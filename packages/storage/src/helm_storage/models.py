@@ -204,3 +204,23 @@ class LearningTaskORM(Base):
     related_gap_id: Mapped[int | None] = mapped_column(
         ForeignKey("knowledge_gaps.id", ondelete="SET NULL")
     )
+
+
+class ReplayQueueORM(Base):
+    __tablename__ = "replay_queue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    agent_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("agent_runs.id", ondelete="SET NULL")
+    )
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

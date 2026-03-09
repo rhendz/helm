@@ -70,3 +70,14 @@ class LinkedInIngestResponse(BaseModel):
     persisted: bool
     message_count: int
     thread_count: int
+
+
+class ReplayEnqueueRequest(BaseModel):
+    agent_run_id: int
+
+
+class ReplayEnqueueResponse(BaseModel):
+    status: str
+    replay_id: int | None
+    created: bool
+    reason: str | None = None
