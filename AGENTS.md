@@ -34,6 +34,8 @@ Default split is one agent per boundary:
 
 - Keep modules boring and explicit. Avoid speculative abstractions.
 - Add TODO markers with owner context where logic is intentionally deferred.
+- Avoid temporal or phase-sensitive comments in code/config/docs (for example: "needed now", "upcoming stage").
+- If such comments are introduced for short-term coordination, they must be removed in the next iteration touching that area.
 - Preserve strict boundaries: app layer orchestrates, package layer implements.
 - Domain decisions should be represented as durable artifacts in storage.
 - Use dependency injection where it improves testability, not everywhere by default.
