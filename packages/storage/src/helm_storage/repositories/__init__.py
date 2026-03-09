@@ -15,6 +15,7 @@ from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyReposito
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.linkedin_messages import SQLAlchemyLinkedInMessageRepository
 from helm_storage.repositories.linkedin_triage import SQLAlchemyLinkedInTriageRepository
+from helm_storage.repositories.opportunities import SQLAlchemyOpportunityRepository
 from helm_storage.repositories.study_ingest import SQLAlchemyStudyIngestRepository
 
 __all__ = [
@@ -31,5 +32,6 @@ __all__ = [
     "SQLAlchemyEmailMessageRepository",
     "SQLAlchemyLinkedInMessageRepository",
     "SQLAlchemyLinkedInTriageRepository",
+    "SQLAlchemyOpportunityRepository",
     "SQLAlchemyStudyIngestRepository",
 ]
