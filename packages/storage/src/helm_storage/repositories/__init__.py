@@ -13,6 +13,7 @@ from helm_storage.repositories.contracts import (
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
+from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepository
 from helm_storage.repositories.linkedin_messages import SQLAlchemyLinkedInMessageRepository
 from helm_storage.repositories.linkedin_triage import SQLAlchemyLinkedInTriageRepository
 from helm_storage.repositories.opportunities import SQLAlchemyOpportunityRepository
@@ -32,6 +33,7 @@ __all__ = [
     "SQLAlchemyDigestItemRepository",
     "SQLAlchemyDraftReplyRepository",
     "SQLAlchemyEmailMessageRepository",
+    "SQLAlchemyJobControlRepository",
     "SQLAlchemyLinkedInMessageRepository",
     "SQLAlchemyLinkedInTriageRepository",
     "SQLAlchemyOpportunityRepository",

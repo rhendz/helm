@@ -7,6 +7,7 @@ class StatusResponse(BaseModel):
     service: str
     state: str
     recent_failed_runs: int = 0
+    paused_jobs: list[str] = Field(default_factory=list)
 
 
 class ActionItemResponse(BaseModel):
@@ -98,3 +99,12 @@ class ReplayReprocessResponse(BaseModel):
     enqueued_count: int
     skipped_count: int
     reason: str | None = None
+
+
+class JobControlResponse(BaseModel):
+    job_name: str
+    paused: bool
+
+
+class JobControlListResponse(BaseModel):
+    items: list[JobControlResponse]
