@@ -8,15 +8,26 @@ _delivery_service = TelegramDigestDeliveryService()
 
 def run() -> None:
     digest = generate_daily_digest()
+    linkedin_count = getattr(digest, "linkedin_opportunity_count", 0)
+    stale_pending_count = getattr(digest, "stale_pending_draft_count", 0)
     logger.info(
         "digest_job_built",
         preview=digest.text[:120],
         action_count=digest.action_count,
         digest_item_count=digest.digest_item_count,
-        linkedin_opportunity_count=getattr(digest, "linkedin_opportunity_count", 0),
+        linkedin_opportunity_count=linkedin_count,
         pending_draft_count=digest.pending_draft_count,
-        stale_pending_draft_count=getattr(digest, "stale_pending_draft_count", 0),
+        stale_pending_draft_count=stale_pending_count,
     )
+    total_signals = (
+        digest.action_count
+        + digest.digest_item_count
+        + linkedin_count
+        + digest.pending_draft_count
+    )
+    if total_signals == 0:
+        logger.info("digest_job_skipped_empty")
+        return
     try:
         _delivery_service.deliver(digest.text)
     except Exception as exc:  # noqa: BLE001

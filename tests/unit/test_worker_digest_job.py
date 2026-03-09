@@ -8,6 +8,8 @@ class _DigestResult:
         self.action_count = 2
         self.digest_item_count = 1
         self.pending_draft_count = 3
+        self.linkedin_opportunity_count = 0
+        self.stale_pending_draft_count = 0
 
 
 def test_run_delivers_generated_digest(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -36,3 +38,24 @@ def test_run_raises_when_delivery_fails(monkeypatch: pytest.MonkeyPatch) -> None
 
     with pytest.raises(RuntimeError, match="send failed"):
         digest.run()
+
+
+def test_run_skips_delivery_when_no_signals(monkeypatch: pytest.MonkeyPatch) -> None:
+    empty_digest = _DigestResult("Daily Brief")
+    empty_digest.action_count = 0
+    empty_digest.digest_item_count = 0
+    empty_digest.pending_draft_count = 0
+    empty_digest.linkedin_opportunity_count = 0
+    seen: dict[str, str] = {}
+
+    monkeypatch.setattr(digest, "generate_daily_digest", lambda: empty_digest)
+
+    class _Service:
+        def deliver(self, text: str) -> None:
+            seen["text"] = text
+
+    monkeypatch.setattr(digest, "_delivery_service", _Service())
+
+    digest.run()
+
+    assert seen == {}
