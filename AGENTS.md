@@ -18,7 +18,7 @@ This repository is intentionally organized for multiple Codex agents to work in 
 
 ## Parallel Work Boundaries
 
-Prefer one agent per boundary:
+Default split is one agent per boundary:
 
 - `apps/api`: API routes, request/response schemas, admin/debug endpoints.
 - `apps/worker`: schedules, workflow execution, retries.
@@ -59,4 +59,3 @@ Prefer one agent per boundary:
 - Tests added/updated for changed behavior (or TODO with clear follow-up ticket).
 - Relevant runbook/docs updated.
 - No boundary leakage across package responsibilities.
-
