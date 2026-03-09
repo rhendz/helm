@@ -136,6 +136,7 @@ class LinkedInThreadORM(Base):
     __tablename__ = "linkedin_threads"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    external_thread_id: Mapped[str | None] = mapped_column(String(255), unique=True)
     thread_summary: Mapped[str | None] = mapped_column(Text())
     category: Mapped[str | None] = mapped_column(String(64))
     priority_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
