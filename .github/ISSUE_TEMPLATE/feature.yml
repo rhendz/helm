@@ -1,0 +1,40 @@
+name: Feature
+description: New capability aligned to Helm V1 scope
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      placeholder: What user problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      placeholder: |
+        In scope:
+        - ...
+        Out of scope:
+        - ...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation Plan
+      placeholder: |
+        - scripts/lint.sh
+        - scripts/test.sh
+    validations:
+      required: true

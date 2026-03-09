@@ -1,0 +1,52 @@
+version: "3.9"
+
+x-helm-base: &helm-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+  env_file:
+    - .env
+  volumes:
+    - ./:/workspace
+  working_dir: /workspace
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: helm-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-helm}
+      POSTGRES_USER: ${POSTGRES_USER:-helm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helm}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - helm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-helm} -d ${POSTGRES_DB:-helm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    <<: *helm-base
+    container_name: helm-api
+    command: ["bash", "scripts/run-api.sh"]
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  worker:
+    <<: *helm-base
+    container_name: helm-worker
+    command: ["bash", "scripts/run-worker.sh"]
+
+  telegram-bot:
+    <<: *helm-base
+    container_name: helm-telegram-bot
+    command: ["bash", "scripts/run-telegram-bot.sh"]
+
+volumes:
+  helm_postgres_data:

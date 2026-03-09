@@ -1,0 +1,23 @@
+name: PR Title Check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate title format
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Validating: $PR_TITLE"
+          if [[ "$PR_TITLE" =~ ^(feat|bug|chore)(\([A-Za-z0-9._/-]+\))?:[[:space:]].+ ]]; then
+            echo "ok"
+          else
+            echo "Invalid title format. Use: feat|bug|chore: <description>"
+            exit 1
+          fi

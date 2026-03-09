@@ -1,0 +1,29 @@
+name: Chore
+description: Maintenance/tooling/docs/infra update
+title: "chore: "
+labels: ["chore"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      placeholder: What operational outcome are we targeting?
+    validations:
+      required: true
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      placeholder: |
+        - scripts/lint.sh
+        - scripts/test.sh
+    validations:
+      required: true

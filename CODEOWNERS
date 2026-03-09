@@ -1,0 +1,12 @@
+# Default owner
+* @ankush
+
+# Boundary owners (update as collaborators join)
+/apps/api/ @ankush
+/apps/worker/ @ankush
+/apps/telegram-bot/ @ankush
+/packages/storage/ @ankush
+/packages/agents/ @ankush
+/packages/orchestration/ @ankush
+/packages/llm/ @ankush
+/docs/ @ankush
