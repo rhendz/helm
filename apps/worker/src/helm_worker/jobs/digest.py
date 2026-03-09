@@ -13,6 +13,7 @@ def run() -> None:
         preview=digest.text[:120],
         action_count=digest.action_count,
         digest_item_count=digest.digest_item_count,
+        linkedin_opportunity_count=getattr(digest, "linkedin_opportunity_count", 0),
         pending_draft_count=digest.pending_draft_count,
     )
     try:

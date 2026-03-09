@@ -17,6 +17,7 @@ def test_generate_daily_digest_falls_back_on_db_failure(monkeypatch) -> None:  #
 
     assert result.action_count == 0
     assert result.digest_item_count == 0
+    assert result.linkedin_opportunity_count == 0
     assert result.pending_draft_count == 0
     assert "No artifact data available" in result.text
 
@@ -54,17 +55,35 @@ class _DraftRepo:
         return [type("Draft", (), {"id": 7, "channel_type": "email", "status": "pending"})()]
 
 
+class _OpportunityRepo:
+    def __init__(self, _session: object) -> None:
+        pass
+
+    def list_open(self, *, limit: int) -> list[object]:
+        assert limit == 5
+        return [
+            type(
+                "Opportunity",
+                (),
+                {"role_title": "Staff Engineer", "company": "Acme", "priority_score": 80},
+            )()
+        ]
+
+
 def test_generate_daily_digest_uses_ranked_sources(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(digest_agent, "SessionLocal", lambda: _Session())
     monkeypatch.setattr(digest_agent, "SQLAlchemyActionItemRepository", _ActionRepo)
     monkeypatch.setattr(digest_agent, "SQLAlchemyDigestItemRepository", _DigestRepo)
+    monkeypatch.setattr(digest_agent, "SQLAlchemyOpportunityRepository", _OpportunityRepo)
     monkeypatch.setattr(digest_agent, "SQLAlchemyDraftReplyRepository", _DraftRepo)
 
     result = digest_agent.generate_daily_digest()
 
     assert result.action_count == 1
     assert result.digest_item_count == 1
+    assert result.linkedin_opportunity_count == 1
     assert result.pending_draft_count == 1
     assert "Actions:" in result.text
     assert "Priority Signals:" in result.text
+    assert "[linkedin] Staff Engineer @ Acme" in result.text
     assert "Pending Drafts:" in result.text
