@@ -4,13 +4,17 @@ Schema source: `docs/internal/helm-v1.md` section 10.
 
 Current state:
 
-- Minimal scaffold model exists in `packages/storage/src/helm_storage/models.py`.
-- Full schema migration is pending.
+- V1 entities from `docs/internal/helm-v1.md` section 10 are defined in
+  `packages/storage/src/helm_storage/models.py`.
+- Baseline Alembic migration exists at
+  `migrations/versions/20260308_0001_rhe12_rhe13_baseline.py`.
+- Repository contracts + SQLAlchemy implementations are available for:
+  - `action_items`
+  - `draft_replies`
+  - `digest_items`
 
 Schema rules:
 
 - Every workflow writes durable artifacts.
 - Workflow transitions should be representable from stored state.
 - New entities require migration + doc update.
-
-TODO(v1-phase1): implement first Alembic migration and lock a baseline ERD.
