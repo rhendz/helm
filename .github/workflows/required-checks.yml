@@ -40,3 +40,17 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: Test
         run: bash scripts/test.sh
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: API Health Smoke Check
+        run: bash scripts/compose-api-health-smoke.sh
+      - name: Compose logs (on failure)
+        if: failure()
+        run: docker compose logs --no-color --timestamps postgres api
+      - name: Compose cleanup
+        if: always()
+        run: docker compose down --volumes --remove-orphans
