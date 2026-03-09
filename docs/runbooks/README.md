@@ -2,6 +2,7 @@
 
 - [Development](./development.md)
 - [Migrations](./migrations.md)
+- [Parallel Agents](./parallel-agents.md)
 
 Planned:
 

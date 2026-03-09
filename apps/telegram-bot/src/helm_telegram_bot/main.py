@@ -1,6 +1,6 @@
+from helm_observability.logging import get_logger, setup_logging
 from telegram.ext import Application, CommandHandler
 
-from helm_observability.logging import get_logger, setup_logging
 from helm_telegram_bot.commands import actions, approve, digest, drafts, snooze, start, study
 from helm_telegram_bot.config import get_settings
 

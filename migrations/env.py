@@ -4,10 +4,9 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
-
-from helm_storage.db import Base
 from helm_storage import models  # noqa: F401
+from helm_storage.db import Base
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 

@@ -1,7 +1,7 @@
+from helm_agents.digest_agent import build_daily_digest
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from helm_agents.digest_agent import build_daily_digest
 from helm_telegram_bot.commands.common import reject_if_unauthorized
 
 

@@ -99,3 +99,5 @@ Phase 1 bootstrap scaffolding is in place.
 - Add digest generation workflow and Telegram `/digest` command path.
 - Add retry/run state dashboards via API endpoints.
 
+
+- Parallel worktree helper: `scripts/worktree-env.sh`

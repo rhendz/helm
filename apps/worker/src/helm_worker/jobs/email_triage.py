@@ -1,7 +1,6 @@
 from helm_connectors.gmail import pull_new_messages
 from helm_observability.logging import get_logger
 
-
 logger = get_logger("helm_worker.jobs.email_triage")
 
 
