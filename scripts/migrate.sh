@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PYTHONPATH="apps/api/src:apps/worker/src:apps/telegram-bot/src:packages/domain/src:packages/storage/src:packages/connectors/src:packages/agents/src:packages/orchestration/src:packages/llm/src:packages/observability/src"
+
 if command -v uv >/dev/null 2>&1; then
   uv run --frozen --extra dev alembic upgrade head
 else
-  python -m alembic upgrade head
+  alembic upgrade head
 fi
