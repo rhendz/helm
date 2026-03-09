@@ -1,5 +1,8 @@
 from helm_storage.db import SessionLocal
 from helm_storage.repositories.agent_runs import SQLAlchemyAgentRunRepository
+from helm_storage.repositories.draft_transition_audits import (
+    SQLAlchemyDraftTransitionAuditRepository,
+)
 from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepository
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -42,6 +45,28 @@ def list_recent_failed_agent_runs(limit: int = 20) -> list[dict]:
                     "error_message": run.error_message,
                 }
                 for run in records
+            ]
+    except SQLAlchemyError:
+        return []
+
+
+def list_recent_failed_draft_transitions(limit: int = 20) -> list[dict]:
+    try:
+        with SessionLocal() as session:
+            repository = SQLAlchemyDraftTransitionAuditRepository(session)
+            records = repository.list_recent_failed(limit=limit)
+            return [
+                {
+                    "id": row.id,
+                    "draft_id": row.draft_id,
+                    "action": row.action,
+                    "from_status": row.from_status,
+                    "to_status": row.to_status,
+                    "success": row.success,
+                    "reason": row.reason,
+                    "created_at": row.created_at,
+                }
+                for row in records
             ]
     except SQLAlchemyError:
         return []

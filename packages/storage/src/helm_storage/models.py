@@ -63,6 +63,21 @@ class DraftReplyORM(Base):
     )
 
 
+class DraftTransitionAuditORM(Base):
+    __tablename__ = "draft_transition_audits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    draft_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(32))
+    to_status: Mapped[str | None] = mapped_column(String(32))
+    success: Mapped[bool] = mapped_column(nullable=False, default=False)
+    reason: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class DigestItemORM(Base):
     __tablename__ = "digest_items"
 
