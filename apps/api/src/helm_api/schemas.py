@@ -28,6 +28,17 @@ class StudyIngestRequest(BaseModel):
     raw_text: str
 
 
+class StudyIngestResponse(BaseModel):
+    status: str
+    source_type: str
+    chars: int
+    summary: str
+    task_count: int
+    gap_count: int
+    session_id: int | None
+    persisted: bool
+
+
 class AgentRunFailureResponse(BaseModel):
     id: int
     agent_name: str
