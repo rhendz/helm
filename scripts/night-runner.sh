@@ -6,7 +6,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DEFAULT_PROMPT_FILE="$REPO_ROOT/docs/runbooks/night-runner-prompt.md"
 PROMPT_FILE="${PROMPT_FILE:-$DEFAULT_PROMPT_FILE}"
-MAX_HOURS_PER_RUN="${MAX_HOURS_PER_RUN:-4}"
+MAX_HOURS_PER_RUN="${MAX_HOURS_PER_RUN:-6}"
 LOCK_DIR="$REPO_ROOT/.night-runner.lock"
 LOG_DIR="$REPO_ROOT/.night-runner-logs"
 REQUIRE_MAIN_BRANCH="${REQUIRE_MAIN_BRANCH:-1}"
@@ -25,7 +25,7 @@ Options:
 
 Environment variables:
   PROMPT_FILE         Prompt file path (default: docs/runbooks/night-runner-prompt.md)
-  MAX_HOURS_PER_RUN   Run timeout in hours (default: 4)
+  MAX_HOURS_PER_RUN   Run timeout in hours (default: 6)
   REQUIRE_MAIN_BRANCH Require current branch to be main before start (default: 1)
   REQUIRE_CLEAN_TREE  Require clean git tree before start (default: 1)
 EOF

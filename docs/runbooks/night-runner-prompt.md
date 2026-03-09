@@ -109,6 +109,11 @@ Progress signal (counts as progress only if one is true):
    - Risk/rollback note
    - Boundary-expansion note if applicable
 14. Transition issue based on done/blocked/backlogged rules.
+15. When no ready issues remain in current sprint:
+   - Generate the next smallest ready issue set from `docs/internal/helm-v1.md`.
+   - Create/update Linear issues with clear acceptance criteria and validation commands.
+   - Move only dependency-free, ready items to `queued` (or team equivalent unstarted state).
+   - Return to step 1 and continue execution.
 
 ## Done Gates (All Required)
 
@@ -167,7 +172,7 @@ If `MODE_PHASE=late`:
 ## Stop Conditions
 
 Stop run when any is true:
-- No queued issues remain in sprint
+- No ready issues remain after executing the sprint rollover step (issue generation/queuing)
 - `MAX_CONSECUTIVE_FAILURES` reached
 - `MAX_HOURS_PER_RUN` reached
 - `NO_DIRECTION_CONSECUTIVE_THRESHOLD` reached due to human-input blockers
@@ -183,8 +188,15 @@ Autonomy stop condition:
 - A no-direction outcome is an issue that is blocked/backlogged specifically due to missing human input/decision.
 
 Sprint complete rule:
-- Sprint is complete when all non-backlogged sprint issues are done.
-- Do not wait for backlogged items.
+- Current sprint is complete when all non-backlogged sprint issues are done.
+- Immediately seed the next sprint from `helm-v1` and continue unless a stop condition is met.
+- Do not wait for backlogged items to seed the next sprint.
+
+Run-complete rule:
+- The run is complete only when one of these is true:
+  - V1 scope in `helm-v1` is completed, or
+  - remaining items require human input, or
+  - a hard stop condition is reached (time/failure/no-direction thresholds).
 
 ## Post-Sprint Actions
 
@@ -197,6 +209,7 @@ Sprint complete rule:
    - Include required and optional goals
    - Map each issue to exact spec section
    - Include acceptance criteria and validation expectations
+   - Create/move a ready subset into `queued` so the next loop can execute immediately
 3. If `helm-v1` is effectively complete, switch to:
    - Cleanup
    - Regression testing

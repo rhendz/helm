@@ -65,7 +65,8 @@ After completion, return:
 2) blocked issues
 3) backlogged issues with unblock steps
 4) retro summary
-5) proposed next sprint issue list mapped to the repo’s source-of-truth spec
+5) next sprint issue list mapped to the repo’s source-of-truth spec
+   - and create/queue the next ready sprint items before stopping
    - for helm: docs/internal/helm-v1.md
    - for ankushp: use the project’s primary product/runbook spec in that repo
 6) live paid API call usage summary
