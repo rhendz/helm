@@ -9,6 +9,8 @@ PROMPT_FILE="${PROMPT_FILE:-$DEFAULT_PROMPT_FILE}"
 MAX_HOURS_PER_RUN="${MAX_HOURS_PER_RUN:-4}"
 LOCK_DIR="$REPO_ROOT/.night-runner.lock"
 LOG_DIR="$REPO_ROOT/.night-runner-logs"
+REQUIRE_MAIN_BRANCH="${REQUIRE_MAIN_BRANCH:-1}"
+REQUIRE_CLEAN_TREE="${REQUIRE_CLEAN_TREE:-1}"
 DRY_RUN=0
 
 usage() {
@@ -24,6 +26,8 @@ Options:
 Environment variables:
   PROMPT_FILE         Prompt file path (default: docs/runbooks/night-runner-prompt.md)
   MAX_HOURS_PER_RUN   Run timeout in hours (default: 4)
+  REQUIRE_MAIN_BRANCH Require current branch to be main before start (default: 1)
+  REQUIRE_CLEAN_TREE  Require clean git tree before start (default: 1)
 EOF
 }
 
@@ -60,6 +64,21 @@ fi
 if [[ ! -f "$PROMPT_FILE" ]]; then
   echo "Prompt file not found: $PROMPT_FILE" >&2
   exit 1
+fi
+
+if [[ "$REQUIRE_MAIN_BRANCH" == "1" ]]; then
+  CURRENT_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
+  if [[ "$CURRENT_BRANCH" != "main" ]]; then
+    echo "Night runner must start from branch 'main'; current branch is '$CURRENT_BRANCH'" >&2
+    exit 1
+  fi
+fi
+
+if [[ "$REQUIRE_CLEAN_TREE" == "1" ]]; then
+  if [[ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]]; then
+    echo "Night runner requires a clean working tree before start." >&2
+    exit 1
+  fi
 fi
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then

@@ -34,6 +34,8 @@ Project-specific guardrails (Helm V1):
 - `MAX_LIVE_API_CALLS_PER_ISSUE = 3`
 - `MAX_LIVE_API_CALLS_PER_RUN = 12`
 - `LIVE_API_TEST_TAG = live_api`
+- `REQUIRE_PR_FLOW = true`
+- `REQUIRE_CI_GREEN_FOR_MERGE = true`
 
 ## Operating Model
 
@@ -42,6 +44,12 @@ Project-specific guardrails (Helm V1):
 - Exactly one issue may be `in_progress` at any time.
 - Keep diffs minimal, reversible, and scoped to the selected issue.
 - Never expose secrets or log sensitive payloads.
+- Ticket lifecycle must be end-to-end before next ticket:
+  - Start from up-to-date `main`.
+  - Create a per-issue branch from `main`.
+  - Complete implementation, checks, PR, and merge.
+  - Return to `main`, fast-forward pull latest merged state, confirm clean tree.
+  - Only then select the next issue.
 
 Progress signal (counts as progress only if one is true):
 1. Code diff advances acceptance criteria.
@@ -65,23 +73,42 @@ Progress signal (counts as progress only if one is true):
 
 1. Pull current sprint issues from Linear, sorted by priority and dependency order.
 2. Skip unresolved dependencies; mark blocked with dependency note.
-3. Select next ready issue; ensure no other issue is `in_progress`.
-4. Move selected issue to `in_progress`.
-5. Restate acceptance criteria from Linear plus `helm-v1`.
-6. Implement minimal viable change aligned to repo patterns.
+3. Git sync pre-step before selecting issue:
+   - Ensure working tree is clean.
+   - Ensure current branch is `main`.
+   - Pull `main` with fast-forward only so issue selection happens from latest merged code.
+4. Select next ready issue; ensure no other issue is `in_progress`.
+5. Move selected issue to `in_progress`.
+6. Restate acceptance criteria from Linear plus `helm-v1`.
+7. Implement minimal viable change aligned to repo patterns.
    - Enforce strict boundary ownership from `AGENTS.md`.
    - App layers orchestrate; package layers implement.
    - Represent durable domain decisions in storage artifacts.
-7. Run validation:
+8. Run validation:
    - Prefer `scripts/lint.sh` and `scripts/test.sh`.
    - If too heavy, run targeted checks and explain scope choice.
-8. Update docs/runbook only when behavior/contracts/workflow changes.
-9. Post Linear verification note:
+9. Update docs/runbook only when behavior/contracts/workflow changes.
+10. Prepare PR flow for the issue:
+   - Create/update a branch that follows `AGENTS.md` branch naming (`ap/feat-*`, `ap/bug-*`, `ap/chore-*`).
+   - Commit scoped changes with a clear message.
+   - Push branch and open/update PR with title format `feat|bug|chore: short description`.
+   - Include Linear issue reference in PR body.
+11. Validate merge readiness:
+   - Confirm required CI checks are green.
+   - Confirm branch is mergeable with no stale/conflicting head state.
+   - If CI is red or merge is blocked by permissions/policies, do not mark `done`; move to `blocked` or `backlogged` with evidence and exact next step.
+12. Merge and sync:
+   - Merge the PR using non-interactive commands/tools.
+   - Verify merge commit is present on target branch.
+   - Checkout `main` and pull fast-forward only.
+   - Confirm working tree is clean on `main`.
+13. Post Linear verification note:
    - Summary of change
    - Checks and outcomes
+   - PR URL and merge commit SHA
    - Risk/rollback note
    - Boundary-expansion note if applicable
-10. Transition issue based on done/blocked/backlogged rules.
+14. Transition issue based on done/blocked/backlogged rules.
 
 ## Done Gates (All Required)
 
@@ -91,6 +118,9 @@ Progress signal (counts as progress only if one is true):
 - Docs/runbook updated if required.
 - Manual verification notes for API/worker/bot behavior changes.
 - No secrets committed and no sensitive logging introduced.
+- PR exists and references the Linear issue.
+- Required CI checks are green before merge.
+- PR is merged and target branch contains the merge commit.
 
 ## Stuck Policy
 
@@ -181,6 +211,8 @@ After each issue:
 - Status transition
 - What changed
 - Checks run and results
+- PR URL and status (`opened|updated|merged`)
+- Merge commit SHA (or reason not merged)
 - Risks/follow-ups
 
 End of run:
@@ -209,6 +241,8 @@ Branch/worktree: <name>
   - Acceptance criteria: <met/partial/not met>
   - Changes: <1-3 bullets>
   - Checks: <cmd>: <pass/fail> ; <cmd>: <pass/fail>
+  - PR: <url> | <opened/updated/merged>
+  - Merge commit: <sha or not merged + reason>
   - Risks/follow-ups: <none or bullets>
 
 2) Blocked
