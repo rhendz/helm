@@ -71,9 +71,10 @@ def _request(query: str, variables: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_projects(team_key: str) -> list[tuple[str, str]]:
+    team_id = resolve_team_id(team_key)
     query = """
-    query($teamKey: String!) {
-      team(key: $teamKey) {
+    query($teamId: String!) {
+      team(id: $teamId) {
         projects(first: 100) {
           nodes {
             name
@@ -83,15 +84,16 @@ def list_projects(team_key: str) -> list[tuple[str, str]]:
       }
     }
     """
-    data = _request(query, {"teamKey": team_key})
+    data = _request(query, {"teamId": team_id})
     nodes = data["team"]["projects"]["nodes"]
     return sorted([(node["name"], node["url"]) for node in nodes], key=lambda item: item[0].lower())
 
 
 def list_issues(team_key: str, limit: int) -> list[Issue]:
+    team_id = resolve_team_id(team_key)
     query = """
-    query($teamKey: String!, $limit: Int!) {
-      team(key: $teamKey) {
+    query($teamId: String!, $limit: Int!) {
+      team(id: $teamId) {
         issues(first: $limit, orderBy: updatedAt) {
           nodes {
             identifier
@@ -113,7 +115,7 @@ def list_issues(team_key: str, limit: int) -> list[Issue]:
       }
     }
     """
-    data = _request(query, {"teamKey": team_key, "limit": limit})
+    data = _request(query, {"teamId": team_id, "limit": limit})
     nodes = data["team"]["issues"]["nodes"]
 
     issues: list[Issue] = []
@@ -131,6 +133,32 @@ def list_issues(team_key: str, limit: int) -> list[Issue]:
             )
         )
     return issues
+
+
+def resolve_team_id(team_key: str) -> str:
+    query = """
+    query {
+      teams(first: 100) {
+        nodes {
+          id
+          key
+          name
+        }
+      }
+    }
+    """
+    data = _request(query, {})
+    teams = data["teams"]["nodes"]
+    key_upper = team_key.upper()
+    for team in teams:
+        if (team.get("key") or "").upper() == key_upper:
+            return team["id"]
+
+    available_keys = sorted(
+        (team.get("key") or "").upper() for team in teams if team.get("key")
+    )
+    available = ", ".join(available_keys)
+    raise RuntimeError(f"Linear team key not found: {team_key}. Available: {available}")
 
 
 def filter_issues(
