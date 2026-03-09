@@ -10,8 +10,8 @@ Let multiple Codex agents run in parallel with minimal environment/setup churn.
 git checkout main
 git pull --ff-only
 
-git worktree add ../helm-<track-a> -b codex/<track-a> main
-git worktree add ../helm-<track-b> -b codex/<track-b> main
+git worktree add ../helm-<track-a> -b ap/feat-<track-a> main
+git worktree add ../helm-<track-b> -b ap/feat-<track-b> main
 ```
 
 ## 2. Share environment across worktrees

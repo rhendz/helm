@@ -64,10 +64,14 @@ Fill required values:
 docker compose up --build
 ```
 
+`docker compose up --build` now includes an automatic migration step (`helm-migrate`)
+before API/worker/bot services start.
+
 Services:
 
 - API: `http://localhost:${API_PORT:-8000}`
 - Postgres: `localhost:${POSTGRES_PORT:-5432}`
+- Migration job: `helm-migrate` (one-shot, idempotent)
 
 ### 4. Local Python workflow (optional)
 
@@ -107,7 +111,6 @@ Phase 1 bootstrap scaffolding is in place.
 
 ## Follow-up Priorities
 
-- Implement first Alembic migration from `docs/internal/helm-v1.md` entity model.
 - Add Gmail ingestion connector and email triage workflow.
 - Add digest generation workflow and Telegram `/digest` command path.
 - Add retry/run state dashboards via API endpoints.

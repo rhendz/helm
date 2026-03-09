@@ -5,12 +5,13 @@
 ```bash
 cp .env.example .env
 make bootstrap
+make doctor
 ```
 
 ## Daily workflow
 
 ```bash
-make doctor
+make format
 make lint
 make test
 ```
@@ -20,6 +21,9 @@ make test
 ```bash
 make up
 ```
+
+`make up` runs `docker compose up --build`, which includes the `migrate` one-shot
+service before long-running services start.
 
 - API: `http://localhost:8000`
 - Postgres: `localhost:5432`
