@@ -5,3 +5,5 @@ def test_status_shape() -> None:
     payload = get_runtime_status()
     assert payload["service"] == "api"
     assert "state" in payload
+    assert "runs" in payload
+    assert "recent" in payload["runs"]

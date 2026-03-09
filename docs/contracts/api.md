@@ -6,6 +6,8 @@ Base path: `/v1`
 
 - `GET /healthz`: liveness.
 - `GET /v1/status`: coarse runtime status.
+- `GET /v1/admin/agent-runs`: list recent workflow runs with failure visibility.
+- `POST /v1/admin/agent-runs/{run_id}/reprocess`: manual reprocess scaffold for failed runs.
 - `GET /v1/actions`: list action items (placeholder).
 - `GET /v1/drafts`: list drafts (placeholder).
 - `POST /v1/study/ingest`: manual study ingest (placeholder).
