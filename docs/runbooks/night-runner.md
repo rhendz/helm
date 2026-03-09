@@ -51,6 +51,22 @@ MAX_HOURS_PER_RUN=6 PROMPT_FILE=docs/runbooks/night-runner-prompt.md bash ./scri
 - Log directory: `.night-runner-logs/`
 - Per-run log file:
   - `.night-runner-logs/night-runner-<UTC timestamp>.log`
+- Runner appends PR-to-Linear reconciliation output to the same log.
+
+## PR-to-Linear Reconciliation
+
+`scripts/night-runner.sh` executes `scripts/pr_linear_reconcile.py` after each run by default.
+
+- `ENABLE_LINEAR_RECONCILE`
+  - Default: `1`
+- `LINEAR_RECONCILE_SINCE_DAYS`
+  - Default: `14`
+
+Manual execution:
+
+```bash
+python3 scripts/pr_linear_reconcile.py --team HELM --since-days 14
+```
 
 ## Codex Automation Prompt (Exact Text, Shared Across Helm + ankushp)
 
