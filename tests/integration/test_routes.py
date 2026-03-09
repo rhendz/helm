@@ -33,3 +33,15 @@ def test_routes_exist() -> None:
     replay_response = client.post("/v1/replay/enqueue", json={"agent_run_id": 999999})
     assert replay_response.status_code == 200
     assert replay_response.json()["status"] in {"rejected", "unavailable"}
+    replay_reprocess_rejected = client.post(
+        "/v1/replay/reprocess",
+        json={"dry_run": True, "limit": 10},
+    )
+    assert replay_reprocess_rejected.status_code == 200
+    assert replay_reprocess_rejected.json()["status"] == "rejected"
+    replay_reprocess_scoped = client.post(
+        "/v1/replay/reprocess",
+        json={"source_type": "worker", "since_hours": 24, "dry_run": True, "limit": 10},
+    )
+    assert replay_reprocess_scoped.status_code == 200
+    assert replay_reprocess_scoped.json()["status"] in {"accepted", "unavailable"}

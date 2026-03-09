@@ -76,6 +76,27 @@ class SQLAlchemyAgentRunRepository:
         )
         return list(self._session.execute(stmt).scalars().all())
 
+    def list_failed_for_reprocess(
+        self,
+        *,
+        source_type: str | None,
+        source_id: str | None,
+        started_at_gte: datetime | None,
+        limit: int,
+    ) -> list[AgentRunORM]:
+        statement = select(AgentRunORM).where(AgentRunORM.status == AgentRunStatus.FAILED.value)
+        if source_type:
+            statement = statement.where(AgentRunORM.source_type == source_type)
+        if source_id:
+            statement = statement.where(AgentRunORM.source_id == source_id)
+        if started_at_gte:
+            statement = statement.where(AgentRunORM.started_at >= started_at_gte)
+        statement = statement.order_by(
+            AgentRunORM.started_at.desc(),
+            AgentRunORM.id.desc(),
+        ).limit(limit)
+        return list(self._session.execute(statement).scalars().all())
+
     def get_by_id(self, run_id: int) -> AgentRunORM | None:
         stmt = select(AgentRunORM).where(AgentRunORM.id == run_id)
         return self._session.execute(stmt).scalars().first()

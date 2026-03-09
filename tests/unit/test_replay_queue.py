@@ -72,3 +72,58 @@ def test_replay_worker_marks_failed_and_records_agent_run(monkeypatch) -> None: 
     assert replay_row.last_error is not None
     assert len(run_rows) == 1
     assert run_rows[0].status == AgentRunStatus.FAILED.value
+
+
+def test_reprocess_failed_runs_requires_bounded_scope(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(replay_service, "SessionLocal", session_local)
+
+    rejected = replay_service.reprocess_failed_runs(
+        source_type=None,
+        source_id=None,
+        since_hours=None,
+        limit=20,
+        dry_run=True,
+    )
+    assert rejected["status"] == "rejected"
+    assert rejected["reason"] == "scope_required"
+
+
+def test_reprocess_failed_runs_dry_run_and_execute(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(replay_service, "SessionLocal", session_local)
+
+    with Session(engine) as session:
+        runs = SQLAlchemyAgentRunRepository(session)
+        first = runs.start_run(agent_name="a", source_type="worker", source_id="scheduler")
+        runs.mark_failed(first.id, "x")
+        second = runs.start_run(agent_name="b", source_type="worker", source_id="scheduler")
+        runs.mark_failed(second.id, "y")
+
+    dry_run = replay_service.reprocess_failed_runs(
+        source_type="worker",
+        source_id="scheduler",
+        since_hours=24,
+        limit=20,
+        dry_run=True,
+    )
+    assert dry_run["status"] == "accepted"
+    assert dry_run["dry_run"] is True
+    assert dry_run["matched_count"] == 2
+
+    execute = replay_service.reprocess_failed_runs(
+        source_type="worker",
+        source_id="scheduler",
+        since_hours=24,
+        limit=20,
+        dry_run=False,
+    )
+    assert execute["status"] == "accepted"
+    assert execute["dry_run"] is False
+    assert execute["matched_count"] == 2
+    assert execute["enqueued_count"] == 2
+    assert execute["skipped_count"] == 0
