@@ -31,6 +31,8 @@ def test_routes_exist() -> None:
     )
     assert linkedin_response.status_code == 200
     assert linkedin_response.json()["status"] == "accepted"
+    assert "failed_event_count" in linkedin_response.json()
+    assert "normalization_failures" in linkedin_response.json()
     replay_response = client.post("/v1/replay/enqueue", json={"agent_run_id": 999999})
     assert replay_response.status_code == 200
     assert replay_response.json()["status"] in {"rejected", "unavailable"}

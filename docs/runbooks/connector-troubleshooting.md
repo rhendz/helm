@@ -100,7 +100,24 @@ docker compose logs --tail=100 telegram-bot
 
 3. Re-run a command (`/start`, `/actions`, `/drafts`) from the allowed account.
 
-## 5) Notes for Incident Triage
+## 5) Normalization Failure Categories
+
+Connector ingest paths record normalization failures by category while continuing
+to process valid payloads.
+
+Categories:
+
+- Gmail: `missing_id`, `invalid_payload`
+- LinkedIn: `missing_id`, `invalid_payload`
+
+Where to inspect:
+
+- Worker log event `email_triage_job_tick` includes `normalization_failures`.
+- LinkedIn ingest endpoint response includes:
+  - `failed_event_count`
+  - `normalization_failures`
+
+## 6) Notes for Incident Triage
 
 - For Gmail issues, the `check-gmail-auth.py` output is the fastest discriminator between env/config errors and upstream API errors.
 - For LinkedIn, `linkedin_pull_stub_manual_mode` is expected in current V1 and does not indicate broken auth.

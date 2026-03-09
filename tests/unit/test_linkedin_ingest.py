@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from helm_connectors.linkedin import normalize_event, pull_new_events
+from helm_connectors.linkedin import normalize_event, pull_new_events, pull_new_events_report
 from helm_storage.db import Base
 from helm_storage.models import LinkedInMessageORM, LinkedInThreadORM
 from helm_storage.repositories.linkedin_messages import SQLAlchemyLinkedInMessageRepository
@@ -38,6 +38,19 @@ def test_pull_new_events_manual_payload_normalizes() -> None:
     assert len(events) == 1
     assert events[0].provider_message_id == "li-msg-2"
     assert events[0].provider_thread_id == "li-msg-2"
+
+
+def test_pull_new_events_manual_payload_records_failures_and_keeps_valid() -> None:
+    report = pull_new_events_report(
+        manual_payload=[
+            {"id": "li-msg-ok", "body_text": "valid"},
+            {"thread_id": "missing-id"},
+        ]
+    )
+
+    assert len(report.events) == 1
+    assert report.events[0].provider_message_id == "li-msg-ok"
+    assert report.failure_counts == {"missing_id": 1}
 
 
 def test_linkedin_repository_upsert_is_idempotent() -> None:
