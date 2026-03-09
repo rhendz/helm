@@ -59,6 +59,10 @@ def test_pull_new_messages_manual_payload_normalizes() -> None:
 
 
 def test_email_triage_graph_scaffold_result_shape() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
     message = normalize_message(
         {
             "id": "msg-3",
@@ -70,7 +74,7 @@ def test_email_triage_graph_scaffold_result_shape() -> None:
     )
 
     graph = build_email_triage_graph()
-    result = run_email_triage_workflow(message, graph=graph)
+    result = run_email_triage_workflow(message, graph=graph, session_factory=session_local)
 
     assert result.message_id == "msg-3"
     assert result.classification == "unclassified"
