@@ -1,13 +1,11 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from helm_runtime import RuntimeAppSettings, runtime_settings_config
 
 
-class APISettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+class APISettings(RuntimeAppSettings):
+    model_config = runtime_settings_config()
 
-    app_env: str = "local"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    log_level: str = "INFO"
 
 
 settings = APISettings()
