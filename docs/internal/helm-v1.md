@@ -869,6 +869,14 @@ Not in V1:
 * draft generation  
 * digest integration
 
+## Phase 6 — Reliability, Operator Control, and Autonomy Acceleration
+
+* reliability hardening across ingest/triage/digest/study flows  
+* operator-safe reprocess controls and run visibility  
+* deterministic idempotency and replay behavior  
+* stronger digest ranking quality using multi-source artifact signals  
+* night-runner execution reliability and Linear state consistency automation
+
 ---
 
 ## 20\. Codex Collaboration Plan
@@ -947,3 +955,284 @@ If you want, next I’ll turn this into:
 2\. an initial set of parallelizable Linear tickets.
 
 ::contentReference\[oaicite:3\]{index=3}  
+
+---
+
+## 23\. V1 Expansion Execution Plan (Night Runner Ready)
+
+This section defines the next V1 execution wave for autonomous implementation.
+It is intentionally ticket-shaped so night-runner can process it with minimal interpretation.
+
+### 23.1 Execution Policy For This Section
+
+* process one issue at a time end-to-end (branch -> checks -> PR -> CI green -> merge -> sync main)  
+* default checks for every issue:
+  * `bash scripts/lint.sh`
+  * `bash scripts/test.sh`
+* if issue touches Docker/runtime startup, also run:
+  * `bash scripts/compose-api-health-smoke.sh`
+* do not mark done without merged PR URL and merge commit SHA recorded in Linear
+* preserve Telegram-first and DB-first assumptions; no web dashboard expansion
+
+### 23.2 Workstream A: Workflow Reliability Layer
+
+Goal: make workflow execution deterministic and replay-safe.
+
+#### A1. Add idempotency keys for ingest and triage writes
+
+Acceptance criteria:
+
+* each persisted artifact class used by workflows has a stable idempotency lookup path  
+* repeated runs over the same source input do not duplicate durable artifacts  
+* tests cover at-least-two-run behavior for each touched workflow
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### A2. Normalize agent run lifecycle states
+
+Acceptance criteria:
+
+* `agent_runs` follows a documented state path (`running`, `succeeded`, `failed`, optional replay marker)  
+* every workflow trigger writes start + terminal state  
+* failure paths include bounded error payloads and never crash status persistence
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### A3. Add replay/dead-letter model for failed units of work
+
+Acceptance criteria:
+
+* failed workflow payload references can be queued for replay  
+* replay path uses existing contracts and writes a new run record  
+* operator runbook documents replay trigger and rollback
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+* `bash scripts/compose-api-health-smoke.sh`
+
+### 23.3 Workstream B: Operator Control Plane (API-only)
+
+Goal: allow controlled reprocessing and diagnostics without adding frontend scope.
+
+#### B1. Reprocess endpoint set with explicit safety guards
+
+Acceptance criteria:
+
+* add bounded API endpoints for reprocessing by source id and/or time window  
+* require explicit parameters (no broad unbounded replay)  
+* include dry-run option returning affected counts without writes
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+* `bash scripts/compose-api-health-smoke.sh`
+
+#### B2. Workflow/job pause-resume controls
+
+Acceptance criteria:
+
+* operator can pause and resume scheduled job families (email/digest/study/linkedin)  
+* paused jobs emit explicit status in `/v1/status` family endpoints  
+* worker respects pause state before executing job body
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### B3. Artifact traceability endpoint
+
+Acceptance criteria:
+
+* for action/draft/digest/opportunity entities, expose upstream source pointers and run id context  
+* endpoint returns stable, redaction-safe debug payload  
+* runbook includes “why did this exist?” debugging path
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+### 23.4 Workstream C: Digest Quality Upgrade
+
+Goal: improve decision usefulness while staying deterministic and testable.
+
+#### C1. Multi-source ranking policy formalization
+
+Acceptance criteria:
+
+* ranking policy combines existing digest items with action urgency, study signals, and LinkedIn opportunities  
+* policy is deterministic and implemented in explicit code path (no hidden prompt-only ranking)  
+* no-source fallback path remains stable and tested
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### C2. Reason-coded ranking output
+
+Acceptance criteria:
+
+* each ranked digest signal includes machine-readable reason tags (for example: urgency/freshness/source)  
+* Telegram digest text uses concise human-readable rendering of top reasons  
+* tests cover reason rendering contract
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+### 23.5 Workstream D: Triage Maturity (Email + LinkedIn)
+
+Goal: increase quality and confidence of triage artifacts.
+
+#### D1. Stronger normalization + validation contracts
+
+Acceptance criteria:
+
+* connector normalization contracts reject malformed payloads with clear error categories  
+* ingest paths record failure counts without breaking healthy message processing  
+* fixtures cover malformed, partial, and valid payload mixes
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### D2. Duplicate detection and thread consolidation
+
+Acceptance criteria:
+
+* repeated provider events map to existing thread/message artifacts  
+* triage outputs reuse existing open action/draft artifacts when source identity matches  
+* regression tests cover duplicate and near-duplicate cases
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+### 23.6 Workstream E: Study Loop Expansion
+
+Goal: make study artifacts more actionable in daily operations.
+
+#### E1. Knowledge-gap dedupe and merge rules
+
+Acceptance criteria:
+
+* gap ingestion avoids duplicate open gaps for equivalent topics  
+* updates severity/notes on existing gaps when appropriate  
+* learning task linkage remains stable after dedupe
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### E2. Weekly study recap artifact generation
+
+Acceptance criteria:
+
+* create a recap artifact summarizing new gaps, resolved gaps, and top tasks  
+* recap can be included as optional digest input  
+* recap generation has deterministic tests
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+### 23.7 Workstream F: Approval and Outbound Safety Hardening
+
+Goal: enforce human-supervised outbound rules consistently.
+
+#### F1. Approval lifecycle audit trail
+
+Acceptance criteria:
+
+* every approval/snooze/terminal change is auditable by artifact id + timestamp  
+* replay-safe handling prevents duplicate terminal transitions from repeated commands  
+* failed approval actions produce visible operator signal
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### F2. Expiration and requeue behavior for pending drafts
+
+Acceptance criteria:
+
+* stale pending drafts can be flagged and optionally requeued/summarized  
+* digest includes stale-approval visibility signal  
+* tests cover expiration edge cases
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+### 23.8 Workstream G: Night Runner Reliability Automation
+
+Goal: reduce coordination drift and failed unattended cycles.
+
+#### G1. PR-to-Linear reconciliation automation
+
+Acceptance criteria:
+
+* merged PRs can be reconciled to Linear state with merge SHA evidence  
+* unresolved state drift is surfaced in run report automatically  
+* no issue is marked done without merged PR confirmation
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+#### G2. Auto-seeding next ready sprint items
+
+Acceptance criteria:
+
+* when sprint queue empties, night-runner seeds next ready issues from this section  
+* created items include acceptance criteria and required validation commands  
+* runner resumes execution without manual re-prompting unless blocked by human decision
+
+Validation:
+
+* `bash scripts/lint.sh`
+* `bash scripts/test.sh`
+
+### 23.9 Priority Order For Autonomous Execution
+
+Use this order by default when generating/queuing issues:
+
+1. Workstream A (reliability layer)  
+2. Workstream B (operator control)  
+3. Workstream C (digest quality)  
+4. Workstream D (triage maturity)  
+5. Workstream F (approval safety)  
+6. Workstream E (study expansion)  
+7. Workstream G (night-runner automation)
+
+### 23.10 V1 Completion Gate (Updated)
+
+V1 is complete when all conditions are true:
+
+* core loops (email, digest, study, telegram action surface) are merged and stable  
+* phase 6 reliability/operator priorities are completed or explicitly deferred with rationale  
+* no unresolved high-priority open issues remain in active sprint  
+* required CI checks are green on final merged set  
+* runbooks reflect final supported operator workflows  
+* LinkedIn remains either:
+  * manual-ingest-only with explicit documented boundary, or  
+  * expanded via approved and policy-safe integration path
