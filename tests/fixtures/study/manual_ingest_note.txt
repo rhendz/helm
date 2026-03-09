@@ -1,0 +1,5 @@
+Practiced binary search and heap questions for 90 minutes.
+Gap: I am confused about proving binary search loop invariants under pressure.
+Gap: I struggle to choose between min-heap and max-heap in streaming median problems.
+Task: Re-derive binary search invariants and explain them out loud tonight.
+Todo: Solve 3 streaming median problems this week and compare heap setups.
