@@ -24,6 +24,7 @@ Input:
 Output:
 
 - concise Telegram digest
+- ranked digest context from open actions, digest items, and pending drafts
 - agent run log
 
 ## Study ingest workflow
