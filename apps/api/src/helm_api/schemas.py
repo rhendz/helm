@@ -48,3 +48,25 @@ class AgentRunFailureResponse(BaseModel):
     started_at: datetime
     completed_at: datetime | None
     error_message: str | None
+
+
+class LinkedInManualEventRequest(BaseModel):
+    id: str
+    thread_id: str | None = None
+    sender_name: str = ""
+    body_text: str = ""
+    received_at: datetime | None = None
+
+
+class LinkedInIngestRequest(BaseModel):
+    source_type: str = "linkedin_manual"
+    events: list[LinkedInManualEventRequest]
+
+
+class LinkedInIngestResponse(BaseModel):
+    status: str
+    source_type: str
+    event_count: int
+    persisted: bool
+    message_count: int
+    thread_count: int
