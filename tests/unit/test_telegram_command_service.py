@@ -66,6 +66,32 @@ class _DraftRepo:
         self.snoozed_ids.append(draft_id)
 
 
+class _AuditRepo:
+    def __init__(self, _session: object) -> None:
+        self.records: list[dict[str, object]] = []
+
+    def create(
+        self,
+        *,
+        draft_id: int,
+        action: str,
+        from_status: str | None,
+        to_status: str | None,
+        success: bool,
+        reason: str | None,
+    ) -> None:
+        self.records.append(
+            {
+                "draft_id": draft_id,
+                "action": action,
+                "from_status": from_status,
+                "to_status": to_status,
+                "success": success,
+                "reason": reason,
+            }
+        )
+
+
 @pytest.mark.parametrize("limit", [1, 3, 5])
 def test_list_open_actions_applies_limit(monkeypatch: pytest.MonkeyPatch, limit: int) -> None:
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
@@ -101,8 +127,12 @@ def test_list_queries_handle_storage_unavailable(monkeypatch: pytest.MonkeyPatch
 
 def test_approve_draft_happy_path_from_pending(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _DraftRepo(object())
+    audit_repo = _AuditRepo(object())
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
     monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+    )
 
     service = command_service.TelegramCommandService()
 
@@ -111,12 +141,17 @@ def test_approve_draft_happy_path_from_pending(monkeypatch: pytest.MonkeyPatch) 
     assert result.ok is True
     assert result.message == "Approved draft 1. Not sent yet."
     assert repo.approved_ids == [1]
+    assert audit_repo.records[-1]["success"] is True
 
 
 def test_approve_draft_allows_snoozed(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _DraftRepo(object())
+    audit_repo = _AuditRepo(object())
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
     monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+    )
 
     service = command_service.TelegramCommandService()
 
@@ -124,12 +159,17 @@ def test_approve_draft_allows_snoozed(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.ok is True
     assert repo.approved_ids == [2]
+    assert audit_repo.records[-1]["from_status"] == "snoozed"
 
 
 def test_approve_draft_rejects_non_actionable_status(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _DraftRepo(object())
+    audit_repo = _AuditRepo(object())
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
     monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+    )
 
     service = command_service.TelegramCommandService()
 
@@ -138,12 +178,17 @@ def test_approve_draft_rejects_non_actionable_status(monkeypatch: pytest.MonkeyP
     assert result.ok is False
     assert result.message == "Draft 3 is approved; cannot approve."
     assert repo.approved_ids == []
+    assert audit_repo.records[-1]["reason"] == "invalid_status"
 
 
 def test_approve_draft_handles_missing_id(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _DraftRepo(object())
+    audit_repo = _AuditRepo(object())
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
     monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+    )
 
     service = command_service.TelegramCommandService()
 
@@ -151,6 +196,7 @@ def test_approve_draft_handles_missing_id(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert result.ok is False
     assert result.message == "Draft 999 not found."
+    assert audit_repo.records[-1]["reason"] == "draft_not_found"
 
 
 def test_approve_draft_handles_storage_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,8 +212,12 @@ def test_approve_draft_handles_storage_unavailable(monkeypatch: pytest.MonkeyPat
 
 def test_snooze_draft_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _DraftRepo(object())
+    audit_repo = _AuditRepo(object())
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
     monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+    )
 
     service = command_service.TelegramCommandService()
 
@@ -176,12 +226,17 @@ def test_snooze_draft_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.ok is True
     assert result.message == "Snoozed draft 1 for later review."
     assert repo.snoozed_ids == [1]
+    assert audit_repo.records[-1]["to_status"] == "snoozed"
 
 
 def test_snooze_draft_rejects_non_pending_status(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _DraftRepo(object())
+    audit_repo = _AuditRepo(object())
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
     monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+    )
 
     service = command_service.TelegramCommandService()
 
@@ -190,12 +245,17 @@ def test_snooze_draft_rejects_non_pending_status(monkeypatch: pytest.MonkeyPatch
     assert result.ok is False
     assert result.message == "Draft 2 is snoozed; cannot snooze."
     assert repo.snoozed_ids == []
+    assert audit_repo.records[-1]["reason"] == "invalid_status"
 
 
 def test_snooze_draft_handles_missing_id(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _DraftRepo(object())
+    audit_repo = _AuditRepo(object())
     monkeypatch.setattr(command_service, "SessionLocal", _Session)
     monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+    monkeypatch.setattr(
+        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+    )
 
     service = command_service.TelegramCommandService()
 
@@ -203,6 +263,7 @@ def test_snooze_draft_handles_missing_id(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert result.ok is False
     assert result.message == "Draft 999 not found."
+    assert audit_repo.records[-1]["reason"] == "draft_not_found"
 
 
 def test_snooze_draft_handles_storage_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -51,6 +51,17 @@ class AgentRunFailureResponse(BaseModel):
     error_message: str | None
 
 
+class DraftTransitionFailureResponse(BaseModel):
+    id: int
+    draft_id: int
+    action: str
+    from_status: str | None
+    to_status: str | None
+    success: bool
+    reason: str | None
+    created_at: datetime
+
+
 class LinkedInManualEventRequest(BaseModel):
     id: str
     thread_id: str | None = None
