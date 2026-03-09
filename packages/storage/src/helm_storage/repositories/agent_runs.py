@@ -1,9 +1,19 @@
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from helm_storage.models import AgentRunORM
+
+
+class AgentRunStatus(StrEnum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+_TERMINAL_STATUSES = {AgentRunStatus.SUCCEEDED.value, AgentRunStatus.FAILED.value}
 
 
 class SQLAlchemyAgentRunRepository:
@@ -21,7 +31,7 @@ class SQLAlchemyAgentRunRepository:
             agent_name=agent_name,
             source_type=source_type,
             source_id=source_id,
-            status="running",
+            status=AgentRunStatus.RUNNING.value,
             started_at=datetime.utcnow(),
         )
         self._session.add(run)
@@ -33,8 +43,12 @@ class SQLAlchemyAgentRunRepository:
         run = self.get_by_id(run_id)
         if run is None:
             return
-        run.status = "succeeded"
-        run.completed_at = datetime.utcnow()
+        if run.status in _TERMINAL_STATUSES:
+            return
+        if run.status != AgentRunStatus.RUNNING.value:
+            return
+        run.status = AgentRunStatus.SUCCEEDED.value
+        run.completed_at = run.completed_at or datetime.utcnow()
         run.error_message = None
         self._session.add(run)
         self._session.commit()
@@ -43,8 +57,12 @@ class SQLAlchemyAgentRunRepository:
         run = self.get_by_id(run_id)
         if run is None:
             return
-        run.status = "failed"
-        run.completed_at = datetime.utcnow()
+        if run.status in _TERMINAL_STATUSES:
+            return
+        if run.status != AgentRunStatus.RUNNING.value:
+            return
+        run.status = AgentRunStatus.FAILED.value
+        run.completed_at = run.completed_at or datetime.utcnow()
         run.error_message = error_message[:4000]
         self._session.add(run)
         self._session.commit()
@@ -52,7 +70,7 @@ class SQLAlchemyAgentRunRepository:
     def list_recent_failed(self, limit: int = 20) -> list[AgentRunORM]:
         stmt = (
             select(AgentRunORM)
-            .where(AgentRunORM.status == "failed")
+            .where(AgentRunORM.status == AgentRunStatus.FAILED.value)
             .order_by(AgentRunORM.started_at.desc(), AgentRunORM.id.desc())
             .limit(limit)
         )
