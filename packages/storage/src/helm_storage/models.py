@@ -1,9 +1,13 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from helm_storage.db import Base
+
+
+def utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class ActionItemORM(Base):
@@ -12,9 +16,70 @@ class ActionItemORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text())
-    priority: Mapped[int] = mapped_column(Integer, default=3)
-    status: Mapped[str] = mapped_column(String(32), default="open")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-# TODO(v1-phase1): add the complete entity set from the V1 spec.
+class DigestItemORM(Base):
+    __tablename__ = "digest_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    domain: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(Text(), nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    related_contact_id: Mapped[int | None] = mapped_column(Integer)
+    related_action_id: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AgentRunORM(Base):
+    __tablename__ = "agent_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    agent_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_type: Mapped[str | None] = mapped_column(String(64))
+    source_id: Mapped[str | None] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_message: Mapped[str | None] = mapped_column(Text())
+
+
+class StudySessionORM(Base):
+    __tablename__ = "study_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text(), nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class KnowledgeGapORM(Base):
+    __tablename__ = "knowledge_gaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    topic: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text())
+    severity: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    source_session_id: Mapped[int | None] = mapped_column(ForeignKey("study_sessions.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class LearningTaskORM(Base):
+    __tablename__ = "learning_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text())
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="open")
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    related_gap_id: Mapped[int | None] = mapped_column(ForeignKey("knowledge_gaps.id"))
+    source_session_id: Mapped[int | None] = mapped_column(ForeignKey("study_sessions.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy.orm import Session
-
 from helm_storage.models import (
     AgentRunORM,
     DigestItemORM,
@@ -12,6 +10,7 @@ from helm_storage.models import (
     LearningTaskORM,
     StudySessionORM,
 )
+from sqlalchemy.orm import Session
 
 
 @dataclass(slots=True)
