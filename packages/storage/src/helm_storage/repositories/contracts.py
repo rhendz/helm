@@ -53,6 +53,15 @@ class ActionItemRepository(Protocol):
 class DraftReplyRepository(Protocol):
     def list_pending(self, *, limit: int | None = None) -> list[DraftReplyORM]: ...
 
+    def list_stale(
+        self,
+        *,
+        stale_after_hours: int = 72,
+        include_snoozed: bool = True,
+        limit: int | None = None,
+        now: datetime | None = None,
+    ) -> list[DraftReplyORM]: ...
+
     def get_by_id(self, draft_id: int) -> DraftReplyORM | None: ...
 
     def get_latest_for_thread(self, *, thread_id: str) -> DraftReplyORM | None: ...
@@ -62,6 +71,8 @@ class DraftReplyRepository(Protocol):
     def approve(self, draft_id: int) -> bool: ...
 
     def snooze(self, draft_id: int) -> bool: ...
+
+    def requeue(self, draft_id: int) -> bool: ...
 
 
 @runtime_checkable

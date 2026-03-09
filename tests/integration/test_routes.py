@@ -9,7 +9,8 @@ def test_routes_exist() -> None:
     assert client.get("/v1/status/draft-transitions/failures").status_code == 200
     assert client.get("/v1/job-controls").status_code == 200
     assert client.get("/v1/actions").status_code == 200
-    assert client.get("/v1/drafts").status_code == 200
+    drafts_response = client.get("/v1/drafts")
+    assert drafts_response.status_code == 200
     response = client.post(
         "/v1/study/ingest",
         json={"source_type": "manual", "raw_text": "Gap: weak in graph DP\nTODO: solve 3 problems"},
@@ -49,6 +50,12 @@ def test_routes_exist() -> None:
     )
     assert replay_reprocess_scoped.status_code == 200
     assert replay_reprocess_scoped.json()["status"] in {"accepted", "unavailable"}
+    requeue_response = client.post(
+        "/v1/drafts/requeue-stale",
+        json={"stale_after_hours": 72, "limit": 10, "dry_run": True},
+    )
+    assert requeue_response.status_code == 200
+    assert requeue_response.json()["status"] in {"accepted", "unavailable"}
     pause_response = client.post("/v1/job-controls/digest/pause")
     assert pause_response.status_code == 200
     assert pause_response.json()["paused"] is True

@@ -15,6 +15,7 @@ def run() -> None:
         digest_item_count=digest.digest_item_count,
         linkedin_opportunity_count=getattr(digest, "linkedin_opportunity_count", 0),
         pending_draft_count=digest.pending_draft_count,
+        stale_pending_draft_count=getattr(digest, "stale_pending_draft_count", 0),
     )
     try:
         _delivery_service.deliver(digest.text)

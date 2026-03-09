@@ -22,6 +22,7 @@ class DraftResponse(BaseModel):
     channel_type: str
     status: str
     preview: str
+    is_stale: bool = False
 
 
 class StudyIngestRequest(BaseModel):
@@ -121,6 +122,21 @@ class JobControlResponse(BaseModel):
 
 class JobControlListResponse(BaseModel):
     items: list[JobControlResponse]
+
+
+class DraftRequeueRequest(BaseModel):
+    stale_after_hours: int = Field(default=72, ge=1, le=720)
+    limit: int = Field(default=20, ge=1, le=100)
+    dry_run: bool = True
+
+
+class DraftRequeueResponse(BaseModel):
+    status: str
+    stale_after_hours: int
+    dry_run: bool
+    matched_count: int
+    requeued_count: int
+    draft_ids: list[int] = Field(default_factory=list)
 
 
 class ArtifactTracePointerResponse(BaseModel):
