@@ -1,9 +1,12 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
 class StatusResponse(BaseModel):
     service: str
     state: str
+    recent_failed_runs: int = 0
 
 
 class ActionItemResponse(BaseModel):
@@ -23,3 +26,14 @@ class DraftResponse(BaseModel):
 class StudyIngestRequest(BaseModel):
     source_type: str = "manual"
     raw_text: str
+
+
+class AgentRunFailureResponse(BaseModel):
+    id: int
+    agent_name: str
+    source_type: str
+    source_id: str | None
+    status: str
+    started_at: datetime
+    completed_at: datetime | None
+    error_message: str | None

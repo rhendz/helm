@@ -16,6 +16,14 @@ class SQLAlchemyDigestItemRepository:
         stmt = stmt.order_by(DigestItemORM.priority.asc(), DigestItemORM.id.desc()).limit(limit)
         return list(self._session.execute(stmt).scalars().all())
 
+    def list_ranked(self, limit: int = 5) -> list[DigestItemORM]:
+        stmt = (
+            select(DigestItemORM)
+            .order_by(DigestItemORM.priority.asc(), DigestItemORM.created_at.desc())
+            .limit(limit)
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
     def create(self, item: NewDigestItem) -> DigestItemORM:
         record = DigestItemORM(
             domain=item.domain,
