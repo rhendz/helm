@@ -108,3 +108,28 @@ class JobControlResponse(BaseModel):
 
 class JobControlListResponse(BaseModel):
     items: list[JobControlResponse]
+
+
+class ArtifactTracePointerResponse(BaseModel):
+    key: str
+    value: str
+
+
+class ArtifactTraceRunResponse(BaseModel):
+    id: int
+    agent_name: str
+    status: str
+    source_type: str
+    source_id: str | None
+    started_at: datetime
+    completed_at: datetime | None
+    error_present: bool
+
+
+class ArtifactTraceResponse(BaseModel):
+    status: str
+    artifact_type: str
+    artifact_id: int
+    source_pointers: list[ArtifactTracePointerResponse] = Field(default_factory=list)
+    run_context: list[ArtifactTraceRunResponse] = Field(default_factory=list)
+    reason: str | None = None

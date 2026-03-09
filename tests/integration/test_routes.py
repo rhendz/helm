@@ -52,3 +52,6 @@ def test_routes_exist() -> None:
     resume_response = client.post("/v1/job-controls/digest/resume")
     assert resume_response.status_code == 200
     assert resume_response.json()["paused"] is False
+    trace_response = client.get("/v1/artifacts/action/1/trace")
+    assert trace_response.status_code == 200
+    assert trace_response.json()["status"] in {"ok", "not_found", "unavailable"}
