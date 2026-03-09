@@ -1,5 +1,5 @@
 import pytest
-from helm_telegram_bot.commands import approve, common, digest, snooze
+from helm_telegram_bot.commands import actions, approve, common, digest, drafts, snooze
 from helm_telegram_bot.services.command_service import DraftTransitionResult
 
 
@@ -20,6 +20,20 @@ class _Update:
 class _Context:
     def __init__(self, args: list[str]) -> None:
         self.args = args
+
+
+class _Action:
+    def __init__(self, item_id: int, priority: int, title: str) -> None:
+        self.id = item_id
+        self.priority = priority
+        self.title = title
+
+
+class _Draft:
+    def __init__(self, draft_id: int, status: str, draft_text: str) -> None:
+        self.id = draft_id
+        self.status = status
+        self.draft_text = draft_text
 
 
 def test_parse_single_id_arg() -> None:
@@ -123,3 +137,126 @@ async def test_digest_command_replies_with_generated_digest(
     await digest.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Daily Brief\n1. Ship feature."]
+
+
+@pytest.mark.asyncio
+async def test_actions_command_replies_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_open_actions(self) -> list[_Action]:
+            return []
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(actions, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(actions, "_service", _Service())
+    update = _Update()
+
+    await actions.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["No open actions."]
+
+
+@pytest.mark.asyncio
+async def test_actions_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_open_actions(self) -> list[_Action]:
+            return [
+                _Action(item_id=3, priority=1, title="Reply to recruiter"),
+                _Action(item_id=2, priority=2, title="Review draft"),
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(actions, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(actions, "_service", _Service())
+    update = _Update()
+
+    await actions.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Open actions:\n3: P1 Reply to recruiter\n2: P2 Review draft"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_drafts_command_replies_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_pending_drafts(self) -> list[_Draft]:
+            return []
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(drafts, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(drafts, "_service", _Service())
+    update = _Update()
+
+    await drafts.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["No pending drafts."]
+
+
+@pytest.mark.asyncio
+async def test_drafts_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_pending_drafts(self) -> list[_Draft]:
+            return [
+                _Draft(draft_id=1, status="pending", draft_text="First line\nSecond line"),
+                _Draft(draft_id=2, status="snoozed", draft_text="Need follow-up"),
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(drafts, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(drafts, "_service", _Service())
+    update = _Update()
+
+    await drafts.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        (
+            "Pending drafts:\n"
+            "1: pending First line Second line\n"
+            "2: snoozed Need follow-up\n"
+            "Use /approve <id> or /snooze <id>."
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_actions_unauthorized_short_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_open_actions(self) -> list[_Action]:
+            raise AssertionError("service should not be called")
+
+    async def _deny(_update: _Update, _context: _Context) -> bool:
+        return True
+
+    monkeypatch.setattr(actions, "reject_if_unauthorized", _deny)
+    monkeypatch.setattr(actions, "_service", _Service())
+    update = _Update()
+
+    await actions.handle(update, _Context(args=[]))
+
+    assert update.message.replies == []
+
+
+@pytest.mark.asyncio
+async def test_drafts_unauthorized_short_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_pending_drafts(self) -> list[_Draft]:
+            raise AssertionError("service should not be called")
+
+    async def _deny(_update: _Update, _context: _Context) -> bool:
+        return True
+
+    monkeypatch.setattr(drafts, "reject_if_unauthorized", _deny)
+    monkeypatch.setattr(drafts, "_service", _Service())
+    update = _Update()
+
+    await drafts.handle(update, _Context(args=[]))
+
+    assert update.message.replies == []
