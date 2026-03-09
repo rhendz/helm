@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from helm_agents import digest_agent
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -19,6 +21,7 @@ def test_generate_daily_digest_falls_back_on_db_failure(monkeypatch) -> None:  #
     assert result.digest_item_count == 0
     assert result.linkedin_opportunity_count == 0
     assert result.pending_draft_count == 0
+    assert result.ranked_signals == []
     assert "No artifact data available" in result.text
 
 
@@ -35,7 +38,17 @@ class _ActionRepo:
         pass
 
     def list_open(self) -> list[object]:
-        return [type("Action", (), {"priority": 1, "title": "Reply recruiter"})()]
+        return [
+            type(
+                "Action",
+                (),
+                {
+                    "priority": 1,
+                    "title": "Reply recruiter",
+                    "created_at": datetime.now(UTC) - timedelta(hours=1),
+                },
+            )()
+        ]
 
 
 class _DigestRepo:
@@ -44,7 +57,18 @@ class _DigestRepo:
 
     def list_ranked(self, limit: int = 5) -> list[object]:
         assert limit == 5
-        return [type("Digest", (), {"priority": 2, "domain": "email", "title": "Hot intro"})()]
+        return [
+            type(
+                "Digest",
+                (),
+                {
+                    "priority": 2,
+                    "domain": "email",
+                    "title": "Hot intro",
+                    "created_at": datetime.now(UTC) - timedelta(hours=7),
+                },
+            )()
+        ]
 
 
 class _DraftRepo:
@@ -52,7 +76,18 @@ class _DraftRepo:
         pass
 
     def list_pending(self) -> list[object]:
-        return [type("Draft", (), {"id": 7, "channel_type": "email", "status": "pending"})()]
+        return [
+            type(
+                "Draft",
+                (),
+                {
+                    "id": 7,
+                    "channel_type": "email",
+                    "status": "pending",
+                    "created_at": datetime.now(UTC) - timedelta(days=3),
+                },
+            )()
+        ]
 
 
 class _OpportunityRepo:
@@ -65,7 +100,12 @@ class _OpportunityRepo:
             type(
                 "Opportunity",
                 (),
-                {"role_title": "Staff Engineer", "company": "Acme", "priority_score": 80},
+                {
+                    "role_title": "Staff Engineer",
+                    "company": "Acme",
+                    "priority_score": 80,
+                    "created_at": datetime.now(UTC) - timedelta(minutes=15),
+                },
             )()
         ]
 
@@ -85,5 +125,11 @@ def test_generate_daily_digest_uses_ranked_sources(monkeypatch) -> None:  # noqa
     assert result.pending_draft_count == 1
     assert "Actions:" in result.text
     assert "Priority Signals:" in result.text
-    assert "[linkedin] Staff Engineer @ Acme" in result.text
+    assert "[linkedin] Staff Engineer @ Acme (high-urgency, new)" in result.text
+    assert "[action] Reply recruiter (high-urgency, new)" in result.text
+    assert "[email] Hot intro (medium-urgency, recent)" in result.text
+    assert "[draft] Draft #7 (email) (medium-urgency, stale)" in result.text
     assert "Pending Drafts:" in result.text
+    assert result.ranked_signals[0].reasons.keys() == {"source", "urgency", "freshness"}
+    assert result.ranked_signals[0].reasons["source"] in {"linkedin", "action"}
+    assert result.ranked_signals[-1].reasons["freshness"] == "stale"
