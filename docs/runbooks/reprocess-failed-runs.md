@@ -107,3 +107,20 @@ Expected:
 
 - Lint and tests pass.
 - `agent_runs` failures endpoint no longer growing for the same root cause.
+
+## 6) Why Did This Exist? (Artifact Traceability)
+
+Use artifact traceability endpoint to inspect upstream pointers and related run context:
+
+```bash
+curl -sS "http://localhost:8000/v1/artifacts/action/1/trace"
+curl -sS "http://localhost:8000/v1/artifacts/draft/1/trace"
+curl -sS "http://localhost:8000/v1/artifacts/digest/1/trace"
+curl -sS "http://localhost:8000/v1/artifacts/opportunity/1/trace"
+```
+
+Expected:
+
+- `status=ok` with `source_pointers` and `run_context` when artifact exists.
+- `status=not_found` when artifact id or type is unknown.
+- `status=unavailable` when storage is unreachable.
