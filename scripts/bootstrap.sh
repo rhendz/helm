@@ -6,9 +6,11 @@ if [[ ! -f .env ]]; then
   echo "Created .env from .env.example"
 fi
 
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-pip install -e .[dev]
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required. Install: https://docs.astral.sh/uv/getting-started/installation/" >&2
+  exit 1
+fi
 
-echo "Bootstrap complete. Activate with: source .venv/bin/activate"
+uv sync --extra dev
+
+echo "Bootstrap complete. Use commands via 'uv run ...' (example: uv run pytest)"

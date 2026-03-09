@@ -2,4 +2,4 @@
 set -euo pipefail
 
 export PYTHONPATH="apps/api/src:apps/worker/src:apps/telegram-bot/src:packages/domain/src:packages/storage/src:packages/connectors/src:packages/agents/src:packages/orchestration/src:packages/llm/src:packages/observability/src"
-pytest
+uv run --frozen --extra dev pytest

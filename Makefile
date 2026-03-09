@@ -1,8 +1,7 @@
 .PHONY: install lint test smoke doctor bootstrap migrate linear-projects linear-issues linear-export up down
 
 install:
-	python3 -m pip install --upgrade pip
-	pip install -e .[dev]
+	uv sync --extra dev
 
 bootstrap:
 	bash scripts/bootstrap.sh

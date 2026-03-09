@@ -59,14 +59,20 @@ def _list_messages(max_results: int = 5) -> dict[str, Any]:
 def main() -> int:
     missing = [name for name in REQUIRED_ENV_VARS if not os.getenv(name)]
     if missing:
-        print(json.dumps({"ok": False, "error": "missing_env", "missing": missing}), file=sys.stderr)
+        print(
+            json.dumps({"ok": False, "error": "missing_env", "missing": missing}),
+            file=sys.stderr,
+        )
         return 2
 
     expected_email = os.getenv("GMAIL_USER_EMAIL", "")
     try:
         payload = _list_messages()
     except ValueError as exc:
-        print(json.dumps({"ok": False, "error": "missing_env", "message": str(exc)}), file=sys.stderr)
+        print(
+            json.dumps({"ok": False, "error": "missing_env", "message": str(exc)}),
+            file=sys.stderr,
+        )
         return 2
     except HttpError as exc:
         body = ""
@@ -76,13 +82,21 @@ def main() -> int:
             body = str(exc)
         print(
             json.dumps(
-                {"ok": False, "error": "gmail_http_error", "status": exc.status_code, "details": body}
+                {
+                    "ok": False,
+                    "error": "gmail_http_error",
+                    "status": exc.status_code,
+                    "details": body,
+                }
             ),
             file=sys.stderr,
         )
         return 1
     except Exception as exc:
-        print(json.dumps({"ok": False, "error": "unexpected_error", "details": str(exc)}), file=sys.stderr)
+        print(
+            json.dumps({"ok": False, "error": "unexpected_error", "details": str(exc)}),
+            file=sys.stderr,
+        )
         return 1
 
     messages = payload.get("messages", [])

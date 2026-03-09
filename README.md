@@ -71,10 +71,9 @@ Services:
 ### 4. Local Python workflow (optional)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev]
-pytest
+bash scripts/bootstrap.sh
+bash scripts/lint.sh
+bash scripts/test.sh
 ```
 
 ### 5. Gmail credential smoke test (optional)
@@ -82,7 +81,7 @@ pytest
 After setting Gmail env vars in `.env`, run:
 
 ```bash
-python scripts/check-gmail-auth.py
+uv run --frozen --extra dev python scripts/check-gmail-auth.py
 ```
 
 Expected result is a JSON payload with `"ok": true`.
