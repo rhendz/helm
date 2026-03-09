@@ -12,6 +12,7 @@ from helm_storage.models import (
     DraftReplyORM,
     EmailMessageORM,
 )
+from helm_storage.repositories.agent_runs import AgentRunStatus
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -209,4 +210,4 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert len(draft_replies) == 1
     assert len(digest_items) == 1
     assert len(agent_runs) == 2
-    assert all(run.status == "succeeded" for run in agent_runs)
+    assert all(run.status == AgentRunStatus.SUCCEEDED.value for run in agent_runs)

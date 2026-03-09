@@ -1,7 +1,7 @@
 """Storage repository implementations and contracts."""
 
 from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
-from helm_storage.repositories.agent_runs import SQLAlchemyAgentRunRepository
+from helm_storage.repositories.agent_runs import AgentRunStatus, SQLAlchemyAgentRunRepository
 from helm_storage.repositories.contracts import (
     ActionItemRepository,
     DigestItemRepository,
@@ -26,6 +26,7 @@ __all__ = [
     "NewDigestItem",
     "NewDraftReply",
     "SQLAlchemyActionItemRepository",
+    "AgentRunStatus",
     "SQLAlchemyAgentRunRepository",
     "SQLAlchemyDigestItemRepository",
     "SQLAlchemyDraftReplyRepository",
