@@ -6,3 +6,4 @@ def test_status_shape() -> None:
     assert payload["service"] == "api"
     assert "state" in payload
     assert "recent_failed_runs" in payload
+    assert "paused_jobs" in payload
