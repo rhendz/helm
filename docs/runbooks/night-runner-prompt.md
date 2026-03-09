@@ -28,6 +28,8 @@ Project-specific guardrails (Helm V1):
 - `MAX_FAILED_COMMANDS_PER_ISSUE = 3`
 - `MAX_NO_PROGRESS_CYCLES = 2`
 - `MAX_CONSECUTIVE_FAILURES = 2`
+- `NO_DIRECTION_CONSECUTIVE_THRESHOLD = 2`
+- `NO_DIRECTION_TOTAL_THRESHOLD = 3`
 - `RUN_LIVE_API_TESTS = false`
 - `MAX_LIVE_API_CALLS_PER_ISSUE = 3`
 - `MAX_LIVE_API_CALLS_PER_RUN = 12`
@@ -138,6 +140,17 @@ Stop run when any is true:
 - No queued issues remain in sprint
 - `MAX_CONSECUTIVE_FAILURES` reached
 - `MAX_HOURS_PER_RUN` reached
+- `NO_DIRECTION_CONSECUTIVE_THRESHOLD` reached due to human-input blockers
+- `NO_DIRECTION_TOTAL_THRESHOLD` reached due to human-input blockers
+
+Autonomy stop condition:
+- If there are no ready issues and remaining work requires human input
+  (for example product choice, missing access/credentials, unclear acceptance criteria, unresolved dependency),
+  stop early and do not continue thrashing.
+- Track both:
+  - consecutive no-direction outcomes
+  - total no-direction outcomes in the run
+- A no-direction outcome is an issue that is blocked/backlogged specifically due to missing human input/decision.
 
 Sprint complete rule:
 - Sprint is complete when all non-backlogged sprint issues are done.
@@ -177,6 +190,11 @@ End of run:
 - Retro notes
 - Next sprint candidates mapped to `helm-v1` sections
 - Live API call usage summary (per issue and total)
+- Autonomy stop summary when triggered:
+  - reason run stopped
+  - exact human decisions/inputs needed
+  - minimal next-step options (1-3)
+  - recommended first issue to resume
 
 ## Operator Handoff Template (Use This Exact Structure)
 
@@ -220,4 +238,10 @@ Branch/worktree: <name>
 - Live paid API calls this run: <count>/<MAX_LIVE_API_CALLS_PER_RUN>
 - Per-issue live API calls:
   - <ISSUE-ID>: <count>
+
+7) Autonomy Stop Summary (only when triggered)
+- Stop reason:
+- Human input required:
+- Next-step options (1-3):
+- Recommended resume issue:
 ```
