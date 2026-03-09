@@ -84,7 +84,7 @@ class _DraftRepo:
                     "id": 7,
                     "channel_type": "email",
                     "status": "pending",
-                    "created_at": datetime.now(UTC) - timedelta(days=3),
+                    "updated_at": datetime.now(UTC) - timedelta(days=3),
                 },
             )()
         ]
@@ -123,6 +123,7 @@ def test_generate_daily_digest_uses_ranked_sources(monkeypatch) -> None:  # noqa
     assert result.digest_item_count == 1
     assert result.linkedin_opportunity_count == 1
     assert result.pending_draft_count == 1
+    assert result.stale_pending_draft_count == 1
     assert "Actions:" in result.text
     assert "Priority Signals:" in result.text
     assert "[linkedin] Staff Engineer @ Acme (high-urgency, new)" in result.text
@@ -130,6 +131,8 @@ def test_generate_daily_digest_uses_ranked_sources(monkeypatch) -> None:  # noqa
     assert "[email] Hot intro (medium-urgency, recent)" in result.text
     assert "[draft] Draft #7 (email) (medium-urgency, stale)" in result.text
     assert "Pending Drafts:" in result.text
+    assert "Stale Approvals:" in result.text
+    assert "#7" in result.text
     assert result.ranked_signals[0].reasons.keys() == {"source", "urgency", "freshness"}
     assert result.ranked_signals[0].reasons["source"] in {"linkedin", "action"}
     assert result.ranked_signals[-1].reasons["freshness"] == "stale"

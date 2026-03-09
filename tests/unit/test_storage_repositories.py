@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from helm_storage.db import Base
 from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
 from helm_storage.repositories.contracts import (
@@ -73,6 +75,26 @@ def test_draft_reply_repository_contract_and_transitions() -> None:
         assert latest is not None
         assert latest.id == second.id
         assert repo.get_latest_for_thread(thread_id="missing-thread") is None
+
+
+def test_draft_reply_repository_stale_and_requeue_behavior() -> None:
+    with _session() as session:
+        repo = SQLAlchemyDraftReplyRepository(session)
+        draft = repo.create(NewDraftReply(thread_id="thr-stale", draft_text="reply"))
+        row = repo.get_by_id(draft.id)
+        assert row is not None
+        row.updated_at = datetime.now(UTC) - timedelta(hours=100)
+        row.status = "snoozed"
+        session.add(row)
+        session.commit()
+
+        stale = repo.list_stale(stale_after_hours=72, include_snoozed=True)
+        assert [item.id for item in stale] == [draft.id]
+
+        assert repo.requeue(draft.id) is True
+        refreshed = repo.get_by_id(draft.id)
+        assert refreshed is not None
+        assert refreshed.status == "pending"
 
 
 def test_digest_item_repository_contract_and_filters() -> None:

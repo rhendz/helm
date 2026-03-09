@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,26 @@ class SQLAlchemyDraftReplyRepository:
             select(DraftReplyORM)
             .where(DraftReplyORM.status.in_(["pending", "snoozed"]))
             .order_by(DraftReplyORM.id.desc())
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(self._session.execute(stmt).scalars().all())
+
+    def list_stale(
+        self,
+        *,
+        stale_after_hours: int = 72,
+        include_snoozed: bool = True,
+        limit: int | None = None,
+        now: datetime | None = None,
+    ) -> list[DraftReplyORM]:
+        cutoff = (now or datetime.now(tz=UTC)) - timedelta(hours=stale_after_hours)
+        statuses = ["pending", "snoozed"] if include_snoozed else ["pending"]
+        stmt = (
+            select(DraftReplyORM)
+            .where(DraftReplyORM.status.in_(statuses))
+            .where(DraftReplyORM.updated_at <= cutoff)
+            .order_by(DraftReplyORM.updated_at.asc(), DraftReplyORM.id.asc())
         )
         if limit is not None:
             stmt = stmt.limit(limit)
@@ -59,6 +81,15 @@ class SQLAlchemyDraftReplyRepository:
         if draft is None:
             return False
         draft.status = "snoozed"
+        self._session.add(draft)
+        self._session.commit()
+        return True
+
+    def requeue(self, draft_id: int) -> bool:
+        draft = self.get_by_id(draft_id)
+        if draft is None:
+            return False
+        draft.status = "pending"
         self._session.add(draft)
         self._session.commit()
         return True

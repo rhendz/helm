@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from helm_observability.logging import get_logger
 from helm_storage.db import SessionLocal
@@ -17,6 +17,7 @@ class DigestBuildResult:
     digest_item_count: int
     linkedin_opportunity_count: int
     pending_draft_count: int
+    stale_pending_draft_count: int
     ranked_signals: list["RankedDigestSignal"]
 
 
@@ -45,6 +46,7 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
             digest_item_count=0,
             linkedin_opportunity_count=0,
             pending_draft_count=0,
+            stale_pending_draft_count=0,
             ranked_signals=[],
         )
 
@@ -66,6 +68,14 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
     if drafts:
         lines.append("Pending Drafts:")
         lines.extend([f"- #{draft.id} ({draft.channel_type}) {draft.status}" for draft in drafts])
+    stale_drafts = _stale_pending_drafts(drafts=drafts, stale_after_hours=72)
+    if stale_drafts:
+        lines.append("Stale Approvals:")
+        lines.append(
+            "- "
+            f"{len(stale_drafts)} stale draft(s): "
+            + ", ".join(f"#{draft.id}" for draft in stale_drafts[:5])
+        )
     if len(lines) == 1:
         lines.append("No open actions, priority signals, or pending drafts.")
 
@@ -83,6 +93,7 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
         digest_item_count=len(digest_items),
         linkedin_opportunity_count=len(linkedin_opportunities),
         pending_draft_count=len(drafts),
+        stale_pending_draft_count=len(stale_drafts),
         ranked_signals=ranked_signals[:limit],
     )
 
@@ -149,7 +160,11 @@ def _build_ranked_signals(
                 source="draft",
                 title=title,
                 priority=2,
-                created_at=getattr(item, "created_at", None),
+                created_at=(
+                    getattr(item, "updated_at", None)
+                    if getattr(item, "updated_at", None) is not None
+                    else getattr(item, "created_at", None)
+                ),
             )
         )
     return sorted(signals, key=lambda signal: (-signal.score, signal.title.lower()))
@@ -217,3 +232,18 @@ def _score(*, priority: int, freshness: str) -> int:
     urgency_score = {1: 90, 2: 70}.get(priority, 50)
     freshness_score = {"new": 12, "recent": 6, "stale": 0, "unknown-freshness": 2}[freshness]
     return urgency_score + freshness_score
+
+
+def _stale_pending_drafts(*, drafts: list[object], stale_after_hours: int) -> list[object]:
+    cutoff = datetime.now(UTC) - timedelta(hours=stale_after_hours)
+    stale: list[object] = []
+    for draft in drafts:
+        status = str(getattr(draft, "status", ""))
+        if status not in {"pending", "snoozed"}:
+            continue
+        updated_at = _normalize_datetime(getattr(draft, "updated_at", None))
+        if updated_at is None:
+            updated_at = _normalize_datetime(getattr(draft, "created_at", None))
+        if updated_at is not None and updated_at <= cutoff:
+            stale.append(draft)
+    return stale
