@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 from helm_observability.logging import get_logger
+
+NORMALIZATION_ERROR_MISSING_ID = "missing_id"
+NORMALIZATION_ERROR_INVALID_PAYLOAD = "invalid_payload"
 
 
 @dataclass(slots=True, frozen=True)
@@ -17,6 +20,12 @@ class NormalizedLinkedInMessage:
     received_at: datetime
     normalized_at: datetime
     source: str = "linkedin"
+
+
+@dataclass(slots=True, frozen=True)
+class PullEventsReport:
+    events: list[NormalizedLinkedInMessage]
+    failure_counts: dict[str, int] = field(default_factory=dict)
 
 
 def _parse_received_at(value: Any, *, fallback: datetime) -> datetime:
@@ -64,16 +73,50 @@ def normalize_event(
     )
 
 
+def normalize_event_checked(
+    raw_payload: Mapping[str, Any], *, normalized_at: datetime | None = None
+) -> tuple[NormalizedLinkedInMessage | None, str | None]:
+    try:
+        return normalize_event(raw_payload, normalized_at=normalized_at), None
+    except ValueError as exc:
+        if "non-empty `id`" in str(exc):
+            return None, NORMALIZATION_ERROR_MISSING_ID
+        return None, NORMALIZATION_ERROR_INVALID_PAYLOAD
+    except Exception:
+        return None, NORMALIZATION_ERROR_INVALID_PAYLOAD
+
+
 def pull_new_events(
     manual_payload: list[dict[str, Any]] | None = None,
 ) -> list[NormalizedLinkedInMessage]:
+    return pull_new_events_report(manual_payload=manual_payload).events
+
+
+def pull_new_events_report(
+    manual_payload: list[dict[str, Any]] | None = None,
+) -> PullEventsReport:
     logger = get_logger("helm_connectors.linkedin")
+    failure_counts: dict[str, int] = {}
+
+    def _add_failure(code: str) -> None:
+        failure_counts[code] = failure_counts.get(code, 0) + 1
+
     if manual_payload is not None:
         logger.info("linkedin_pull_manual_payload", count=len(manual_payload))
-        return [normalize_event(item) for item in manual_payload]
+        normalized_events: list[NormalizedLinkedInMessage] = []
+        for item in manual_payload:
+            normalized, failure = normalize_event_checked(item)
+            if normalized is not None:
+                normalized_events.append(normalized)
+                continue
+            if failure is not None:
+                _add_failure(failure)
+        if failure_counts:
+            logger.warning("linkedin_pull_manual_payload_failures", failure_counts=failure_counts)
+        return PullEventsReport(events=normalized_events, failure_counts=failure_counts)
 
     logger.info("linkedin_pull_stub_manual_mode")
     # TODO(v1-linkedin-feasibility): select ingestion path (official API vs defer).
     # TODO(v1-linkedin-go-no-go): enable only when criteria in
     # docs/internal/linkedin-feasibility-v1.md are met.
-    return []
+    return PullEventsReport(events=[], failure_counts={})

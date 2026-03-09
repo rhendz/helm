@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,6 +16,15 @@ _GMAIL_REQUIRED_ENV_VARS = (
     "GMAIL_REFRESH_TOKEN",
     "GMAIL_USER_EMAIL",
 )
+
+NORMALIZATION_ERROR_MISSING_ID = "missing_id"
+NORMALIZATION_ERROR_INVALID_PAYLOAD = "invalid_payload"
+
+
+@dataclass(slots=True, frozen=True)
+class PullMessagesReport:
+    messages: list[NormalizedGmailMessage]
+    failure_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True, frozen=True)
@@ -77,6 +86,19 @@ def normalize_message(
         received_at=received_at,
         normalized_at=now,
     )
+
+
+def normalize_message_checked(
+    raw_payload: Mapping[str, Any], *, normalized_at: datetime | None = None
+) -> tuple[NormalizedGmailMessage | None, str | None]:
+    try:
+        return normalize_message(raw_payload, normalized_at=normalized_at), None
+    except ValueError as exc:
+        if "non-empty `id`" in str(exc):
+            return None, NORMALIZATION_ERROR_MISSING_ID
+        return None, NORMALIZATION_ERROR_INVALID_PAYLOAD
+    except Exception:
+        return None, NORMALIZATION_ERROR_INVALID_PAYLOAD
 
 
 def _decode_base64url(value: str) -> str:
@@ -192,24 +214,45 @@ def _build_gmail_raw_payload(service: Any, message_id: str) -> dict[str, Any]:
 def pull_new_messages(
     manual_payload: list[dict[str, Any]] | None = None,
 ) -> list[NormalizedGmailMessage]:
+    return pull_new_messages_report(manual_payload=manual_payload).messages
+
+
+def pull_new_messages_report(
+    manual_payload: list[dict[str, Any]] | None = None,
+) -> PullMessagesReport:
     logger = get_logger("helm_connectors.gmail")
+    failure_counts: dict[str, int] = {}
+
+    def _add_failure(code: str) -> None:
+        failure_counts[code] = failure_counts.get(code, 0) + 1
+
     if manual_payload is not None:
         logger.info("gmail_pull_manual_payload", count=len(manual_payload))
-        return [normalize_message(item) for item in manual_payload]
+        messages: list[NormalizedGmailMessage] = []
+        for item in manual_payload:
+            normalized, failure = normalize_message_checked(item)
+            if normalized is not None:
+                messages.append(normalized)
+                continue
+            if failure is not None:
+                _add_failure(failure)
+        if failure_counts:
+            logger.warning("gmail_pull_manual_payload_failures", failure_counts=failure_counts)
+        return PullMessagesReport(messages=messages, failure_counts=failure_counts)
 
     missing = [name for name in _GMAIL_REQUIRED_ENV_VARS if not os.getenv(name, "").strip()]
     if missing:
         logger.info("gmail_pull_unconfigured", missing_env=missing)
-        return []
+        return PullMessagesReport(messages=[], failure_counts={})
 
     try:
         service = _build_gmail_service()
     except ImportError:
         logger.warning("gmail_pull_missing_google_dependencies")
-        return []
+        return PullMessagesReport(messages=[], failure_counts={})
     except Exception as exc:
         logger.warning("gmail_pull_auth_failed", error=str(exc))
-        return []
+        return PullMessagesReport(messages=[], failure_counts={})
 
     try:
         response = (
@@ -220,11 +263,11 @@ def pull_new_messages(
         )
     except Exception as exc:
         logger.warning("gmail_pull_list_failed", error=str(exc))
-        return []
+        return PullMessagesReport(messages=[], failure_counts={})
 
     message_refs = response.get("messages")
     if not isinstance(message_refs, list):
-        return []
+        return PullMessagesReport(messages=[], failure_counts={})
 
     normalized_messages: list[NormalizedGmailMessage] = []
     for item in message_refs:
@@ -235,9 +278,18 @@ def pull_new_messages(
             continue
         try:
             raw_payload = _build_gmail_raw_payload(service, message_id)
-            normalized_messages.append(normalize_message(raw_payload))
+            normalized, failure = normalize_message_checked(raw_payload)
+            if normalized is not None:
+                normalized_messages.append(normalized)
+            elif failure is not None:
+                _add_failure(failure)
         except Exception as exc:
             logger.warning("gmail_pull_message_failed", message_id=message_id, error=str(exc))
+            _add_failure(NORMALIZATION_ERROR_INVALID_PAYLOAD)
 
-    logger.info("gmail_pull_completed", count=len(normalized_messages))
-    return normalized_messages
+    logger.info(
+        "gmail_pull_completed",
+        count=len(normalized_messages),
+        failure_counts=failure_counts,
+    )
+    return PullMessagesReport(messages=normalized_messages, failure_counts=failure_counts)

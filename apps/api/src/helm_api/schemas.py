@@ -71,6 +71,8 @@ class LinkedInIngestResponse(BaseModel):
     persisted: bool
     message_count: int
     thread_count: int
+    failed_event_count: int = 0
+    normalization_failures: dict[str, int] = Field(default_factory=dict)
 
 
 class ReplayEnqueueRequest(BaseModel):

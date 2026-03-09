@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 from helm_connectors import gmail
-from helm_connectors.gmail import normalize_message, pull_new_messages
+from helm_connectors.gmail import normalize_message, pull_new_messages, pull_new_messages_report
 from helm_orchestration.email_flow import build_email_triage_graph, run_email_triage_workflow
 from helm_storage.db import Base
 from helm_storage.models import (
@@ -58,6 +58,19 @@ def test_pull_new_messages_manual_payload_normalizes() -> None:
     assert len(messages) == 1
     assert messages[0].provider_message_id == "msg-2"
     assert messages[0].subject == "Hello"
+
+
+def test_pull_new_messages_manual_payload_records_failures_and_keeps_valid() -> None:
+    report = pull_new_messages_report(
+        manual_payload=[
+            {"id": "msg-ok", "subject": "Hello"},
+            {"threadId": "missing-id"},
+        ]
+    )
+
+    assert len(report.messages) == 1
+    assert report.messages[0].provider_message_id == "msg-ok"
+    assert report.failure_counts == {"missing_id": 1}
 
 
 def test_pull_new_messages_returns_empty_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:

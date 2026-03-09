@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from helm_connectors.linkedin import pull_new_events
+from helm_connectors.linkedin import pull_new_events_report
 from helm_observability.agent_runs import record_agent_run
 from helm_storage.db import SessionLocal
 from helm_storage.repositories.linkedin_messages import SQLAlchemyLinkedInMessageRepository
@@ -8,7 +8,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 
 def ingest_manual_linkedin_events(*, source_type: str, events: list[Mapping[str, object]]) -> dict:
-    normalized_events = pull_new_events(manual_payload=[dict(item) for item in events])
+    report = pull_new_events_report(manual_payload=[dict(item) for item in events])
+    normalized_events = report.events
     persisted = False
     message_count = 0
     thread_ids: set[str] = set()
@@ -40,4 +41,6 @@ def ingest_manual_linkedin_events(*, source_type: str, events: list[Mapping[str,
         "persisted": persisted,
         "message_count": message_count,
         "thread_count": len(thread_ids),
+        "failed_event_count": sum(report.failure_counts.values()),
+        "normalization_failures": report.failure_counts,
     }
