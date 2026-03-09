@@ -23,6 +23,16 @@ class SQLAlchemyActionItemRepository:
         stmt = select(ActionItemORM).where(ActionItemORM.id == action_id)
         return self._session.execute(stmt).scalars().first()
 
+    def get_open_by_source(self, *, source_type: str, source_id: str) -> ActionItemORM | None:
+        stmt = (
+            select(ActionItemORM)
+            .where(ActionItemORM.source_type == source_type)
+            .where(ActionItemORM.source_id == source_id)
+            .where(ActionItemORM.status == "open")
+            .order_by(ActionItemORM.id.desc())
+        )
+        return self._session.execute(stmt).scalars().first()
+
     def create(self, item: NewActionItem) -> ActionItemORM:
         record = ActionItemORM(
             source_type=item.source_type,

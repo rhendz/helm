@@ -12,6 +12,7 @@ from helm_storage.repositories.contracts import (
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
+from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.study_ingest import SQLAlchemyStudyIngestRepository
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "SQLAlchemyAgentRunRepository",
     "SQLAlchemyDigestItemRepository",
     "SQLAlchemyDraftReplyRepository",
+    "SQLAlchemyEmailMessageRepository",
     "SQLAlchemyStudyIngestRepository",
 ]

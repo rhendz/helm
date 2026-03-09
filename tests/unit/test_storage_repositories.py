@@ -47,6 +47,9 @@ def test_action_item_repository_contract_and_ordering() -> None:
         fetched = repo.get_by_id(open_items[0].id)
         assert fetched is not None
         assert fetched.title == "Highest"
+        assert (
+            repo.get_open_by_source(source_type="email", source_id="m-2") is not None
+        )
 
 
 def test_draft_reply_repository_contract_and_transitions() -> None:
@@ -54,8 +57,8 @@ def test_draft_reply_repository_contract_and_transitions() -> None:
         repo = SQLAlchemyDraftReplyRepository(session)
         assert isinstance(repo, DraftReplyRepository)
 
-        first = repo.create(NewDraftReply(draft_text="reply one"))
-        second = repo.create(NewDraftReply(draft_text="reply two"))
+        first = repo.create(NewDraftReply(thread_id="thr-1", draft_text="reply one"))
+        second = repo.create(NewDraftReply(thread_id="thr-1", draft_text="reply two"))
 
         assert [draft.id for draft in repo.list_pending()] == [second.id, first.id]
 
@@ -66,6 +69,10 @@ def test_draft_reply_repository_contract_and_transitions() -> None:
         updated = repo.get_by_id(first.id)
         assert updated is not None
         assert updated.status == "approved"
+        latest = repo.get_latest_for_thread(thread_id="thr-1")
+        assert latest is not None
+        assert latest.id == second.id
+        assert repo.get_latest_for_thread(thread_id="missing-thread") is None
 
 
 def test_digest_item_repository_contract_and_filters() -> None:
@@ -82,3 +89,12 @@ def test_digest_item_repository_contract_and_filters() -> None:
 
         top_email = repo.list_top(limit=5, domain="email")
         assert [item.title for item in top_email] == ["High", "Low"]
+        assert (
+            repo.find_matching(
+                domain="email",
+                title="High",
+                summary="...",
+                related_action_id=None,
+            )
+            is not None
+        )
