@@ -31,3 +31,7 @@ dist/
 
 # Local project configs
 .codex/
+
+# Night runner artifacts
+.night-runner-logs/
+.night-runner.lock/
