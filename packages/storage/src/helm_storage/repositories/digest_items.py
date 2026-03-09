@@ -24,6 +24,24 @@ class SQLAlchemyDigestItemRepository:
         )
         return list(self._session.execute(stmt).scalars().all())
 
+    def find_matching(
+        self,
+        *,
+        domain: str,
+        title: str,
+        summary: str,
+        related_action_id: int | None,
+    ) -> DigestItemORM | None:
+        stmt = (
+            select(DigestItemORM)
+            .where(DigestItemORM.domain == domain)
+            .where(DigestItemORM.title == title)
+            .where(DigestItemORM.summary == summary)
+            .where(DigestItemORM.related_action_id == related_action_id)
+            .order_by(DigestItemORM.id.desc())
+        )
+        return self._session.execute(stmt).scalars().first()
+
     def create(self, item: NewDigestItem) -> DigestItemORM:
         record = DigestItemORM(
             domain=item.domain,

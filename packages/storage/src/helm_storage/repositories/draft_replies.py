@@ -23,6 +23,14 @@ class SQLAlchemyDraftReplyRepository:
         stmt = select(DraftReplyORM).where(DraftReplyORM.id == draft_id)
         return self._session.execute(stmt).scalars().first()
 
+    def get_latest_for_thread(self, *, thread_id: str) -> DraftReplyORM | None:
+        stmt = (
+            select(DraftReplyORM)
+            .where(DraftReplyORM.thread_id == thread_id)
+            .order_by(DraftReplyORM.id.desc())
+        )
+        return self._session.execute(stmt).scalars().first()
+
     def create(self, item: NewDraftReply) -> DraftReplyORM:
         record = DraftReplyORM(
             channel_type=item.channel_type,
