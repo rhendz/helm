@@ -1,6 +1,6 @@
 # Workstream Task Template
 
-- Issue: `RHE-XX`
+- Issue: `<TEAM>-XX` (example: `HELM-42`)
 - Boundary: `apps/...` or `packages/...`
 - Owner: `<agent/name>`
 - Scope:

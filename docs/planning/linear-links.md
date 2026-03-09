@@ -2,6 +2,10 @@
 
 Canonical initiative + issue map for Helm V1 execution.
 
+Note: This file records the initial seed snapshot. Team rename/prefix changes can
+make issue identifiers differ over time. For current state, use:
+`make linear-export` and read `docs/workstreams/linear-inbox.md`.
+
 ## Initiatives (Linear Projects)
 
 - Helm V1: Foundation & Storage
@@ -37,4 +41,3 @@ Canonical initiative + issue map for Helm V1 execution.
   - https://linear.app/rhendz/issue/RHE-19/implement-manual-study-ingest-pipeline-and-knowledge-gap-artifact
 - RHE-20 Persist agent_runs and expose failure visibility endpoint
   - https://linear.app/rhendz/issue/RHE-20/persist-agent-runs-and-expose-failure-visibility-endpoint
-

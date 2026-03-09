@@ -5,32 +5,32 @@ Use this runbook to pull current Linear work into a local, parallel-friendly inb
 ## Prerequisites
 
 - `LINEAR_API_KEY` set in your shell or `.env`.
-- Optional: `LINEAR_TEAM_KEY` (defaults to `RHE`).
+- Optional: `LINEAR_TEAM_KEY` (defaults to `HELM`).
 
 ## Commands
 
 List projects:
 
 ```bash
-python scripts/linear_intake.py list-projects
+uv run --frozen --extra dev python scripts/linear_intake.py list-projects
 ```
 
 List issues (all):
 
 ```bash
-python scripts/linear_intake.py list-issues
+uv run --frozen --extra dev python scripts/linear_intake.py list-issues
 ```
 
 List issues by state:
 
 ```bash
-python scripts/linear_intake.py list-issues --state "Backlog"
+uv run --frozen --extra dev python scripts/linear_intake.py list-issues --state "Backlog"
 ```
 
 Generate local inbox snapshot:
 
 ```bash
-python scripts/linear_intake.py export-md --output docs/workstreams/linear-inbox.md
+uv run --frozen --extra dev python scripts/linear_intake.py export-md --output docs/workstreams/linear-inbox.md
 ```
 
 ## Notes

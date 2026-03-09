@@ -3,7 +3,7 @@
 
 Uses Linear GraphQL API and environment variables:
 - LINEAR_API_KEY (required)
-- LINEAR_TEAM_KEY (optional, default: RHE)
+- LINEAR_TEAM_KEY (optional, default: HELM)
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from datetime import datetime
 from typing import Any
 
 API_URL = "https://api.linear.app/graphql"
-DEFAULT_TEAM_KEY = "RHE"
+DEFAULT_TEAM_KEY = "HELM"
 
 
 @dataclass(slots=True)
