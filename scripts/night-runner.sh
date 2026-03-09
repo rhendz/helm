@@ -68,7 +68,14 @@ fi
 
 if [[ "$REQUIRE_MAIN_BRANCH" == "1" ]]; then
   CURRENT_BRANCH="$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)"
-  if [[ "$CURRENT_BRANCH" != "main" ]]; then
+  if [[ "$CURRENT_BRANCH" == "HEAD" ]]; then
+    if git -C "$REPO_ROOT" branch --contains HEAD --format='%(refname:short)' | grep -qx "main"; then
+      echo "Night runner running from detached HEAD that is contained in 'main'; proceeding."
+    else
+      echo "Night runner must start from branch 'main'; current state is detached HEAD not contained in 'main'" >&2
+      exit 1
+    fi
+  elif [[ "$CURRENT_BRANCH" != "main" ]]; then
     echo "Night runner must start from branch 'main'; current branch is '$CURRENT_BRANCH'" >&2
     exit 1
   fi
