@@ -46,10 +46,14 @@ Default split is one agent per boundary:
 - Do not include ticket IDs in branch names.
 - If a Linear ticket exists, include it in PR description/body.
 - PR title format: `feat|bug|chore: short description`.
+- PR body must be plain Markdown with real newlines (never escaped `\n` blocks).
 - Create focused PRs scoped to one boundary.
 - Run local checks before PR:
   - `scripts/lint.sh`
   - `scripts/test.sh`
+- Treat CI as source of truth for merge readiness. If a check fails, fix the branch and re-run required checks before merging.
+- For tests, prefer hermetic defaults (unit tests should use in-memory/local test dependencies, not external services).
+- For containerized app paths, verify import/runtime behavior in Docker and CI, not only host shell execution.
 - Update docs when contracts or workflows change.
 - For API/worker/bot behavior changes, include manual verification notes.
 
@@ -65,3 +69,4 @@ Default split is one agent per boundary:
 - Tests added/updated for changed behavior (or TODO with clear follow-up ticket).
 - Relevant runbook/docs updated.
 - No boundary leakage across package responsibilities.
+- PR is mergeable with all required checks green and no stale/conflicting head branch state.
