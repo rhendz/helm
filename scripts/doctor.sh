@@ -2,7 +2,7 @@
 set -euo pipefail
 
 missing=0
-for cmd in python3 docker; do
+for cmd in uv docker; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "missing command: $cmd"
     missing=1

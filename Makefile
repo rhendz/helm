@@ -1,4 +1,4 @@
-.PHONY: install lint test smoke doctor bootstrap migrate linear-projects linear-issues linear-export up down
+.PHONY: install format lint test smoke doctor bootstrap migrate linear-projects linear-issues linear-export up down
 
 install:
 	uv sync --extra dev
@@ -12,6 +12,9 @@ doctor:
 lint:
 	bash scripts/lint.sh
 
+format:
+	bash scripts/format.sh
+
 test:
 	bash scripts/test.sh
 
@@ -22,13 +25,13 @@ migrate:
 	bash scripts/migrate.sh
 
 linear-projects:
-	python scripts/linear_intake.py list-projects
+	uv run --frozen --extra dev python scripts/linear_intake.py list-projects
 
 linear-issues:
-	python scripts/linear_intake.py list-issues
+	uv run --frozen --extra dev python scripts/linear_intake.py list-issues
 
 linear-export:
-	python scripts/linear_intake.py export-md --output docs/workstreams/linear-inbox.md
+	uv run --frozen --extra dev python scripts/linear_intake.py export-md --output docs/workstreams/linear-inbox.md
 
 up:
 	docker compose up --build

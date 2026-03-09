@@ -42,6 +42,7 @@ Primary product spec: [`docs/internal/helm-v1.md`](docs/internal/helm-v1.md)
 ### 1. Prerequisites
 
 - Python 3.11+
+- uv
 - Docker + Docker Compose
 
 ### 2. Configure env
@@ -72,6 +73,9 @@ Services:
 
 ```bash
 bash scripts/bootstrap.sh
+bash scripts/doctor.sh
+uv run pre-commit install
+bash scripts/format.sh
 bash scripts/lint.sh
 bash scripts/test.sh
 ```
@@ -88,9 +92,9 @@ Expected result is a JSON payload with `"ok": true`.
 
 ## Initial Commands
 
-- API app: `python -m helm_api.main`
-- Worker app: `python -m helm_worker.main`
-- Telegram bot: `python -m helm_telegram_bot.main`
+- API app: `uv run python -m helm_api.main`
+- Worker app: `uv run python -m helm_worker.main`
+- Telegram bot: `uv run python -m helm_telegram_bot.main`
 
 ## Current Status
 
