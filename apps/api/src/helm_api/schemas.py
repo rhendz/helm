@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StatusResponse(BaseModel):
@@ -80,4 +80,21 @@ class ReplayEnqueueResponse(BaseModel):
     status: str
     replay_id: int | None
     created: bool
+    reason: str | None = None
+
+
+class ReplayReprocessRequest(BaseModel):
+    source_type: str | None = None
+    source_id: str | None = None
+    since_hours: int | None = Field(default=None, ge=1, le=168)
+    limit: int = Field(default=20, ge=1, le=100)
+    dry_run: bool = True
+
+
+class ReplayReprocessResponse(BaseModel):
+    status: str
+    dry_run: bool
+    matched_count: int
+    enqueued_count: int
+    skipped_count: int
     reason: str | None = None
