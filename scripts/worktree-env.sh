@@ -23,10 +23,13 @@ ensure_worktree() {
 
 prepare_shared() {
   cd "$ROOT_DIR"
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "error: uv is required (install: https://docs.astral.sh/uv/getting-started/installation/)"
+    exit 1
+  fi
+
   if [[ ! -d .venv ]]; then
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -e '.[dev]'
+    uv sync --frozen --extra dev
     echo "created shared .venv"
   else
     echo "shared .venv already exists"
