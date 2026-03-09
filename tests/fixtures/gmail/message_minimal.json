@@ -1,0 +1,12 @@
+{
+  "id": "18f3a1234abc",
+  "threadId": "18f39fff0001",
+  "internalDate": "1710000000000",
+  "snippet": "Hi Ankush, wanted to follow up on the role.",
+  "payload": {
+    "headers": [
+      {"name": "From", "value": "Recruiter <recruiter@example.com>"},
+      {"name": "Subject", "value": "Following up on Staff Engineer role"}
+    ]
+  }
+}
