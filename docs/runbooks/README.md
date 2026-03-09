@@ -1,11 +1,7 @@
 # Runbooks Index
 
 - [Development](./development.md)
+- [Reprocess Failed Runs](./reprocess-failed-runs.md)
+- [Connector Troubleshooting](./connector-troubleshooting.md)
 - [Migrations](./migrations.md)
 - [Parallel Agents](./parallel-agents.md)
-
-Planned:
-
-- Reprocess failed runs (TODO)
-- Telegram approval loop operations (TODO)
-- Connector troubleshooting (TODO)
