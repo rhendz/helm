@@ -2,4 +2,5 @@
 
 Alembic migrations live here.
 
-TODO(v1-phase1): initialize Alembic environment and create first schema revision from `docs/internal/helm-v1.md`.
+- Baseline V1 schema is defined in `migrations/versions/20260308_0001_v1_baseline.py`.
+- Keep new revisions small and scoped to one contract change.
