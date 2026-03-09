@@ -23,3 +23,14 @@ class DraftResponse(BaseModel):
 class StudyIngestRequest(BaseModel):
     source_type: str = "manual"
     raw_text: str
+
+
+class StudyIngestResponse(BaseModel):
+    status: str
+    source_type: str
+    study_session_id: int
+    summary: str
+    learning_task_ids: list[int]
+    knowledge_gap_ids: list[int]
+    digest_item_id: int | None
+    agent_run_id: int
