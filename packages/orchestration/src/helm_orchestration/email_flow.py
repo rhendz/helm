@@ -172,14 +172,24 @@ def _persist_triage_artifacts(
 
     if state.get("action_item_required", False):
         action_record = action_repo.get_open_by_source(
-            source_type="email_message",
-            source_id=message.provider_message_id,
+            source_type="email_thread",
+            source_id=message.provider_thread_id,
         )
+        if action_record is None:
+            action_record = action_repo.get_open_by_source(
+                source_type="email_message",
+                source_id=message.provider_message_id,
+            )
+        if action_record is None:
+            action_record = action_repo.get_open_by_source(
+                source_type="email_thread",
+                source_id=message.provider_message_id,
+            )
         if action_record is None:
             action_record = action_repo.create(
                 NewActionItem(
-                    source_type="email_message",
-                    source_id=message.provider_message_id,
+                    source_type="email_thread",
+                    source_id=message.provider_thread_id,
                     title=_build_action_title(message),
                     description=thread_summary or None,
                     priority=priority,

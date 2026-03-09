@@ -224,3 +224,54 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert len(digest_items) == 1
     assert len(agent_runs) == 2
     assert all(run.status == AgentRunStatus.SUCCEEDED.value for run in agent_runs)
+
+
+def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    first_message = normalize_message(
+        {
+            "id": "msg-10-a",
+            "threadId": "thr-10",
+            "from": "recruiter@example.com",
+            "subject": "Staff Backend role",
+            "snippet": "Would you be open to an interview?",
+        }
+    )
+    second_message = normalize_message(
+        {
+            "id": "msg-10-b",
+            "threadId": "thr-10",
+            "from": "recruiter@example.com",
+            "subject": "Staff Backend role",
+            "snippet": "Checking in on this thread.",
+        }
+    )
+
+    graph = build_email_triage_graph()
+    first_result = run_email_triage_workflow(
+        first_message,
+        graph=graph,
+        session_factory=session_local,
+    )
+    second_result = run_email_triage_workflow(
+        second_message,
+        graph=graph,
+        session_factory=session_local,
+    )
+
+    assert first_result.action_item_id is not None
+    assert second_result.action_item_id == first_result.action_item_id
+    assert first_result.draft_reply_id is not None
+    assert second_result.draft_reply_id == first_result.draft_reply_id
+
+    with Session(engine) as session:
+        action_items = list(session.execute(select(ActionItemORM)).scalars().all())
+        draft_replies = list(session.execute(select(DraftReplyORM)).scalars().all())
+        email_messages = list(session.execute(select(EmailMessageORM)).scalars().all())
+
+    assert len(action_items) == 1
+    assert len(draft_replies) == 1
+    assert len(email_messages) == 2
