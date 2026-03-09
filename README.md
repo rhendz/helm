@@ -77,6 +77,16 @@ pip install -e .[dev]
 pytest
 ```
 
+### 5. Gmail credential smoke test (optional)
+
+After setting Gmail env vars in `.env`, run:
+
+```bash
+python scripts/check-gmail-auth.py
+```
+
+Expected result is a JSON payload with `"ok": true`.
+
 ## Initial Commands
 
 - API app: `python -m helm_api.main`
