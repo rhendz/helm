@@ -11,6 +11,8 @@ LOCK_DIR="$REPO_ROOT/.night-runner.lock"
 LOG_DIR="$REPO_ROOT/.night-runner-logs"
 REQUIRE_MAIN_BRANCH="${REQUIRE_MAIN_BRANCH:-1}"
 REQUIRE_CLEAN_TREE="${REQUIRE_CLEAN_TREE:-1}"
+ENABLE_LINEAR_RECONCILE="${ENABLE_LINEAR_RECONCILE:-1}"
+LINEAR_RECONCILE_SINCE_DAYS="${LINEAR_RECONCILE_SINCE_DAYS:-14}"
 DRY_RUN=0
 
 usage() {
@@ -28,6 +30,8 @@ Environment variables:
   MAX_HOURS_PER_RUN   Run timeout in hours (default: 6)
   REQUIRE_MAIN_BRANCH Require current branch to be main before start (default: 1)
   REQUIRE_CLEAN_TREE  Require clean git tree before start (default: 1)
+  ENABLE_LINEAR_RECONCILE Run PR-to-Linear reconciliation after run (default: 1)
+  LINEAR_RECONCILE_SINCE_DAYS Lookback window for reconciliation (default: 14)
 EOF
 }
 
@@ -109,6 +113,8 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "MAX_HOURS_PER_RUN=$MAX_HOURS_PER_RUN"
   echo "TIMEOUT_SECONDS=$TIMEOUT_SECONDS"
   echo "LOG_FILE=$LOG_FILE"
+  echo "ENABLE_LINEAR_RECONCILE=$ENABLE_LINEAR_RECONCILE"
+  echo "LINEAR_RECONCILE_SINCE_DAYS=$LINEAR_RECONCILE_SINCE_DAYS"
   echo "COMMAND: ${CMD[*]} < \"$PROMPT_FILE\" | tee \"$LOG_FILE\""
   exit 0
 fi
@@ -136,6 +142,15 @@ RUN_STATUS=$?
 set -e
 
 kill "$WATCHDOG_PID" >/dev/null 2>&1 || true
+
+if [[ "$ENABLE_LINEAR_RECONCILE" == "1" ]]; then
+  echo "Running PR-to-Linear reconciliation (since ${LINEAR_RECONCILE_SINCE_DAYS} days)" | tee -a "$LOG_FILE"
+  if ! python3 "$REPO_ROOT/scripts/pr_linear_reconcile.py" \
+    --team "${LINEAR_TEAM_KEY:-HELM}" \
+    --since-days "$LINEAR_RECONCILE_SINCE_DAYS" | tee -a "$LOG_FILE"; then
+    echo "Reconciliation step failed (non-fatal). Review setup for gh/Linear auth." | tee -a "$LOG_FILE"
+  fi
+fi
 
 if [[ "$RUN_STATUS" -ne 0 ]]; then
   echo "Night runner exited with status $RUN_STATUS. See log: $LOG_FILE" >&2
