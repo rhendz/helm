@@ -9,7 +9,10 @@
 ## Branch and PR
 
 - One focused change per PR.
-- Branch format: `ap/(feat|bug|chore)-short-description`.
+- Branch format:
+  - `ap/feat-short-description`
+  - `ap/bug-short-description`
+  - `ap/chore-short-description`
 - PR title format: `feat|bug|chore: short description`.
 - If a Linear ticket exists, include it in PR description/body.
 - Do not include ticket IDs in the branch name.

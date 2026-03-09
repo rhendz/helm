@@ -18,7 +18,10 @@ jobs:
           if [[ "$BRANCH_NAME" =~ ^ap/(feat|bug|chore)-[a-z0-9._-]+$ ]]; then
             echo "branch ok"
           else
-            echo "Invalid branch format. Use: ap/(feat|bug|chore)-short-description"
+            echo "Invalid branch format. Use one of:"
+            echo "  ap/feat-short-description"
+            echo "  ap/bug-short-description"
+            echo "  ap/chore-short-description"
             exit 1
           fi
 

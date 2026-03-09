@@ -9,6 +9,7 @@
 - Issue: Closes #<id> or N/A
 - Linear: <ticket-id-or-url> (required when a Linear ticket exists)
   - Include this in PR description/body, not the branch name.
+- Branch should be `ap/feat-short-description`, `ap/bug-short-description`, or `ap/chore-short-description`.
 
 ## Validation
 - [ ] `scripts/lint.sh`
