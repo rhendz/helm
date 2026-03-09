@@ -46,6 +46,7 @@ where = [
   "packages/agents/src",
   "packages/orchestration/src",
   "packages/llm/src",
+  "packages/runtime/src",
   "packages/observability/src",
 ]
 
