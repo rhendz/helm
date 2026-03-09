@@ -40,6 +40,10 @@ Default split is one agent per boundary:
 
 ## Workflow Conventions
 
+- Branch naming: `ap/(feat|bug|chore)-short-description`.
+- Do not include ticket IDs in branch names.
+- If a Linear ticket exists, include it in PR description/body.
+- PR title format: `feat|bug|chore: short description`.
 - Create focused PRs scoped to one boundary.
 - Run local checks before PR:
   - `scripts/lint.sh`

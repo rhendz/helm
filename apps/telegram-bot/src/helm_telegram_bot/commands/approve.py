@@ -1,11 +1,20 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from helm_telegram_bot.commands.common import reject_if_unauthorized
+from helm_telegram_bot.commands.common import parse_single_id_arg, reject_if_unauthorized
+from helm_telegram_bot.services.command_service import TelegramCommandService
+
+_service = TelegramCommandService()
 
 
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if await reject_if_unauthorized(update, context):
         return
-    # TODO(v1-phase2): parse /approve <id> and transition draft state.
-    await update.message.reply_text("Approve flow not implemented yet.")
+    if not update.message:
+        return
+    draft_id = parse_single_id_arg(context.args)
+    if draft_id is None:
+        await update.message.reply_text("Usage: /approve <id>")
+        return
+    result = _service.approve_draft(draft_id)
+    await update.message.reply_text(result.message)

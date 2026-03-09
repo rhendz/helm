@@ -10,6 +10,18 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate branch name format
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          echo "Validating branch: $BRANCH_NAME"
+          if [[ "$BRANCH_NAME" =~ ^ap/(feat|bug|chore)-[a-z0-9._-]+$ ]]; then
+            echo "branch ok"
+          else
+            echo "Invalid branch format. Use: ap/(feat|bug|chore)-short-description"
+            exit 1
+          fi
+
       - name: Validate title format
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}

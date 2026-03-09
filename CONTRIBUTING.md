@@ -9,7 +9,10 @@
 ## Branch and PR
 
 - One focused change per PR.
-- Use PR title format: `feat|bug|chore: <short description>`.
+- Branch format: `ap/(feat|bug|chore)-short-description`.
+- PR title format: `feat|bug|chore: short description`.
+- If a Linear ticket exists, include it in PR description/body.
+- Do not include ticket IDs in the branch name.
 - Link issue and include validation steps.
 
 ## Local Workflow
@@ -32,4 +35,3 @@ make test
 - Persist workflow state in DB artifacts, not in process memory.
 - Keep human approval for meaningful outbound actions.
 - Keep LinkedIn integration optional unless explicitly enabled.
-

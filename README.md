@@ -101,3 +101,10 @@ Phase 1 bootstrap scaffolding is in place.
 
 
 - Parallel worktree helper: `scripts/worktree-env.sh`
+
+
+Linear intake:
+
+- `make linear-projects`
+- `make linear-issues`
+- `make linear-export`

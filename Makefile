@@ -1,4 +1,4 @@
-.PHONY: install lint test smoke doctor bootstrap migrate up down
+.PHONY: install lint test smoke doctor bootstrap migrate linear-projects linear-issues linear-export up down
 
 install:
 	python3 -m pip install --upgrade pip
@@ -21,6 +21,15 @@ smoke:
 
 migrate:
 	bash scripts/migrate.sh
+
+linear-projects:
+	python scripts/linear_intake.py list-projects
+
+linear-issues:
+	python scripts/linear_intake.py list-issues
+
+linear-export:
+	python scripts/linear_intake.py export-md --output docs/workstreams/linear-inbox.md
 
 up:
 	docker compose up --build

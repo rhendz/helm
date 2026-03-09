@@ -41,3 +41,9 @@ This file defines low-conflict tracks for parallel Codex agents.
   - LLM prompt contract helpers.
   - Optional LinkedIn manual connector scaffolding.
 
+
+
+## Intake
+
+- Refresh inbox from Linear with `python scripts/linear_intake.py export-md --output docs/workstreams/linear-inbox.md`.
+- Use `docs/workstreams/linear-inbox.md` as a current read-only queue snapshot.

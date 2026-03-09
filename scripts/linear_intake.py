@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""Linear intake helper for Helm parallel work.
+
+Uses Linear GraphQL API and environment variables:
+- LINEAR_API_KEY (required)
+- LINEAR_TEAM_KEY (optional, default: RHE)
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+API_URL = "https://api.linear.app/graphql"
+DEFAULT_TEAM_KEY = "RHE"
+
+
+@dataclass(slots=True)
+class Issue:
+    identifier: str
+    title: str
+    url: str
+    state: str
+    priority: int
+    project: str
+    assignee: str
+    updated_at: str
+
+
+def _priority_name(priority: int) -> str:
+    names = {
+        0: "None",
+        1: "Urgent",
+        2: "High",
+        3: "Medium",
+        4: "Low",
+    }
+    return names.get(priority, str(priority))
+
+
+def _request(query: str, variables: dict[str, Any]) -> dict[str, Any]:
+    token = os.getenv("LINEAR_API_KEY", "")
+    if not token:
+        raise RuntimeError("LINEAR_API_KEY is required")
+
+    payload = json.dumps({"query": query, "variables": variables}).encode()
+    request = urllib.request.Request(
+        API_URL,
+        data=payload,
+        headers={"Content-Type": "application/json", "Authorization": token},
+    )
+
+    try:
+        with urllib.request.urlopen(request) as response:
+            body = json.loads(response.read().decode())
+    except urllib.error.HTTPError as err:
+        detail = err.read().decode()
+        raise RuntimeError(f"Linear API error HTTP {err.code}: {detail}") from err
+
+    if body.get("errors"):
+        raise RuntimeError(f"Linear API GraphQL errors: {body['errors']}")
+
+    return body["data"]
+
+
+def list_projects(team_key: str) -> list[tuple[str, str]]:
+    query = """
+    query($teamKey: String!) {
+      team(key: $teamKey) {
+        projects(first: 100) {
+          nodes {
+            name
+            url
+          }
+        }
+      }
+    }
+    """
+    data = _request(query, {"teamKey": team_key})
+    nodes = data["team"]["projects"]["nodes"]
+    return sorted([(node["name"], node["url"]) for node in nodes], key=lambda item: item[0].lower())
+
+
+def list_issues(team_key: str, limit: int) -> list[Issue]:
+    query = """
+    query($teamKey: String!, $limit: Int!) {
+      team(key: $teamKey) {
+        issues(first: $limit, orderBy: updatedAt) {
+          nodes {
+            identifier
+            title
+            url
+            state {
+              name
+            }
+            priority
+            updatedAt
+            project {
+              name
+            }
+            assignee {
+              name
+            }
+          }
+        }
+      }
+    }
+    """
+    data = _request(query, {"teamKey": team_key, "limit": limit})
+    nodes = data["team"]["issues"]["nodes"]
+
+    issues: list[Issue] = []
+    for node in nodes:
+        issues.append(
+            Issue(
+                identifier=node["identifier"],
+                title=node["title"],
+                url=node["url"],
+                state=node["state"]["name"] if node.get("state") else "Unknown",
+                priority=int(node.get("priority") or 0),
+                project=(node.get("project") or {}).get("name") or "(no project)",
+                assignee=(node.get("assignee") or {}).get("name") or "Unassigned",
+                updated_at=node["updatedAt"],
+            )
+        )
+    return issues
+
+
+def filter_issues(
+    issues: list[Issue],
+    state: str | None,
+    project: str | None,
+    assignee: str | None,
+) -> list[Issue]:
+    filtered = issues
+
+    if state:
+        state_lower = state.lower()
+        filtered = [issue for issue in filtered if issue.state.lower() == state_lower]
+
+    if project:
+        project_lower = project.lower()
+        filtered = [issue for issue in filtered if issue.project.lower() == project_lower]
+
+    if assignee:
+        assignee_lower = assignee.lower()
+        filtered = [issue for issue in filtered if issue.assignee.lower() == assignee_lower]
+
+    return sorted(filtered, key=lambda issue: issue.updated_at, reverse=True)
+
+
+def print_issue_rows(issues: list[Issue]) -> None:
+    if not issues:
+        print("No issues matched filters.")
+        return
+
+    for issue in issues:
+        updated = datetime.fromisoformat(issue.updated_at.replace("Z", "+00:00")).date()
+        print(
+            f"{issue.identifier:8} [{issue.state:12}] [P:{_priority_name(issue.priority):6}] "
+            f"[{issue.project}] {issue.title}"
+        )
+        print(f"  assignee={issue.assignee} updated={updated} url={issue.url}")
+
+
+def export_markdown(path: str, issues: list[Issue], team_key: str) -> None:
+    grouped: dict[str, list[Issue]] = {}
+    for issue in issues:
+        grouped.setdefault(issue.project, []).append(issue)
+
+    lines = [
+        "# Linear Inbox Snapshot",
+        "",
+        f"Team: `{team_key}`",
+        f"Generated at: `{datetime.utcnow().isoformat()}Z`",
+        "",
+        "This file is generated by `scripts/linear_intake.py`.",
+        "",
+    ]
+
+    if not issues:
+        lines.append("No matching issues.")
+    else:
+        for project in sorted(grouped):
+            lines.append(f"## {project}")
+            lines.append("")
+            for issue in sorted(grouped[project], key=lambda item: item.updated_at, reverse=True):
+                lines.append(
+                    f"- `{issue.identifier}` [{issue.state}] [P:{_priority_name(issue.priority)}] "
+                    f"{issue.title} ([link]({issue.url}))"
+                )
+            lines.append("")
+
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines).rstrip() + "\n")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Linear intake helper")
+    parser.add_argument("--team", default=os.getenv("LINEAR_TEAM_KEY", DEFAULT_TEAM_KEY))
+
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("list-projects")
+
+    issues = subparsers.add_parser("list-issues")
+    issues.add_argument("--state", default=None, help="Exact state name filter")
+    issues.add_argument("--project", default=None, help="Exact project name filter")
+    issues.add_argument("--assignee", default=None, help="Exact assignee name filter")
+    issues.add_argument("--limit", type=int, default=200)
+
+    export = subparsers.add_parser("export-md")
+    export.add_argument("--state", default=None)
+    export.add_argument("--project", default=None)
+    export.add_argument("--assignee", default=None)
+    export.add_argument("--limit", type=int, default=200)
+    export.add_argument("--output", default="docs/workstreams/linear-inbox.md")
+
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+
+    try:
+        if args.command == "list-projects":
+            projects = list_projects(args.team)
+            if not projects:
+                print("No projects found.")
+                return 0
+            for name, url in projects:
+                print(f"- {name}: {url}")
+            return 0
+
+        issues = list_issues(args.team, args.limit)
+        filtered = filter_issues(issues, args.state, args.project, args.assignee)
+
+        if args.command == "list-issues":
+            print_issue_rows(filtered)
+            return 0
+
+        if args.command == "export-md":
+            export_markdown(args.output, filtered, args.team)
+            print(f"Wrote {len(filtered)} issues to {args.output}")
+            return 0
+
+        return 1
+    except RuntimeError as err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
