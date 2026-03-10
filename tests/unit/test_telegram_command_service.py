@@ -27,6 +27,31 @@ def test_list_open_actions_applies_limit(monkeypatch) -> None:  # noqa: ANN001
     assert [a.id for a in actions] == [1, 2, 3]
 
 
+def test_list_threads_filters_by_business_state(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_email_threads": lambda self, *, business_state, label, limit: [
+                {
+                    "id": 3,
+                    "business_state": business_state,
+                    "visible_labels": ["Action"],
+                    "current_summary": "Reply to recruiter",
+                    "action_reason": "reply_needed",
+                }
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    threads = service.list_threads(limit=2, business_state="waiting_on_user")
+
+    assert len(threads) == 1
+    assert threads[0].business_state == "waiting_on_user"
+
+
 def test_list_pending_drafts_applies_limit(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
 
