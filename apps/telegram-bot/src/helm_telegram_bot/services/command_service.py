@@ -23,6 +23,12 @@ class ThreadTaskTransitionResult:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class ThreadOverrideTransitionResult:
+    ok: bool
+    message: str
+
+
 class TelegramCommandService:
     def list_open_actions(self, *, limit: int = 5) -> list[object]:
         return list_open_actions(limit=limit, runtime=build_helm_runtime())
@@ -70,4 +76,66 @@ class TelegramCommandService:
         return ThreadTaskTransitionResult(
             ok=True,
             message=f"Created {task_type} task {result.task_id} for thread {thread_id}.",
+        )
+
+    def resolve_thread(self, thread_id: int) -> ThreadOverrideTransitionResult:
+        runtime = build_helm_runtime()
+        thread = runtime.get_thread_by_id(thread_id)
+        if thread is None:
+            return ThreadOverrideTransitionResult(
+                ok=False,
+                message=f"Thread {thread_id} not found.",
+            )
+        updated = runtime.update_thread_state(
+            thread_id,
+            business_state="resolved",
+            visible_labels=(),
+            latest_confidence_band=thread.latest_confidence_band,
+            resurfacing_source="user_override",
+            action_reason="user_marked_done",
+            current_summary=thread.current_summary,
+            last_message_id=thread.last_message_id,
+            last_inbound_message_id=thread.last_inbound_message_id,
+            last_outbound_message_id=thread.last_outbound_message_id,
+        )
+        if updated is None:
+            return ThreadOverrideTransitionResult(
+                ok=False,
+                message=f"Thread {thread_id} not found.",
+            )
+        return ThreadOverrideTransitionResult(
+            ok=True,
+            message=f"Marked thread {thread_id} resolved.",
+        )
+
+    def mark_thread_needs_review(self, thread_id: int) -> ThreadOverrideTransitionResult:
+        runtime = build_helm_runtime()
+        thread = runtime.get_thread_by_id(thread_id)
+        if thread is None:
+            return ThreadOverrideTransitionResult(
+                ok=False,
+                message=f"Thread {thread_id} not found.",
+            )
+        labels = [label for label in thread.visible_labels.split(",") if label]
+        labels.append("NeedsReview")
+        updated = runtime.update_thread_state(
+            thread_id,
+            business_state="needs_review",
+            visible_labels=tuple(sorted(set(labels))),
+            latest_confidence_band=thread.latest_confidence_band,
+            resurfacing_source="user_override",
+            action_reason="user_requested_review",
+            current_summary=thread.current_summary,
+            last_message_id=thread.last_message_id,
+            last_inbound_message_id=thread.last_inbound_message_id,
+            last_outbound_message_id=thread.last_outbound_message_id,
+        )
+        if updated is None:
+            return ThreadOverrideTransitionResult(
+                ok=False,
+                message=f"Thread {thread_id} not found.",
+            )
+        return ThreadOverrideTransitionResult(
+            ok=True,
+            message=f"Marked thread {thread_id} for review.",
         )
