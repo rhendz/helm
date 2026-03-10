@@ -154,7 +154,13 @@ class DigestItemRepository(Protocol):
 
 @runtime_checkable
 class EmailThreadRepository(Protocol):
-    def list_recent(self, *, limit: int | None = None) -> list[EmailThreadORM]: ...
+    def list_recent(
+        self,
+        *,
+        business_state: str | None = None,
+        label: str | None = None,
+        limit: int | None = None,
+    ) -> list[EmailThreadORM]: ...
 
     def get_by_id(self, thread_id: int) -> EmailThreadORM | None: ...
 

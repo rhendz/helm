@@ -74,24 +74,20 @@ class TelegramCommandService:
         ]
 
     def list_review_threads(self, *, limit: int = 5) -> list[ThreadDetailView]:
-        items = build_helm_runtime().list_email_threads(limit=limit * 4)
-        results: list[ThreadDetailView] = []
-        for item in items:
-            labels = item.get("visible_labels", [])
-            if item.get("business_state") != "needs_review" and "NeedsReview" not in labels:
-                continue
-            results.append(
-                ThreadDetailView(
-                    id=item["id"],
-                    business_state=item["business_state"],
-                    visible_labels=labels,
-                    current_summary=item.get("current_summary"),
-                    action_reason=item.get("action_reason"),
-                )
+        items = build_helm_runtime().list_email_threads(
+            business_state="needs_review",
+            limit=limit,
+        )
+        return [
+            ThreadDetailView(
+                id=item["id"],
+                business_state=item["business_state"],
+                visible_labels=item.get("visible_labels", []),
+                current_summary=item.get("current_summary"),
+                action_reason=item.get("action_reason"),
             )
-            if len(results) >= limit:
-                break
-        return results
+            for item in items
+        ]
 
     def list_scheduled_tasks(
         self,
