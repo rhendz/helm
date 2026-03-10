@@ -12,6 +12,7 @@ from helm_telegram_bot.commands import (
     proposals,
     remind,
     resolve,
+    resolved_threads,
     review,
     reviews,
     snooze,
@@ -344,6 +345,30 @@ async def test_waiting_on_other_party_threads_command_formats_items(
     assert update.message.replies == [
         "Waiting-on-other-party threads:\n24: Waiting for recruiter response"
     ]
+
+
+@pytest.mark.asyncio
+async def test_resolved_threads_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_resolved_threads(self) -> list[ThreadQueueView]:
+            return [
+                ThreadQueueView(
+                    id=25,
+                    business_state="resolved",
+                    current_summary="Closed recruiter thread",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(resolved_threads, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(resolved_threads, "_service", _Service())
+    update = _Update()
+
+    await resolved_threads.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Resolved threads:\n25: Closed recruiter thread"]
 
 
 @pytest.mark.asyncio

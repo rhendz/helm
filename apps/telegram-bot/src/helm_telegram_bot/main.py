@@ -13,6 +13,7 @@ from helm_telegram_bot.commands import (
     proposals,
     remind,
     resolve,
+    resolved_threads,
     review,
     reviews,
     snooze,
@@ -46,6 +47,7 @@ def main() -> None:
     application.add_handler(CommandHandler("study", study.handle))
     application.add_handler(CommandHandler("approve", approve.handle))
     application.add_handler(CommandHandler("done_task", done_task.handle))
+    application.add_handler(CommandHandler("resolved_threads", resolved_threads.handle))
     application.add_handler(CommandHandler("snooze", snooze.handle))
     application.add_handler(CommandHandler("remind", remind.handle))
     application.add_handler(CommandHandler("followup", followup.handle))
