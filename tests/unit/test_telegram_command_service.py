@@ -48,6 +48,29 @@ def test_list_pending_drafts_applies_limit(monkeypatch) -> None:  # noqa: ANN001
     assert [d.id for d in drafts] == [1, 2, 3, 4]
 
 
+def test_list_pending_drafts_filters_by_approval_status(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_email_drafts": lambda self, *, limit, approval_status: [
+                {
+                    "id": 4,
+                    "approval_status": approval_status,
+                    "preview": "Approved draft",
+                }
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    drafts = service.list_pending_drafts(limit=2, approval_status="approved")
+
+    assert len(drafts) == 1
+    assert drafts[0].status == "approved"
+
+
 def test_approve_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
 
