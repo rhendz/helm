@@ -10,6 +10,7 @@ from helm_telegram_bot.commands import (
     remind,
     resolve,
     review,
+    reviews,
     snooze,
     start,
     study,
@@ -37,6 +38,7 @@ def main() -> None:
     application.add_handler(CommandHandler("followup", followup.handle))
     application.add_handler(CommandHandler("resolve", resolve.handle))
     application.add_handler(CommandHandler("review", review.handle))
+    application.add_handler(CommandHandler("reviews", reviews.handle))
     application.add_handler(CommandHandler("thread", thread.handle))
 
     logger.info("telegram_bot_started")

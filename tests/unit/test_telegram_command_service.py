@@ -204,3 +204,34 @@ def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
     assert result is not None
     assert result.id == 5
     assert result.visible_labels == ["Action"]
+
+
+def test_list_review_threads_filters_results(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_email_threads": lambda self, *, limit: [
+                {
+                    "id": 1,
+                    "business_state": "needs_review",
+                    "visible_labels": ["NeedsReview"],
+                    "current_summary": "Review recruiter thread",
+                    "action_reason": "user_requested_review",
+                },
+                {
+                    "id": 2,
+                    "business_state": "waiting_on_user",
+                    "visible_labels": ["Action"],
+                    "current_summary": "Reply later",
+                    "action_reason": "reply_needed",
+                },
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    results = service.list_review_threads()
+
+    assert [item.id for item in results] == [1]
