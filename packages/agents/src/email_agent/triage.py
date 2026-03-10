@@ -7,6 +7,7 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from email_agent.runtime import EmailAgentRuntime
+from email_agent.thread_state import transition_for_inbound
 from email_agent.types import EmailMessage
 
 
@@ -165,24 +166,28 @@ def _persist_triage_artifacts(
     priority = _clamp_priority(state.get("priority_score", 3))
     thread_summary = state.get("thread_summary", "")
     classification = state.get("classification", "unclassified")
-    action_reason = _derive_action_reason(state=state)
-    visible_labels = _derive_visible_labels(state=state)
-    business_state = _derive_business_state(state=state)
-    confidence_band = _derive_confidence_band(
-        priority_score=priority,
+    existing_thread = runtime.get_thread_by_id(email_thread_id)
+    thread_update = transition_for_inbound(
         classification=classification,
+        priority_score=priority,
+        thread_summary=thread_summary or None,
+        action_item_required=state.get("action_item_required", False),
+        draft_reply_required=state.get("draft_reply_required", False),
+        email_message_id=email_message_id,
+        previous_thread=existing_thread,
     )
 
     runtime.update_thread_state(
         email_thread_id,
-        business_state=business_state,
-        visible_labels=visible_labels,
-        latest_confidence_band=confidence_band,
-        resurfacing_source="new_message",
-        action_reason=action_reason,
-        current_summary=thread_summary or None,
-        last_message_id=email_message_id,
-        last_inbound_message_id=email_message_id,
+        business_state=thread_update.business_state,
+        visible_labels=thread_update.visible_labels,
+        latest_confidence_band=thread_update.latest_confidence_band,
+        resurfacing_source=thread_update.resurfacing_source,
+        action_reason=thread_update.action_reason,
+        current_summary=thread_update.current_summary,
+        last_message_id=thread_update.last_message_id,
+        last_inbound_message_id=thread_update.last_inbound_message_id,
+        last_outbound_message_id=thread_update.last_outbound_message_id,
     )
 
     if state.get("action_item_required", False):
@@ -192,7 +197,7 @@ def _persist_triage_artifacts(
                 email_thread_id=email_thread_id,
                 proposal_type="reply" if state.get("draft_reply_required", False) else "review",
                 rationale=thread_summary or None,
-                confidence_band=confidence_band,
+                confidence_band=thread_update.latest_confidence_band,
             )
 
     if state.get("draft_reply_required", False):
@@ -244,39 +249,6 @@ def _build_fallback_summary(message: EmailMessage) -> str:
     if message.body_text:
         return f"{message.from_address}: {message.body_text[:120]}"
     return f"{message.from_address}: (no subject/body)"
-
-
-def _derive_business_state(*, state: EmailTriageState) -> str:
-    if state.get("action_item_required", False):
-        return "waiting_on_user"
-    return "resolved"
-
-
-def _derive_action_reason(*, state: EmailTriageState) -> str | None:
-    if state.get("draft_reply_required", False):
-        return "reply_needed"
-    if state.get("action_item_required", False):
-        return "awareness_needed"
-    return None
-
-
-def _derive_visible_labels(*, state: EmailTriageState) -> tuple[str, ...]:
-    labels: list[str] = []
-    if state.get("action_item_required", False):
-        labels.append("Action")
-    if state.get("classification") == "urgent":
-        labels.append("Urgent")
-    if state.get("classification") == "unclassified" and state.get("priority_score", 3) <= 2:
-        labels.append("NeedsReview")
-    return tuple(labels)
-
-
-def _derive_confidence_band(*, priority_score: int, classification: str) -> str:
-    if classification in {"opportunity", "urgent"} and priority_score <= 2:
-        return "High"
-    if classification == "unclassified":
-        return "Medium"
-    return "Low"
 
 
 def _build_draft_stub(*, message: EmailMessage, classification: str) -> str:

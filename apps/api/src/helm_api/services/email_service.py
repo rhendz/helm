@@ -16,6 +16,7 @@ from email_agent.reminders import (
     list_thread_scheduled_tasks,
 )
 from email_agent.reprocess import reprocess_email_thread
+from email_agent.thread_state import transition_for_human_override
 from email_agent.triage import build_email_triage_graph, run_email_triage_workflow
 from email_agent.types import EmailMessage
 from helm_connectors.gmail import pull_new_messages_report
@@ -114,19 +115,27 @@ def override_thread(
         }
 
     try:
-        updated = runtime.update_thread_state(
-            thread_id,
+        thread_update = transition_for_human_override(
+            thread,
             business_state=business_state,
             visible_labels=tuple(visible_labels),
-            latest_confidence_band=latest_confidence_band,
-            resurfacing_source="user_override",
-            action_reason=action_reason,
             current_summary=current_summary,
-            last_message_id=thread.last_message_id,
-            last_inbound_message_id=thread.last_inbound_message_id,
-            last_outbound_message_id=thread.last_outbound_message_id,
+            latest_confidence_band=latest_confidence_band,
+            action_reason=action_reason,
         )
-    except SQLAlchemyError:
+        updated = runtime.update_thread_state(
+            thread_id,
+            business_state=thread_update.business_state,
+            visible_labels=thread_update.visible_labels,
+            latest_confidence_band=thread_update.latest_confidence_band,
+            resurfacing_source=thread_update.resurfacing_source,
+            action_reason=thread_update.action_reason,
+            current_summary=thread_update.current_summary,
+            last_message_id=thread_update.last_message_id,
+            last_inbound_message_id=thread_update.last_inbound_message_id,
+            last_outbound_message_id=thread_update.last_outbound_message_id,
+        )
+    except (SQLAlchemyError, ValueError):
         return {
             "status": "unavailable",
             "thread_id": thread_id,
