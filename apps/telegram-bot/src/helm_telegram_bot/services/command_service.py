@@ -29,12 +29,34 @@ class ThreadOverrideTransitionResult:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class ThreadDetailView:
+    id: int
+    business_state: str
+    visible_labels: list[str]
+    current_summary: str | None
+    action_reason: str | None
+
+
 class TelegramCommandService:
     def list_open_actions(self, *, limit: int = 5) -> list[object]:
         return list_open_actions(limit=limit, runtime=build_helm_runtime())
 
     def list_pending_drafts(self, *, limit: int = 5) -> list[object]:
         return list_pending_drafts(limit=limit, runtime=build_helm_runtime())
+
+    def get_thread_detail(self, thread_id: int) -> ThreadDetailView | None:
+        detail = build_helm_runtime().get_email_thread_detail(thread_id=thread_id)
+        if detail is None:
+            return None
+        thread = detail["thread"]
+        return ThreadDetailView(
+            id=thread["id"],
+            business_state=thread["business_state"],
+            visible_labels=thread["visible_labels"],
+            current_summary=thread["current_summary"],
+            action_reason=thread["action_reason"],
+        )
 
     def approve_draft(self, draft_id: int) -> DraftTransitionResult:
         result = approve_draft(draft_id, runtime=build_helm_runtime())

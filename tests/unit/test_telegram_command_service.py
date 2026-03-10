@@ -178,3 +178,29 @@ def test_resolve_thread_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
     assert result.ok is True
     assert result.message == "Marked thread 7 resolved."
+
+
+def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "get_email_thread_detail": lambda self, *, thread_id: {
+                "thread": {
+                    "id": thread_id,
+                    "business_state": "waiting_on_user",
+                    "visible_labels": ["Action"],
+                    "current_summary": "Reply to recruiter",
+                    "action_reason": "reply_needed",
+                }
+            }
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    result = service.get_thread_detail(5)
+
+    assert result is not None
+    assert result.id == 5
+    assert result.visible_labels == ["Action"]
