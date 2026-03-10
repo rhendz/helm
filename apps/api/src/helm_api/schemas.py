@@ -89,6 +89,24 @@ class EmailThreadReprocessResponse(BaseModel):
     workflow_status: str | None = None
 
 
+class EmailThreadOverrideRequest(BaseModel):
+    business_state: str = Field(
+        pattern="^(uninitialized|waiting_on_user|waiting_on_other_party|needs_review|resolved)$"
+    )
+    visible_labels: list[str] = Field(default_factory=list)
+    current_summary: str | None = None
+    latest_confidence_band: str | None = None
+    action_reason: str | None = None
+
+
+class EmailThreadOverrideResponse(BaseModel):
+    status: str
+    thread_id: int
+    found: bool
+    reason: str | None = None
+    thread: EmailThreadResponse | None = None
+
+
 class EmailManualMessageRequest(BaseModel):
     id: str
     threadId: str | None = None
