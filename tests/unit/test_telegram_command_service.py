@@ -50,6 +50,29 @@ def test_list_action_threads_uses_action_label(monkeypatch) -> None:  # noqa: AN
     assert threads[0].id == 11
 
 
+def test_list_needs_review_threads_uses_label(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_email_threads": lambda self, *, label, limit: [
+                {
+                    "id": 21,
+                    "business_state": "needs_review",
+                    "current_summary": "Manual review needed",
+                }
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    threads = service.list_needs_review_threads(limit=2)
+
+    assert len(threads) == 1
+    assert threads[0].id == 21
+
+
 def test_list_proposals_filters_by_type(monkeypatch) -> None:  # noqa: ANN001
     runtime = type(
         "Runtime",

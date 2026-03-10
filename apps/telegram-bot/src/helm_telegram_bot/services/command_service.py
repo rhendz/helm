@@ -77,6 +77,17 @@ class TelegramCommandService:
             for item in items
         ]
 
+    def list_needs_review_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
+        items = build_helm_runtime().list_email_threads(label="NeedsReview", limit=limit)
+        return [
+            ThreadQueueView(
+                id=item["id"],
+                business_state=item["business_state"],
+                current_summary=item.get("current_summary"),
+            )
+            for item in items
+        ]
+
     def list_threads(
         self,
         *,

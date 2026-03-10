@@ -8,6 +8,7 @@ from helm_telegram_bot.commands import (
     done_task,
     drafts,
     followup,
+    needsreview_threads,
     proposals,
     remind,
     resolve,
@@ -239,6 +240,30 @@ async def test_action_threads_command_formats_items(monkeypatch: pytest.MonkeyPa
     await action_threads.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Action threads:\n14: Reply to recruiter"]
+
+
+@pytest.mark.asyncio
+async def test_needsreview_threads_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_needs_review_threads(self) -> list[ThreadQueueView]:
+            return [
+                ThreadQueueView(
+                    id=22,
+                    business_state="needs_review",
+                    current_summary="Review recruiter note",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(needsreview_threads, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(needsreview_threads, "_service", _Service())
+    update = _Update()
+
+    await needsreview_threads.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["NeedsReview threads:\n22: Review recruiter note"]
 
 
 @pytest.mark.asyncio
