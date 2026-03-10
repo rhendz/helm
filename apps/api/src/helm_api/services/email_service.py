@@ -3,9 +3,11 @@ from dataclasses import asdict
 
 from email_agent.adapters import build_helm_runtime
 from email_agent.query import (
+    get_email_draft_detail,
     get_email_thread_detail,
     list_classification_artifacts_for_message,
     list_classification_artifacts_for_thread,
+    list_draft_transition_audits_for_draft,
     list_email_drafts,
     list_email_proposals,
     list_email_threads,
@@ -75,6 +77,10 @@ def list_drafts(
 
 def get_thread_detail(*, thread_id: int) -> dict | None:
     return get_email_thread_detail(thread_id=thread_id, runtime=_runtime())
+
+
+def get_draft_detail(*, draft_id: int) -> dict | None:
+    return get_email_draft_detail(draft_id=draft_id, runtime=_runtime())
 
 
 def reprocess_thread(*, thread_id: int, dry_run: bool) -> dict:
@@ -186,6 +192,10 @@ def list_thread_classification_artifacts(*, thread_id: int) -> list[dict]:
 
 def list_message_classification_artifacts(*, message_id: int) -> list[dict]:
     return list_classification_artifacts_for_message(message_id=message_id, runtime=_runtime())
+
+
+def list_draft_transition_audits(*, draft_id: int) -> list[dict]:
+    return list_draft_transition_audits_for_draft(draft_id=draft_id, runtime=_runtime())
 
 
 def create_thread_task(
@@ -306,7 +316,9 @@ __all__ = [
     "create_thread_task",
     "complete_global_task",
     "complete_task",
+    "get_draft_detail",
     "ingest_manual_email_messages",
+    "list_draft_transition_audits",
     "list_drafts",
     "list_proposals",
     "list_tasks",

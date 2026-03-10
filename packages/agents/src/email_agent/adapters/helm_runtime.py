@@ -234,6 +234,25 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 "draft_subject": record.draft_subject,
             }
 
+    def list_draft_transition_audits_for_draft(self, *, draft_id: int) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyDraftTransitionAuditRepository(session).list_for_draft(
+                draft_id=draft_id,
+            )
+            return [
+                {
+                    "id": row.id,
+                    "draft_id": row.draft_id,
+                    "action": row.action,
+                    "from_status": row.from_status,
+                    "to_status": row.to_status,
+                    "success": row.success,
+                    "reason": row.reason,
+                    "created_at": row.created_at,
+                }
+                for row in records
+            ]
+
     def set_email_draft_approval_status(self, draft_id: int, *, approval_status: str) -> bool:
         with self.session_factory() as session:
             return SQLAlchemyEmailDraftRepository(session).set_approval_status(

@@ -85,3 +85,31 @@ def get_email_thread_detail(
         return runtime.get_email_thread_detail(thread_id=thread_id)
     except SQLAlchemyError:
         return None
+
+
+def get_email_draft_detail(
+    *,
+    draft_id: int,
+    runtime: EmailAgentRuntime,
+) -> dict | None:
+    try:
+        draft = runtime.get_email_draft_by_id(draft_id)
+        if draft is None:
+            return None
+        return {
+            **draft,
+            "transition_audits": runtime.list_draft_transition_audits_for_draft(draft_id=draft_id),
+        }
+    except SQLAlchemyError:
+        return None
+
+
+def list_draft_transition_audits_for_draft(
+    *,
+    draft_id: int,
+    runtime: EmailAgentRuntime,
+) -> list[dict]:
+    try:
+        return runtime.list_draft_transition_audits_for_draft(draft_id=draft_id)
+    except SQLAlchemyError:
+        return []

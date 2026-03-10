@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from email_agent import query as email_query
 from email_agent.adapters import build_helm_runtime
+from email_agent.operator import approve_draft
 from email_agent.reminders import (
     complete_scheduled_task,
     complete_thread_task,
@@ -269,6 +270,51 @@ def test_email_thread_detail_and_reprocess() -> None:
     )
     assert completed.status == "accepted"
     assert completed.completed is True
+
+
+def test_email_draft_detail_includes_transition_audits() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    with Session(engine) as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        proposal_repo = SQLAlchemyActionProposalRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-draft-detail"))
+        proposal = proposal_repo.create(
+            NewActionProposal(
+                email_thread_id=thread.id,
+                proposal_type="reply",
+                rationale="Reply with availability",
+                confidence_band="High",
+            )
+        )
+        draft = draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                action_proposal_id=proposal.id,
+                draft_body="Thanks for reaching out.",
+                draft_subject="Re: Opportunity",
+                approval_status="pending_user",
+            )
+        )
+
+    approve_result = approve_draft(draft.id, runtime=runtime)
+    assert approve_result.ok is True
+
+    detail = email_query.get_email_draft_detail(draft_id=draft.id, runtime=runtime)
+    audits = email_query.list_draft_transition_audits_for_draft(draft_id=draft.id, runtime=runtime)
+
+    assert detail is not None
+    assert detail["id"] == draft.id
+    assert detail["approval_status"] == "approved"
+    assert len(detail["transition_audits"]) == 1
+    assert detail["transition_audits"][0]["action"] == "approve"
+    assert len(audits) == 1
+    assert audits[0]["to_status"] == "approved"
 
 
 def test_email_service_lists_global_scheduled_tasks() -> None:
