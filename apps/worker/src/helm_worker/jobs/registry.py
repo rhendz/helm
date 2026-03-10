@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from helm_worker.jobs import digest, email_triage, replay, study
+from helm_worker.jobs import digest, email_triage, replay, scheduled_thread_tasks, study
 
 Job = Callable[[], None]
 
@@ -9,4 +9,5 @@ JOBS: dict[str, Job] = {
     "digest": digest.run,
     "study": study.run,
     "replay": replay.run,
+    "scheduled_thread_tasks": scheduled_thread_tasks.run,
 }
