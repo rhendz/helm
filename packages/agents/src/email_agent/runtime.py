@@ -154,6 +154,8 @@ class EmailAgentRuntime(Protocol):
 
     def get_email_draft_by_id(self, draft_id: int) -> dict | None: ...
 
+    def list_draft_transition_audits_for_draft(self, *, draft_id: int) -> list[dict]: ...
+
     def set_email_draft_approval_status(
         self,
         draft_id: int,

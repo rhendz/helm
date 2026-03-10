@@ -5,6 +5,8 @@ from helm_api.schemas import (
     CompleteScheduledTaskResponse,
     CreateScheduledTaskRequest,
     CreateScheduledTaskResponse,
+    DraftTransitionAuditResponse,
+    EmailDraftDetailResponse,
     EmailDraftResponse,
     EmailIngestRequest,
     EmailIngestResponse,
@@ -22,8 +24,10 @@ from helm_api.services.email_service import (
     complete_global_task,
     complete_task,
     create_thread_task,
+    get_draft_detail,
     get_thread_detail,
     ingest_manual_email_messages,
+    list_draft_transition_audits,
     list_drafts,
     list_message_classification_artifacts,
     list_proposals,
@@ -98,6 +102,27 @@ def get_email_drafts(
     return [
         EmailDraftResponse(**item)
         for item in list_drafts(limit=limit, status=status, approval_status=approval_status)
+    ]
+
+
+@router.get("/drafts/{draft_id}", response_model=EmailDraftDetailResponse)
+def get_email_draft_detail_route(draft_id: int) -> EmailDraftDetailResponse:
+    detail = get_draft_detail(draft_id=draft_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Email draft not found")
+    return EmailDraftDetailResponse(**detail)
+
+
+@router.get(
+    "/drafts/{draft_id}/transition-audits",
+    response_model=list[DraftTransitionAuditResponse],
+)
+def get_email_draft_transition_audits(
+    draft_id: int,
+) -> list[DraftTransitionAuditResponse]:
+    return [
+        DraftTransitionAuditResponse(**item)
+        for item in list_draft_transition_audits(draft_id=draft_id)
     ]
 
 

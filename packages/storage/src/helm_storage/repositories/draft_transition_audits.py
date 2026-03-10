@@ -40,3 +40,10 @@ class SQLAlchemyDraftTransitionAuditRepository:
         )
         return list(self._session.execute(stmt).scalars().all())
 
+    def list_for_draft(self, *, draft_id: int) -> list[DraftTransitionAuditORM]:
+        stmt = (
+            select(DraftTransitionAuditORM)
+            .where(DraftTransitionAuditORM.draft_id == draft_id)
+            .order_by(DraftTransitionAuditORM.id.desc())
+        )
+        return list(self._session.execute(stmt).scalars().all())

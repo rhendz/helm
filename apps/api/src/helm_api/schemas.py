@@ -55,6 +55,28 @@ class EmailDraftResponse(BaseModel):
     draft_subject: str | None = None
 
 
+class DraftTransitionAuditResponse(BaseModel):
+    id: int
+    draft_id: int
+    action: str
+    from_status: str | None
+    to_status: str | None
+    success: bool
+    reason: str | None = None
+    created_at: datetime
+
+
+class EmailDraftDetailResponse(BaseModel):
+    id: int
+    email_thread_id: int
+    action_proposal_id: int | None = None
+    status: str
+    approval_status: str
+    draft_body: str
+    draft_subject: str | None = None
+    transition_audits: list[DraftTransitionAuditResponse] = Field(default_factory=list)
+
+
 class EmailMessageResponse(BaseModel):
     id: int
     provider_message_id: str
