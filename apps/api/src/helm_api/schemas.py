@@ -55,6 +55,40 @@ class EmailDraftResponse(BaseModel):
     draft_subject: str | None = None
 
 
+class EmailMessageResponse(BaseModel):
+    id: int
+    provider_message_id: str
+    provider_thread_id: str
+    direction: str
+    from_address: str
+    subject: str
+    snippet: str | None = None
+    received_at: datetime
+    processed_at: datetime | None = None
+    source: str
+
+
+class EmailThreadDetailResponse(BaseModel):
+    thread: EmailThreadResponse
+    proposals: list[EmailProposalResponse] = Field(default_factory=list)
+    drafts: list[EmailDraftResponse] = Field(default_factory=list)
+    messages: list[EmailMessageResponse] = Field(default_factory=list)
+
+
+class EmailThreadReprocessRequest(BaseModel):
+    dry_run: bool = True
+
+
+class EmailThreadReprocessResponse(BaseModel):
+    status: str
+    thread_id: int
+    dry_run: bool
+    found: bool
+    reprocessed: bool
+    reason: str | None = None
+    workflow_status: str | None = None
+
+
 class StudyIngestRequest(BaseModel):
     source_type: str = "manual"
     raw_text: str

@@ -17,6 +17,25 @@ class SQLAlchemyEmailMessageRepository:
         )
         return self._session.execute(stmt).scalars().first()
 
+    def list_for_thread(self, *, email_thread_id: int) -> list[EmailMessageORM]:
+        stmt = (
+            select(EmailMessageORM)
+            .where(EmailMessageORM.email_thread_id == email_thread_id)
+            .order_by(EmailMessageORM.received_at.asc(), EmailMessageORM.id.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def get_latest_inbound_for_thread(self, *, email_thread_id: int) -> EmailMessageORM | None:
+        stmt = (
+            select(EmailMessageORM)
+            .where(
+                EmailMessageORM.email_thread_id == email_thread_id,
+                EmailMessageORM.direction == "inbound",
+            )
+            .order_by(EmailMessageORM.received_at.desc(), EmailMessageORM.id.desc())
+        )
+        return self._session.execute(stmt).scalars().first()
+
     def upsert_from_normalized(
         self,
         message: NormalizedGmailMessage,

@@ -47,6 +47,14 @@ class SQLAlchemyEmailDraftRepository:
         )
         return self._session.execute(stmt).scalars().first()
 
+    def list_for_thread(self, *, email_thread_id: int) -> list[EmailDraftORM]:
+        stmt = (
+            select(EmailDraftORM)
+            .where(EmailDraftORM.email_thread_id == email_thread_id)
+            .order_by(EmailDraftORM.id.desc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
     def set_approval_status(self, draft_id: int, *, approval_status: str) -> bool:
         record = self.get_by_id(draft_id)
         if record is None:

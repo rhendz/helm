@@ -64,6 +64,13 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
             record = SQLAlchemyEmailThreadRepository(session).get_by_id(thread_id)
             return _thread_record(record) if record is not None else None
 
+    def get_thread_by_provider_thread_id(self, provider_thread_id: str) -> ThreadRecord | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailThreadRepository(session).get_by_provider_thread_id(
+                provider_thread_id,
+            )
+            return _thread_record(record) if record is not None else None
+
     def upsert_inbound_message(
         self,
         *,
@@ -296,6 +303,91 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 }
                 for draft in records
             ]
+
+    def get_email_thread_detail(self, *, thread_id: int) -> dict | None:
+        with self.session_factory() as session:
+            thread = SQLAlchemyEmailThreadRepository(session).get_by_id(thread_id)
+            if thread is None:
+                return None
+
+            proposals = SQLAlchemyActionProposalRepository(session).list_for_thread(
+                email_thread_id=thread_id,
+            )
+            drafts = SQLAlchemyEmailDraftRepository(session).list_for_thread(
+                email_thread_id=thread_id,
+            )
+            messages = SQLAlchemyEmailMessageRepository(session).list_for_thread(
+                email_thread_id=thread_id,
+            )
+
+            return {
+                "thread": {
+                    "id": thread.id,
+                    "provider_thread_id": thread.provider_thread_id,
+                    "business_state": thread.business_state,
+                    "visible_labels": _split_labels(thread.visible_labels),
+                    "current_summary": thread.current_summary,
+                    "latest_confidence_band": thread.latest_confidence_band,
+                    "resurfacing_source": thread.resurfacing_source,
+                    "action_reason": thread.action_reason,
+                },
+                "proposals": [
+                    {
+                        "id": proposal.id,
+                        "email_thread_id": proposal.email_thread_id,
+                        "proposal_type": proposal.proposal_type,
+                        "status": proposal.status,
+                        "confidence_band": proposal.confidence_band,
+                        "rationale": proposal.rationale,
+                    }
+                    for proposal in proposals
+                ],
+                "drafts": [
+                    {
+                        "id": draft.id,
+                        "email_thread_id": draft.email_thread_id,
+                        "action_proposal_id": draft.action_proposal_id,
+                        "status": draft.status,
+                        "approval_status": draft.approval_status,
+                        "preview": draft.draft_body[:120],
+                        "draft_subject": draft.draft_subject,
+                    }
+                    for draft in drafts
+                ],
+                "messages": [
+                    {
+                        "id": message.id,
+                        "provider_message_id": message.provider_message_id,
+                        "provider_thread_id": message.provider_thread_id,
+                        "direction": message.direction,
+                        "from_address": message.from_address,
+                        "subject": message.subject,
+                        "snippet": message.snippet,
+                        "received_at": message.received_at,
+                        "processed_at": message.processed_at,
+                        "source": message.source,
+                    }
+                    for message in messages
+                ],
+            }
+
+    def get_latest_inbound_email_message(self, *, thread_id: int) -> dict | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailMessageRepository(session).get_latest_inbound_for_thread(
+                email_thread_id=thread_id,
+            )
+            if record is None:
+                return None
+            return {
+                "provider_message_id": record.provider_message_id,
+                "provider_thread_id": record.provider_thread_id,
+                "from_address": record.from_address,
+                "subject": record.subject,
+                "body_text": record.body_text,
+                "received_at": record.received_at,
+                "normalized_at": record.normalized_at,
+                "source": record.source,
+            }
 
 
 def build_helm_runtime(
