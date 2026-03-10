@@ -235,3 +235,30 @@ def test_list_review_threads_filters_results(monkeypatch) -> None:  # noqa: ANN0
     results = service.list_review_threads()
 
     assert [item.id for item in results] == [1]
+
+
+def test_list_scheduled_tasks_applies_status_and_limit(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_scheduled_tasks": lambda self, *, status, limit: [
+                {
+                    "id": 11,
+                    "email_thread_id": 7,
+                    "task_type": "followup",
+                    "due_at": datetime(2026, 1, 3, 9, 0, tzinfo=UTC),
+                    "status": status,
+                    "reason": "followup_due",
+                }
+            ][:limit]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    results = service.list_scheduled_tasks(limit=1, status="pending")
+
+    assert len(results) == 1
+    assert results[0].id == 11
+    assert results[0].status == "pending"

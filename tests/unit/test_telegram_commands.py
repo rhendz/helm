@@ -11,10 +11,12 @@ from helm_telegram_bot.commands import (
     review,
     reviews,
     snooze,
+    tasks,
     thread,
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
+    ScheduledTaskView,
     ThreadDetailView,
     ThreadOverrideTransitionResult,
     ThreadTaskTransitionResult,
@@ -431,3 +433,32 @@ async def test_reviews_command_formats_threads(monkeypatch: pytest.MonkeyPatch) 
     await reviews.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Review threads:\n4: Check recruiter note"]
+
+
+@pytest.mark.asyncio
+async def test_tasks_command_formats_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_scheduled_tasks(self) -> list[ScheduledTaskView]:
+            return [
+                ScheduledTaskView(
+                    id=10,
+                    email_thread_id=4,
+                    task_type="reminder",
+                    due_at=common.parse_iso_datetime_arg("2026-01-03T09:00:00Z"),
+                    status="pending",
+                    reason="reminder_due",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(tasks, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(tasks, "_service", _Service())
+    update = _Update()
+
+    await tasks.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Pending email tasks:\n10: thread 4 reminder due 2026-01-03T09:00:00Z"
+    ]
