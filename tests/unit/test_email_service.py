@@ -1,4 +1,4 @@
-from helm_api.services import email_service
+from email_agent import query as email_query
 from helm_storage.db import Base
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.contracts import NewActionProposal, NewEmailDraft, NewEmailThread
@@ -12,7 +12,7 @@ def test_email_service_lists_threads_proposals_and_drafts(monkeypatch) -> None: 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    monkeypatch.setattr(email_service, "SessionLocal", session_local)
+    monkeypatch.setattr(email_query, "SessionLocal", session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
@@ -47,9 +47,9 @@ def test_email_service_lists_threads_proposals_and_drafts(monkeypatch) -> None: 
             )
         )
 
-    threads = email_service.list_email_threads()
-    proposals = email_service.list_email_proposals()
-    drafts = email_service.list_email_drafts()
+    threads = email_query.list_email_threads()
+    proposals = email_query.list_email_proposals()
+    drafts = email_query.list_email_drafts()
 
     assert len(threads) == 1
     assert threads[0]["provider_thread_id"] == "thr-api-1"

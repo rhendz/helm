@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 
 import pytest
+from email_agent.triage import build_email_triage_graph, run_email_triage_workflow
 from helm_connectors import gmail
 from helm_connectors.gmail import normalize_message, pull_new_messages, pull_new_messages_report
-from helm_orchestration.email_flow import build_email_triage_graph, run_email_triage_workflow
 from helm_storage.db import Base
 from helm_storage.models import (
     ActionItemORM,

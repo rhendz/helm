@@ -49,6 +49,11 @@ where = [
   "packages/runtime/src",
   "packages/observability/src",
 ]
+include = [
+  "email_agent",
+  "email_agent.*",
+  "helm_*",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

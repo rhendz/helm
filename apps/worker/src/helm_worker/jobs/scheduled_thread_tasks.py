@@ -1,5 +1,5 @@
+from email_agent.scheduling import run_due_scheduled_thread_tasks
 from helm_observability.logging import get_logger
-from helm_orchestration.scheduled_tasks import run_due_scheduled_thread_tasks
 
 logger = get_logger("helm_worker.jobs.scheduled_thread_tasks")
 
