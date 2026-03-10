@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from email_agent.runtime import EmailAgentRuntime, build_runtime
+from email_agent.runtime import EmailAgentRuntime
 
 
 @dataclass(slots=True, frozen=True)
@@ -15,27 +14,24 @@ class ScheduledThreadTaskRunResult:
 
 def run_due_scheduled_thread_tasks(
     *,
-    session_factory: Callable[[], object] | None = None,
-    runtime: EmailAgentRuntime | None = None,
+    runtime: EmailAgentRuntime,
     now: datetime | None = None,
     limit: int = 100,
 ) -> ScheduledThreadTaskRunResult:
     due_before = now or datetime.now(tz=UTC)
-    runtime_instance = runtime or build_runtime(session_factory=session_factory)
-
-    due_tasks = runtime_instance.list_due_tasks(due_before=due_before, limit=limit)
+    due_tasks = runtime.list_due_tasks(due_before=due_before, limit=limit)
 
     processed_count = 0
     skipped_count = 0
     for task in due_tasks:
-        thread = runtime_instance.get_thread_by_id(task.email_thread_id)
+        thread = runtime.get_thread_by_id(task.email_thread_id)
         if thread is None:
             skipped_count += 1
             continue
 
         visible_labels = _merge_action_label(thread.visible_labels)
         resurfacing_source, action_reason = _derive_task_metadata(task.task_type)
-        runtime_instance.update_thread_state(
+        runtime.update_thread_state(
             thread.id,
             business_state=thread.business_state,
             visible_labels=visible_labels,
@@ -47,7 +43,7 @@ def run_due_scheduled_thread_tasks(
             last_inbound_message_id=thread.last_inbound_message_id,
             last_outbound_message_id=thread.last_outbound_message_id,
         )
-        runtime_instance.mark_task_completed(task.id)
+        runtime.mark_task_completed(task.id)
         processed_count += 1
 
     return ScheduledThreadTaskRunResult(

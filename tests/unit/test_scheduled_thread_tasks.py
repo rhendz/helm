@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+from email_agent.adapters import build_helm_runtime
 from email_agent.scheduling import run_due_scheduled_thread_tasks
 from helm_storage.db import Base
 from helm_storage.repositories.contracts import NewEmailThread, NewScheduledThreadTask
@@ -54,7 +55,7 @@ def test_due_scheduled_tasks_update_resurfacing_metadata_and_complete_tasks() ->
             )
         )
 
-    result = run_due_scheduled_thread_tasks(session_factory=session_local)
+    result = run_due_scheduled_thread_tasks(runtime=build_helm_runtime(session_local))
     assert result.processed_count == 2
     assert result.skipped_count == 0
 

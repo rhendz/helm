@@ -11,8 +11,10 @@ from email_agent.triage import (
     build_email_triage_graph,
     run_email_triage_workflow,
 )
+from email_agent.types import EmailMessage
 
 __all__ = [
+    "EmailMessage",
     "EmailTriageWorkflowResult",
     "ScheduledThreadTaskRunResult",
     "build_email_triage_graph",

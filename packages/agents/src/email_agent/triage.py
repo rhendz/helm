@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
-from helm_connectors.gmail import NormalizedGmailMessage
 from langgraph.graph import END, START, StateGraph
 
-from email_agent.runtime import EmailAgentRuntime, build_runtime
+from email_agent.runtime import EmailAgentRuntime
+from email_agent.types import EmailMessage
 
 
 class EmailTriageState(TypedDict, total=False):
-    normalized_message: NormalizedGmailMessage
+    normalized_message: EmailMessage
     classification: str
     priority_score: int
     thread_summary: str
@@ -35,8 +34,6 @@ class EmailTriageWorkflowResult:
     workflow_status: str
     action_proposal_id: int | None = None
     email_draft_id: int | None = None
-    action_item_id: int | None = None
-    draft_reply_id: int | None = None
     digest_item_id: int | None = None
 
 
@@ -97,23 +94,21 @@ def build_email_triage_graph() -> Any:
 
 
 def run_email_triage_workflow(
-    message: NormalizedGmailMessage,
+    message: EmailMessage,
     *,
     graph: Any | None = None,
-    session_factory: Callable[[], object] | None = None,
-    runtime: EmailAgentRuntime | None = None,
+    runtime: EmailAgentRuntime,
 ) -> EmailTriageWorkflowResult:
     compiled_graph = graph or build_email_triage_graph()
-    runtime_instance = runtime or build_runtime(session_factory=session_factory)
 
-    run = runtime_instance.start_run(
+    run = runtime.start_run(
         agent_name="email_triage",
         source_type="email_message",
         source_id=message.provider_message_id,
     )
-    thread = runtime_instance.get_or_create_thread(provider_thread_id=message.provider_thread_id)
+    thread = runtime.get_or_create_thread(provider_thread_id=message.provider_thread_id)
     thread_id = thread.id
-    email_record = runtime_instance.upsert_inbound_message(
+    email_record = runtime.upsert_inbound_message(
         message=message,
         email_thread_id=thread_id,
     )
@@ -123,23 +118,21 @@ def run_email_triage_workflow(
         (
             action_proposal_id,
             email_draft_id,
-            action_item_id,
-            draft_reply_id,
             digest_item_id,
         ) = _persist_triage_artifacts(
             state=state,
             message=message,
             email_thread_id=thread_id,
-            runtime=runtime_instance,
+            runtime=runtime,
             email_message_id=email_record.id,
         )
-        runtime_instance.mark_message_processed(
+        runtime.mark_message_processed(
             message.provider_message_id,
             processed_at=datetime.now(tz=UTC),
         )
-        runtime_instance.mark_run_succeeded(run.id)
+        runtime.mark_run_succeeded(run.id)
     except Exception as exc:
-        runtime_instance.mark_run_failed(run.id, str(exc))
+        runtime.mark_run_failed(run.id, str(exc))
         raise
 
     return EmailTriageWorkflowResult(
@@ -154,8 +147,6 @@ def run_email_triage_workflow(
         workflow_status="completed",
         action_proposal_id=action_proposal_id,
         email_draft_id=email_draft_id,
-        action_item_id=action_item_id,
-        draft_reply_id=draft_reply_id,
         digest_item_id=digest_item_id,
     )
 
@@ -163,15 +154,13 @@ def run_email_triage_workflow(
 def _persist_triage_artifacts(
     *,
     state: EmailTriageState,
-    message: NormalizedGmailMessage,
+    message: EmailMessage,
     email_thread_id: int,
     runtime: EmailAgentRuntime,
     email_message_id: int,
-) -> tuple[int | None, int | None, int | None, int | None, int | None]:
+) -> tuple[int | None, int | None, int | None]:
     proposal_record = None
     email_draft_record = None
-    action_record = None
-    draft_record = None
     digest_record = None
     priority = _clamp_priority(state.get("priority_score", 3))
     thread_summary = state.get("thread_summary", "")
@@ -205,28 +194,6 @@ def _persist_triage_artifacts(
                 rationale=thread_summary or None,
                 confidence_band=confidence_band,
             )
-        action_record = runtime.get_open_action_for_source(
-            source_type="email_thread",
-            source_id=message.provider_thread_id,
-        )
-        if action_record is None:
-            action_record = runtime.get_open_action_for_source(
-                source_type="email_message",
-                source_id=message.provider_message_id,
-            )
-        if action_record is None:
-            action_record = runtime.get_open_action_for_source(
-                source_type="email_thread",
-                source_id=message.provider_message_id,
-            )
-        if action_record is None:
-            action_record = runtime.create_action(
-                source_type="email_thread",
-                source_id=message.provider_thread_id,
-                title=_build_action_title(message),
-                description=thread_summary or None,
-                priority=priority,
-            )
 
     if state.get("draft_reply_required", False):
         email_draft_record = runtime.get_latest_email_draft_for_thread(
@@ -239,24 +206,14 @@ def _persist_triage_artifacts(
                 draft_body=_build_draft_stub(message=message, classification=classification),
                 draft_subject=message.subject or None,
             )
-        draft_record = runtime.get_latest_legacy_draft_for_thread(
-            thread_id=message.provider_thread_id
-        )
-        if draft_record is None:
-            draft_record = runtime.create_legacy_draft_reply(
-                thread_id=message.provider_thread_id,
-                draft_text=_build_draft_stub(message=message, classification=classification),
-            )
 
     if state.get("digest_item_required", False):
         digest_title = _build_digest_title(message)
         digest_summary = thread_summary or _build_fallback_summary(message)
-        related_action_id = action_record.id if action_record is not None else None
         digest_record = runtime.find_matching_digest(
             domain="email",
             title=digest_title,
             summary=digest_summary,
-            related_action_id=related_action_id,
         )
         if digest_record is None:
             digest_record = runtime.create_digest(
@@ -264,32 +221,24 @@ def _persist_triage_artifacts(
                 title=digest_title,
                 summary=digest_summary,
                 priority=priority,
-                related_action_id=related_action_id,
             )
 
     action_proposal_id = proposal_record.id if proposal_record is not None else None
     email_draft_id = email_draft_record.id if email_draft_record is not None else None
-    action_item_id = action_record.id if action_record is not None else None
-    draft_reply_id = draft_record.id if draft_record is not None else None
     digest_item_id = digest_record.id if digest_record is not None else None
-    return action_proposal_id, email_draft_id, action_item_id, draft_reply_id, digest_item_id
+    return action_proposal_id, email_draft_id, digest_item_id
 
 
 def _clamp_priority(value: int) -> int:
     return max(1, min(4, value))
 
 
-def _build_action_title(message: NormalizedGmailMessage) -> str:
-    subject = message.subject or "(no subject)"
-    return f"Email follow-up: {subject[:200]}"
-
-
-def _build_digest_title(message: NormalizedGmailMessage) -> str:
+def _build_digest_title(message: EmailMessage) -> str:
     subject = message.subject or "(no subject)"
     return f"Important email: {subject[:200]}"
 
 
-def _build_fallback_summary(message: NormalizedGmailMessage) -> str:
+def _build_fallback_summary(message: EmailMessage) -> str:
     if message.subject:
         return f"{message.from_address}: {message.subject}"
     if message.body_text:
@@ -330,7 +279,7 @@ def _derive_confidence_band(*, priority_score: int, classification: str) -> str:
     return "Low"
 
 
-def _build_draft_stub(*, message: NormalizedGmailMessage, classification: str) -> str:
+def _build_draft_stub(*, message: EmailMessage, classification: str) -> str:
     subject = message.subject or "(no subject)"
     snippet = message.body_text[:240] if message.body_text else "(no body provided)"
     return (

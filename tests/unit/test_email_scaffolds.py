@@ -1,16 +1,16 @@
 from datetime import UTC, datetime
 
 import pytest
+from email_agent.adapters import build_helm_runtime
 from email_agent.triage import build_email_triage_graph, run_email_triage_workflow
+from email_agent.types import EmailMessage
 from helm_connectors import gmail
 from helm_connectors.gmail import normalize_message, pull_new_messages, pull_new_messages_report
 from helm_storage.db import Base
 from helm_storage.models import (
-    ActionItemORM,
     ActionProposalORM,
     AgentRunORM,
     DigestItemORM,
-    DraftReplyORM,
     EmailDraftORM,
     EmailMessageORM,
     EmailThreadORM,
@@ -164,7 +164,11 @@ def test_email_triage_graph_scaffold_result_shape() -> None:
     )
 
     graph = build_email_triage_graph()
-    result = run_email_triage_workflow(message, graph=graph, session_factory=session_local)
+    result = run_email_triage_workflow(
+        _email_message(message),
+        graph=graph,
+        runtime=build_helm_runtime(session_local),
+    )
 
     assert result.message_id == "msg-3"
     assert result.classification == "unclassified"
@@ -192,14 +196,14 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
 
     graph = build_email_triage_graph()
     first_result = run_email_triage_workflow(
-        message,
+        _email_message(message),
         graph=graph,
-        session_factory=session_local,
+        runtime=build_helm_runtime(session_local),
     )
     second_result = run_email_triage_workflow(
-        message,
+        _email_message(message),
         graph=graph,
-        session_factory=session_local,
+        runtime=build_helm_runtime(session_local),
     )
 
     assert first_result.action_item_required is True
@@ -208,15 +212,11 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert first_result.email_thread_id is not None
     assert first_result.action_proposal_id is not None
     assert first_result.email_draft_id is not None
-    assert first_result.action_item_id is not None
-    assert first_result.draft_reply_id is not None
     assert first_result.digest_item_id is not None
 
     assert second_result.email_thread_id == first_result.email_thread_id
     assert second_result.action_proposal_id == first_result.action_proposal_id
     assert second_result.email_draft_id == first_result.email_draft_id
-    assert second_result.action_item_id == first_result.action_item_id
-    assert second_result.draft_reply_id == first_result.draft_reply_id
     assert second_result.digest_item_id == first_result.digest_item_id
 
     with Session(engine) as session:
@@ -224,8 +224,6 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
         email_threads = list(session.execute(select(EmailThreadORM)).scalars().all())
         action_proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
         email_drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
-        action_items = list(session.execute(select(ActionItemORM)).scalars().all())
-        draft_replies = list(session.execute(select(DraftReplyORM)).scalars().all())
         digest_items = list(session.execute(select(DigestItemORM)).scalars().all())
         agent_runs = list(session.execute(select(AgentRunORM)).scalars().all())
 
@@ -238,8 +236,6 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert email_threads[0].visible_labels == "Action"
     assert len(action_proposals) == 1
     assert len(email_drafts) == 1
-    assert len(action_items) == 1
-    assert len(draft_replies) == 1
     assert len(digest_items) == 1
     assert len(agent_runs) == 2
     assert all(run.status == AgentRunStatus.SUCCEEDED.value for run in agent_runs)
@@ -271,22 +267,18 @@ def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> N
 
     graph = build_email_triage_graph()
     first_result = run_email_triage_workflow(
-        first_message,
+        _email_message(first_message),
         graph=graph,
-        session_factory=session_local,
+        runtime=build_helm_runtime(session_local),
     )
     second_result = run_email_triage_workflow(
-        second_message,
+        _email_message(second_message),
         graph=graph,
-        session_factory=session_local,
+        runtime=build_helm_runtime(session_local),
     )
 
-    assert first_result.action_item_id is not None
     assert first_result.email_thread_id is not None
-    assert second_result.action_item_id == first_result.action_item_id
     assert second_result.email_thread_id == first_result.email_thread_id
-    assert first_result.draft_reply_id is not None
-    assert second_result.draft_reply_id == first_result.draft_reply_id
     assert first_result.action_proposal_id is not None
     assert second_result.action_proposal_id == first_result.action_proposal_id
     assert first_result.email_draft_id is not None
@@ -296,13 +288,22 @@ def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> N
         email_threads = list(session.execute(select(EmailThreadORM)).scalars().all())
         action_proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
         email_drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
-        action_items = list(session.execute(select(ActionItemORM)).scalars().all())
-        draft_replies = list(session.execute(select(DraftReplyORM)).scalars().all())
         email_messages = list(session.execute(select(EmailMessageORM)).scalars().all())
 
     assert len(email_threads) == 1
     assert len(action_proposals) == 1
     assert len(email_drafts) == 1
-    assert len(action_items) == 1
-    assert len(draft_replies) == 1
     assert len(email_messages) == 2
+
+
+def _email_message(message) -> EmailMessage:  # noqa: ANN001
+    return EmailMessage(
+        provider_message_id=message.provider_message_id,
+        provider_thread_id=message.provider_thread_id,
+        from_address=message.from_address,
+        subject=message.subject,
+        body_text=message.body_text,
+        received_at=message.received_at,
+        normalized_at=message.normalized_at,
+        source=message.source,
+    )
