@@ -33,6 +33,17 @@ def parse_two_arg_task_inputs(args: list[str]) -> tuple[int, str] | None:
     return thread_id, due_at
 
 
+def parse_optional_choice_arg(args: list[str], *, allowed: set[str]) -> str | None | object:
+    if not args:
+        return None
+    if len(args) != 1:
+        return _INVALID_ARG
+    value = args[0].strip()
+    if value not in allowed:
+        return _INVALID_ARG
+    return value
+
+
 def parse_iso_datetime_arg(value: str) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -49,3 +60,6 @@ async def reject_if_unauthorized(update: Update, context: ContextTypes.DEFAULT_T
     if update.message:
         await update.message.reply_text("Unauthorized user.")
     return True
+
+
+_INVALID_ARG = object()

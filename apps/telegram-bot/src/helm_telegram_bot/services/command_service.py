@@ -6,6 +6,7 @@ from datetime import datetime
 from email_agent.adapters import build_helm_runtime
 from email_agent.operator import (
     DraftTransitionResult,
+    DraftView,
     approve_draft,
     list_open_actions,
     list_pending_drafts,
@@ -52,8 +53,25 @@ class TelegramCommandService:
     def list_open_actions(self, *, limit: int = 5) -> list[object]:
         return list_open_actions(limit=limit, runtime=build_helm_runtime())
 
-    def list_pending_drafts(self, *, limit: int = 5) -> list[object]:
-        return list_pending_drafts(limit=limit, runtime=build_helm_runtime())
+    def list_pending_drafts(
+        self,
+        *,
+        limit: int = 5,
+        approval_status: str | None = None,
+    ) -> list[object]:
+        if approval_status is None:
+            return list_pending_drafts(limit=limit, runtime=build_helm_runtime())
+        return [
+            DraftView(
+                id=item["id"],
+                status=item["approval_status"],
+                draft_text=item["preview"],
+            )
+            for item in build_helm_runtime().list_email_drafts(
+                limit=limit,
+                approval_status=approval_status,
+            )
+        ]
 
     def list_review_threads(self, *, limit: int = 5) -> list[ThreadDetailView]:
         items = build_helm_runtime().list_email_threads(limit=limit * 4)

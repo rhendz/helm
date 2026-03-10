@@ -213,7 +213,7 @@ async def test_actions_command_formats_items(monkeypatch: pytest.MonkeyPatch) ->
 @pytest.mark.asyncio
 async def test_drafts_command_replies_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
-        def list_pending_drafts(self) -> list[_Draft]:
+        def list_pending_drafts(self, approval_status=None) -> list[_Draft]:
             return []
 
     async def _allow(_update: _Update, _context: _Context) -> bool:
@@ -229,9 +229,22 @@ async def test_drafts_command_replies_when_empty(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+async def test_drafts_command_rejects_invalid_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(drafts, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await drafts.handle(update, _Context(args=["bad"]))
+
+    assert update.message.replies == ["Usage: /drafts [pending_user|snoozed|approved]"]
+
+
+@pytest.mark.asyncio
 async def test_drafts_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
-        def list_pending_drafts(self) -> list[_Draft]:
+        def list_pending_drafts(self, approval_status=None) -> list[_Draft]:
             return [
                 _Draft(draft_id=1, status="pending", draft_text="First line\nSecond line"),
                 _Draft(draft_id=2, status="snoozed", draft_text="Need follow-up"),
@@ -254,6 +267,27 @@ async def test_drafts_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> 
             "Use /approve <id> or /snooze <id>."
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_drafts_command_formats_filtered_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_pending_drafts(self, approval_status=None) -> list[_Draft]:
+            assert approval_status == "approved"
+            return [
+                _Draft(draft_id=7, status="approved", draft_text="Ready to inspect"),
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(drafts, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(drafts, "_service", _Service())
+    update = _Update()
+
+    await drafts.handle(update, _Context(args=["approved"]))
+
+    assert update.message.replies == ["Drafts (approved):\n7: approved Ready to inspect"]
 
 
 @pytest.mark.asyncio
