@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
-from helm_orchestration.scheduled_tasks import run_due_scheduled_thread_tasks
+from email_agent.scheduling import run_due_scheduled_thread_tasks
 from helm_storage.db import Base
 from helm_storage.repositories.contracts import NewEmailThread, NewScheduledThreadTask
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository

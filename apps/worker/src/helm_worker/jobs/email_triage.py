@@ -1,6 +1,6 @@
+from email_agent.triage import run_email_triage_workflow
 from helm_connectors.gmail import pull_new_messages_report
 from helm_observability.logging import get_logger
-from helm_orchestration.email_flow import run_email_triage_workflow
 
 logger = get_logger("helm_worker.jobs.email_triage")
 
