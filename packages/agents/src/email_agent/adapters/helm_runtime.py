@@ -18,6 +18,9 @@ from helm_storage.repositories.contracts import (
     NewScheduledThreadTask,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
+from helm_storage.repositories.draft_transition_audits import (
+    SQLAlchemyDraftTransitionAuditRepository,
+)
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
@@ -236,6 +239,26 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
             return SQLAlchemyEmailDraftRepository(session).set_approval_status(
                 draft_id,
                 approval_status=approval_status,
+            )
+
+    def create_draft_transition_audit(
+        self,
+        *,
+        draft_id: int,
+        action: str,
+        from_status: str | None,
+        to_status: str | None,
+        success: bool,
+        reason: str | None,
+    ) -> None:
+        with self.session_factory() as session:
+            SQLAlchemyDraftTransitionAuditRepository(session).create(
+                draft_id=draft_id,
+                action=action,
+                from_status=from_status,
+                to_status=to_status,
+                success=success,
+                reason=reason,
             )
 
     def find_matching_digest(

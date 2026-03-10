@@ -44,6 +44,8 @@ def _classify_message(state: EmailTriageState) -> EmailTriageState:
 
     if any(token in haystack for token in ("recruiter", "interview", "opportunity", "role")):
         return {"classification": "opportunity", "priority_score": 1}
+    if any(token in haystack for token in ("review", "heads up", "fyi", "for your awareness")):
+        return {"classification": "review", "priority_score": 2}
     if any(token in haystack for token in ("urgent", "asap", "today", "deadline")):
         return {"classification": "urgent", "priority_score": 1}
     if any(token in haystack for token in ("newsletter", "unsubscribe")):
