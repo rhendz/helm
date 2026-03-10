@@ -20,6 +20,7 @@ from helm_telegram_bot.commands import (
     thread,
     threads,
     threads_label,
+    uninitialized_threads,
     urgent_threads,
     waiting_on_other_party_threads,
     waiting_on_user_threads,
@@ -291,6 +292,34 @@ async def test_urgent_threads_command_formats_items(monkeypatch: pytest.MonkeyPa
     await urgent_threads.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Urgent threads:\n18: Urgent response needed"]
+
+
+@pytest.mark.asyncio
+async def test_uninitialized_threads_command_formats_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Service:
+        def list_uninitialized_threads(self) -> list[ThreadQueueView]:
+            return [
+                ThreadQueueView(
+                    id=21,
+                    business_state="uninitialized",
+                    current_summary="New thread without classification",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(uninitialized_threads, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(uninitialized_threads, "_service", _Service())
+    update = _Update()
+
+    await uninitialized_threads.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Uninitialized threads:\n21: New thread without classification"
+    ]
 
 
 @pytest.mark.asyncio

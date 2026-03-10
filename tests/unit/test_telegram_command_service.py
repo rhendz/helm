@@ -50,6 +50,30 @@ def test_list_action_threads_uses_action_label(monkeypatch) -> None:  # noqa: AN
     assert threads[0].id == 11
 
 
+def test_list_uninitialized_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_email_threads": lambda self, *, business_state, limit: [
+                {
+                    "id": 13,
+                    "business_state": business_state,
+                    "current_summary": "New thread without classification",
+                }
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    threads = service.list_uninitialized_threads(limit=2)
+
+    assert len(threads) == 1
+    assert threads[0].id == 13
+    assert threads[0].business_state == "uninitialized"
+
+
 def test_list_waiting_on_user_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
     runtime = type(
         "Runtime",
