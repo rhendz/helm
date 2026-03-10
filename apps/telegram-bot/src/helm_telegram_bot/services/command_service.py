@@ -13,6 +13,7 @@ from email_agent.operator import (
     snooze_draft,
 )
 from email_agent.reminders import complete_scheduled_task, create_thread_reminder
+from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
 from helm_observability.logging import get_logger
 
 logger = get_logger("helm_telegram_bot.services.command_service")
@@ -355,17 +356,18 @@ class TelegramCommandService:
                 ok=False,
                 message=f"Thread {thread_id} not found.",
             )
+        thread_update = transition_for_resolve(thread)
         updated = runtime.update_thread_state(
             thread_id,
-            business_state="resolved",
-            visible_labels=(),
-            latest_confidence_band=thread.latest_confidence_band,
-            resurfacing_source="user_override",
-            action_reason="user_marked_done",
-            current_summary=thread.current_summary,
-            last_message_id=thread.last_message_id,
-            last_inbound_message_id=thread.last_inbound_message_id,
-            last_outbound_message_id=thread.last_outbound_message_id,
+            business_state=thread_update.business_state,
+            visible_labels=thread_update.visible_labels,
+            latest_confidence_band=thread_update.latest_confidence_band,
+            resurfacing_source=thread_update.resurfacing_source,
+            action_reason=thread_update.action_reason,
+            current_summary=thread_update.current_summary,
+            last_message_id=thread_update.last_message_id,
+            last_inbound_message_id=thread_update.last_inbound_message_id,
+            last_outbound_message_id=thread_update.last_outbound_message_id,
         )
         if updated is None:
             return ThreadOverrideTransitionResult(
@@ -385,19 +387,18 @@ class TelegramCommandService:
                 ok=False,
                 message=f"Thread {thread_id} not found.",
             )
-        labels = [label for label in thread.visible_labels.split(",") if label]
-        labels.append("NeedsReview")
+        thread_update = transition_for_needs_review(thread)
         updated = runtime.update_thread_state(
             thread_id,
-            business_state="needs_review",
-            visible_labels=tuple(sorted(set(labels))),
-            latest_confidence_band=thread.latest_confidence_band,
-            resurfacing_source="user_override",
-            action_reason="user_requested_review",
-            current_summary=thread.current_summary,
-            last_message_id=thread.last_message_id,
-            last_inbound_message_id=thread.last_inbound_message_id,
-            last_outbound_message_id=thread.last_outbound_message_id,
+            business_state=thread_update.business_state,
+            visible_labels=thread_update.visible_labels,
+            latest_confidence_band=thread_update.latest_confidence_band,
+            resurfacing_source=thread_update.resurfacing_source,
+            action_reason=thread_update.action_reason,
+            current_summary=thread_update.current_summary,
+            last_message_id=thread_update.last_message_id,
+            last_inbound_message_id=thread_update.last_inbound_message_id,
+            last_outbound_message_id=thread_update.last_outbound_message_id,
         )
         if updated is None:
             return ThreadOverrideTransitionResult(
