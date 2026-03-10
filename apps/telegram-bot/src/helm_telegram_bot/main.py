@@ -22,6 +22,7 @@ from helm_telegram_bot.commands import (
     thread,
     threads,
     threads_label,
+    waiting_on_user_threads,
 )
 from helm_telegram_bot.config import get_settings
 
@@ -54,6 +55,9 @@ def main() -> None:
     application.add_handler(CommandHandler("thread", thread.handle))
     application.add_handler(CommandHandler("threads", threads.handle))
     application.add_handler(CommandHandler("threads_label", threads_label.handle))
+    application.add_handler(
+        CommandHandler("waiting_on_user_threads", waiting_on_user_threads.handle)
+    )
 
     logger.info("telegram_bot_started")
     application.run_polling()
