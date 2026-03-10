@@ -314,6 +314,49 @@ async def test_proposals_command_formats_queue(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
+async def test_tasks_command_rejects_invalid_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(tasks, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await tasks.handle(update, _Context(args=["bad"]))
+
+    assert update.message.replies == ["Usage: /tasks [pending|completed]"]
+
+
+@pytest.mark.asyncio
+async def test_tasks_command_formats_completed_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_scheduled_tasks(self, status="pending") -> list[ScheduledTaskView]:
+            assert status == "completed"
+            return [
+                ScheduledTaskView(
+                    id=10,
+                    email_thread_id=4,
+                    task_type="reminder",
+                    due_at=common.parse_iso_datetime_arg("2026-01-03T09:00:00Z"),
+                    status="completed",
+                    reason="reminder_due",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(tasks, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(tasks, "_service", _Service())
+    update = _Update()
+
+    await tasks.handle(update, _Context(args=["completed"]))
+
+    assert update.message.replies == [
+        "Completed email tasks:\n10: thread 4 reminder due 2026-01-03T09:00:00Z"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_drafts_command_formats_filtered_items(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def list_pending_drafts(self, approval_status=None) -> list[_Draft]:
@@ -602,7 +645,8 @@ async def test_reviews_command_formats_threads(monkeypatch: pytest.MonkeyPatch) 
 @pytest.mark.asyncio
 async def test_tasks_command_formats_queue(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
-        def list_scheduled_tasks(self) -> list[ScheduledTaskView]:
+        def list_scheduled_tasks(self, status="pending") -> list[ScheduledTaskView]:
+            assert status == "pending"
             return [
                 ScheduledTaskView(
                     id=10,
