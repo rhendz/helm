@@ -11,6 +11,7 @@ from helm_storage.repositories.contracts import (
     NewDigestItem,
     NewEmailDraft,
     NewEmailThread,
+    NewScheduledThreadTask,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
@@ -387,6 +388,53 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 "received_at": record.received_at,
                 "normalized_at": record.normalized_at,
                 "source": record.source,
+            }
+
+    def list_scheduled_tasks_for_thread(self, *, thread_id: int) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyScheduledThreadTaskRepository(session).list_for_thread(
+                email_thread_id=thread_id,
+            )
+            return [
+                {
+                    "id": record.id,
+                    "email_thread_id": record.email_thread_id,
+                    "task_type": record.task_type,
+                    "created_by": record.created_by,
+                    "due_at": record.due_at,
+                    "status": record.status,
+                    "reason": record.reason,
+                }
+                for record in records
+            ]
+
+    def create_scheduled_task(
+        self,
+        *,
+        thread_id: int,
+        task_type: str,
+        created_by: str,
+        due_at: datetime,
+        reason: str | None,
+    ) -> dict:
+        with self.session_factory() as session:
+            record = SQLAlchemyScheduledThreadTaskRepository(session).create(
+                NewScheduledThreadTask(
+                    email_thread_id=thread_id,
+                    task_type=task_type,
+                    created_by=created_by,
+                    due_at=due_at,
+                    reason=reason,
+                )
+            )
+            return {
+                "id": record.id,
+                "email_thread_id": record.email_thread_id,
+                "task_type": record.task_type,
+                "created_by": record.created_by,
+                "due_at": record.due_at,
+                "status": record.status,
+                "reason": record.reason,
             }
 
 

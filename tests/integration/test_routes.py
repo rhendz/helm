@@ -19,6 +19,17 @@ def test_routes_exist() -> None:
     )
     assert reprocess_email_response.status_code == 200
     assert reprocess_email_response.json()["status"] in {"not_found", "unavailable"}
+    assert client.get("/v1/email/threads/999999/tasks").status_code == 200
+    create_task_response = client.post(
+        "/v1/email/threads/999999/tasks",
+        json={
+            "task_type": "reminder",
+            "due_at": "2026-01-03T09:00:00Z",
+            "created_by": "user",
+        },
+    )
+    assert create_task_response.status_code == 200
+    assert create_task_response.json()["status"] in {"not_found", "unavailable"}
     drafts_response = client.get("/v1/drafts")
     assert drafts_response.status_code == 200
     response = client.post(

@@ -173,3 +173,15 @@ class EmailAgentRuntime(Protocol):
     def get_email_thread_detail(self, *, thread_id: int) -> dict | None: ...
 
     def get_latest_inbound_email_message(self, *, thread_id: int) -> dict | None: ...
+
+    def list_scheduled_tasks_for_thread(self, *, thread_id: int) -> list[dict]: ...
+
+    def create_scheduled_task(
+        self,
+        *,
+        thread_id: int,
+        task_type: str,
+        created_by: str,
+        due_at: datetime,
+        reason: str | None,
+    ) -> dict: ...

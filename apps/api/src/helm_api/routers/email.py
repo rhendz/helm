@@ -1,17 +1,22 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from helm_api.schemas import (
+    CreateScheduledTaskRequest,
+    CreateScheduledTaskResponse,
     EmailDraftResponse,
     EmailProposalResponse,
     EmailThreadDetailResponse,
     EmailThreadReprocessRequest,
     EmailThreadReprocessResponse,
     EmailThreadResponse,
+    ScheduledTaskResponse,
 )
 from helm_api.services.email_service import (
+    create_thread_task,
     get_thread_detail,
     list_drafts,
     list_proposals,
+    list_thread_tasks,
     list_threads,
     reprocess_thread,
 )
@@ -54,4 +59,24 @@ def reprocess_email_thread_route(
 ) -> EmailThreadReprocessResponse:
     return EmailThreadReprocessResponse(
         **reprocess_thread(thread_id=thread_id, dry_run=payload.dry_run),
+    )
+
+
+@router.get("/threads/{thread_id}/tasks", response_model=list[ScheduledTaskResponse])
+def get_email_thread_tasks(thread_id: int) -> list[ScheduledTaskResponse]:
+    return [ScheduledTaskResponse(**item) for item in list_thread_tasks(thread_id=thread_id)]
+
+
+@router.post("/threads/{thread_id}/tasks", response_model=CreateScheduledTaskResponse)
+def create_email_thread_task(
+    thread_id: int,
+    payload: CreateScheduledTaskRequest,
+) -> CreateScheduledTaskResponse:
+    return CreateScheduledTaskResponse(
+        **create_thread_task(
+            thread_id=thread_id,
+            task_type=payload.task_type,
+            due_at=payload.due_at,
+            created_by=payload.created_by,
+        )
     )

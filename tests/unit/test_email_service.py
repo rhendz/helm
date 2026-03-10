@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from email_agent import query as email_query
 from email_agent.adapters import build_helm_runtime
+from email_agent.reminders import create_thread_reminder, list_thread_scheduled_tasks
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.types import EmailMessage
 from helm_storage.db import Base
@@ -131,3 +132,17 @@ def test_email_thread_detail_and_reprocess() -> None:
     executed = reprocess_email_thread(thread_id=thread_id, dry_run=False, runtime=runtime)
     assert executed.status == "accepted"
     assert executed.reprocessed is True
+
+    scheduled = create_thread_reminder(
+        thread_id=thread_id,
+        due_at=datetime(2026, 1, 3, 9, 0, 0, tzinfo=UTC),
+        created_by="user",
+        task_type="reminder",
+        runtime=runtime,
+    )
+    assert scheduled.status == "accepted"
+    assert scheduled.task_id is not None
+
+    tasks = list_thread_scheduled_tasks(thread_id=thread_id, runtime=runtime)
+    assert len(tasks) == 1
+    assert tasks[0]["task_type"] == "reminder"
