@@ -61,6 +61,9 @@ def test_routes_exist() -> None:
     )
     assert create_task_response.status_code == 200
     assert create_task_response.json()["status"] in {"not_found", "unavailable"}
+    complete_task_response = client.post("/v1/email/threads/999999/tasks/999999/complete")
+    assert complete_task_response.status_code == 200
+    assert complete_task_response.json()["status"] in {"not_found", "unavailable"}
     drafts_response = client.get("/v1/drafts")
     assert drafts_response.status_code == 200
     response = client.post(
