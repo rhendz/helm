@@ -19,6 +19,7 @@ from email_agent.reminders import (
 )
 from email_agent.reprocess import ThreadReprocessResult, reprocess_email_thread
 from email_agent.scheduling import ScheduledThreadTaskRunResult, run_due_scheduled_thread_tasks
+from email_agent.seed import plan_seed_threads, summarize_seed_plan
 from email_agent.triage import (
     EmailTriageWorkflowResult,
     build_email_triage_graph,
@@ -46,4 +47,6 @@ __all__ = [
     "process_inbound_email_message",
     "run_due_scheduled_thread_tasks",
     "run_email_triage_workflow",
+    "plan_seed_threads",
+    "summarize_seed_plan",
 ]

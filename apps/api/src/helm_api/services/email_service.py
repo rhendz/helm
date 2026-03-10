@@ -18,6 +18,7 @@ from email_agent.reminders import (
     list_thread_scheduled_tasks,
 )
 from email_agent.reprocess import reprocess_email_thread
+from email_agent.seed import plan_seed_threads, summarize_seed_plan
 from email_agent.thread_state import transition_for_human_override
 from email_agent.triage import build_email_triage_graph, process_inbound_email_message
 from email_agent.types import EmailMessage
@@ -277,6 +278,29 @@ def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str
     }
 
 
+def plan_seed_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:
+    report = pull_new_messages_report(manual_payload=[dict(item) for item in messages])
+    normalized_messages = [
+        EmailMessage(
+            provider_message_id=message.provider_message_id,
+            provider_thread_id=message.provider_thread_id,
+            from_address=message.from_address,
+            subject=message.subject,
+            body_text=message.body_text,
+            received_at=message.received_at,
+            normalized_at=message.normalized_at,
+            source=message.source,
+        )
+        for message in report.messages
+    ]
+    result = summarize_seed_plan(plan_seed_threads(normalized_messages))
+    result["source_type"] = source_type
+    result["message_count"] = len(normalized_messages)
+    result["failed_message_count"] = sum(report.failure_counts.values())
+    result["normalization_failures"] = report.failure_counts
+    return result
+
+
 __all__ = [
     "get_thread_detail",
     "create_thread_task",
@@ -289,5 +313,6 @@ __all__ = [
     "list_thread_tasks",
     "list_threads",
     "override_thread",
+    "plan_seed_email_messages",
     "reprocess_thread",
 ]
