@@ -1,6 +1,18 @@
 import pytest
-from helm_telegram_bot.commands import actions, approve, common, digest, drafts, snooze
-from helm_telegram_bot.services.command_service import DraftTransitionResult
+from helm_telegram_bot.commands import (
+    actions,
+    approve,
+    common,
+    digest,
+    drafts,
+    followup,
+    remind,
+    snooze,
+)
+from helm_telegram_bot.services.command_service import (
+    DraftTransitionResult,
+    ThreadTaskTransitionResult,
+)
 
 
 class _Message:
@@ -42,6 +54,15 @@ def test_parse_single_id_arg() -> None:
     assert common.parse_single_id_arg(["abc"]) is None
     assert common.parse_single_id_arg(["0"]) is None
     assert common.parse_single_id_arg(["1", "2"]) is None
+
+
+def test_parse_two_arg_task_inputs() -> None:
+    assert common.parse_two_arg_task_inputs(["42", "2026-01-03T09:00:00Z"]) == (
+        42,
+        "2026-01-03T09:00:00Z",
+    )
+    assert common.parse_two_arg_task_inputs(["42"]) is None
+    assert common.parse_two_arg_task_inputs(["x", "2026-01-03T09:00:00Z"]) is None
 
 
 @pytest.mark.asyncio
@@ -260,3 +281,49 @@ async def test_drafts_unauthorized_short_circuit(monkeypatch: pytest.MonkeyPatch
     await drafts.handle(update, _Context(args=[]))
 
     assert update.message.replies == []
+
+
+@pytest.mark.asyncio
+async def test_remind_usage_message_when_missing_args(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(remind, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await remind.handle(update, _Context(args=["7"]))
+
+    assert update.message.replies == ["Usage: /remind <thread_id> <ISO8601>"]
+
+
+@pytest.mark.asyncio
+async def test_followup_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, str]] = []
+
+        def create_thread_task(
+            self,
+            *,
+            thread_id: int,
+            due_at,
+            task_type: str,
+        ) -> ThreadTaskTransitionResult:
+            self.calls.append((thread_id, task_type))
+            return ThreadTaskTransitionResult(
+                ok=True,
+                message="Created followup task 9 for thread 3.",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(followup, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(followup, "_service", service)
+    update = _Update()
+
+    await followup.handle(update, _Context(args=["3", "2026-01-03T09:00:00Z"]))
+
+    assert service.calls == [(3, "followup")]
+    assert update.message.replies == ["Created followup task 9 for thread 3."]

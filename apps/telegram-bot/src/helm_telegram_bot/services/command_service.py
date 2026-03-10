@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
 from email_agent.adapters import build_helm_runtime
 from email_agent.operator import (
     DraftTransitionResult,
@@ -8,9 +11,16 @@ from email_agent.operator import (
     list_pending_drafts,
     snooze_draft,
 )
+from email_agent.reminders import create_thread_reminder
 from helm_observability.logging import get_logger
 
 logger = get_logger("helm_telegram_bot.services.command_service")
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadTaskTransitionResult:
+    ok: bool
+    message: str
 
 
 class TelegramCommandService:
@@ -31,3 +41,33 @@ class TelegramCommandService:
         if not result.ok:
             logger.warning("draft_transition_failed", action="snooze", draft_id=draft_id)
         return result
+
+    def create_thread_task(
+        self,
+        *,
+        thread_id: int,
+        due_at: datetime,
+        task_type: str,
+    ) -> ThreadTaskTransitionResult:
+        result = create_thread_reminder(
+            thread_id=thread_id,
+            due_at=due_at,
+            created_by="user",
+            task_type=task_type,
+            runtime=build_helm_runtime(),
+        )
+        if result.status != "accepted":
+            logger.warning(
+                "thread_task_create_failed",
+                thread_id=thread_id,
+                task_type=task_type,
+                reason=result.reason,
+            )
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Could not create {task_type} for thread {thread_id}.",
+            )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"Created {task_type} task {result.task_id} for thread {thread_id}.",
+        )
