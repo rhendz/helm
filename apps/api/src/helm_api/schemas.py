@@ -158,6 +158,14 @@ class CreateScheduledTaskResponse(BaseModel):
     reason: str | None = None
 
 
+class CompleteScheduledTaskResponse(BaseModel):
+    status: str
+    thread_id: int
+    task_id: int
+    completed: bool
+    reason: str | None = None
+
+
 class StudyIngestRequest(BaseModel):
     source_type: str = "manual"
     raw_text: str

@@ -8,7 +8,11 @@ from email_agent.query import (
     list_email_proposals,
     list_email_threads,
 )
-from email_agent.reminders import create_thread_reminder, list_thread_scheduled_tasks
+from email_agent.reminders import (
+    complete_thread_task,
+    create_thread_reminder,
+    list_thread_scheduled_tasks,
+)
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.triage import build_email_triage_graph, run_email_triage_workflow
 from email_agent.types import EmailMessage
@@ -146,6 +150,16 @@ def create_thread_task(
     )
 
 
+def complete_task(*, thread_id: int, task_id: int) -> dict:
+    return asdict(
+        complete_thread_task(
+            thread_id=thread_id,
+            task_id=task_id,
+            runtime=_runtime(),
+        )
+    )
+
+
 def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:
     report = pull_new_messages_report(manual_payload=[dict(item) for item in messages])
     normalized_messages = report.messages
@@ -202,6 +216,7 @@ def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str
 __all__ = [
     "get_thread_detail",
     "create_thread_task",
+    "complete_task",
     "ingest_manual_email_messages",
     "list_drafts",
     "list_proposals",

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from helm_api.schemas import (
+    CompleteScheduledTaskResponse,
     CreateScheduledTaskRequest,
     CreateScheduledTaskResponse,
     EmailDraftResponse,
@@ -16,6 +17,7 @@ from helm_api.schemas import (
     ScheduledTaskResponse,
 )
 from helm_api.services.email_service import (
+    complete_task,
     create_thread_task,
     get_thread_detail,
     ingest_manual_email_messages,
@@ -115,4 +117,17 @@ def create_email_thread_task(
             due_at=payload.due_at,
             created_by=payload.created_by,
         )
+    )
+
+
+@router.post(
+    "/threads/{thread_id}/tasks/{task_id}/complete",
+    response_model=CompleteScheduledTaskResponse,
+)
+def complete_email_thread_task(
+    thread_id: int,
+    task_id: int,
+) -> CompleteScheduledTaskResponse:
+    return CompleteScheduledTaskResponse(
+        **complete_task(thread_id=thread_id, task_id=task_id),
     )
