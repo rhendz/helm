@@ -7,6 +7,7 @@ from typing import Protocol, runtime_checkable
 from helm_storage.models import (
     ActionItemORM,
     ActionProposalORM,
+    ClassificationArtifactORM,
     DigestItemORM,
     DraftReplyORM,
     EmailAgentConfigORM,
@@ -65,6 +66,22 @@ class NewActionProposal:
     rationale: str | None = None
     confidence_band: str | None = None
     status: str = "proposed"
+    model_name: str | None = None
+    prompt_version: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewClassificationArtifact:
+    email_thread_id: int
+    email_message_id: int
+    classification: str
+    priority_score: int
+    business_state: str
+    visible_labels: tuple[str, ...]
+    action_reason: str | None = None
+    resurfacing_source: str | None = None
+    confidence_band: str | None = None
+    decision_context: dict[str, object] | None = None
     model_name: str | None = None
     prompt_version: str | None = None
 
@@ -218,6 +235,15 @@ class EmailDraftRepository(Protocol):
     def get_latest_for_thread(self, *, email_thread_id: int) -> EmailDraftORM | None: ...
 
     def set_approval_status(self, draft_id: int, *, approval_status: str) -> bool: ...
+
+
+@runtime_checkable
+class ClassificationArtifactRepository(Protocol):
+    def create(self, item: NewClassificationArtifact) -> ClassificationArtifactORM: ...
+
+    def list_for_thread(self, *, email_thread_id: int) -> list[ClassificationArtifactORM]: ...
+
+    def list_for_message(self, *, email_message_id: int) -> list[ClassificationArtifactORM]: ...
 
 
 @runtime_checkable

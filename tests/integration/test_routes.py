@@ -31,6 +31,8 @@ def test_routes_exist() -> None:
     assert client.get("/v1/email/threads").status_code == 200
     assert client.get("/v1/email/threads?business_state=needs_review").status_code == 200
     assert client.get("/v1/email/threads?label=Action").status_code == 200
+    assert client.get("/v1/email/threads/1/classification-artifacts").status_code == 200
+    assert client.get("/v1/email/messages/1/classification-artifacts").status_code == 200
     assert client.get("/v1/email/proposals").status_code == 200
     assert client.get("/v1/email/proposals?status=proposed&proposal_type=reply").status_code == 200
     assert client.get("/v1/email/drafts").status_code == 200

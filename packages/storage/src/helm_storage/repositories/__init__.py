@@ -3,9 +3,13 @@
 from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.agent_runs import AgentRunStatus, SQLAlchemyAgentRunRepository
+from helm_storage.repositories.classification_artifacts import (
+    SQLAlchemyClassificationArtifactRepository,
+)
 from helm_storage.repositories.contracts import (
     ActionItemRepository,
     ActionProposalRepository,
+    ClassificationArtifactRepository,
     DigestItemRepository,
     DraftReplyRepository,
     EmailAgentConfigPatch,
@@ -14,6 +18,7 @@ from helm_storage.repositories.contracts import (
     EmailThreadRepository,
     NewActionItem,
     NewActionProposal,
+    NewClassificationArtifact,
     NewDigestItem,
     NewDraftReply,
     NewEmailDraft,
@@ -39,6 +44,7 @@ from helm_storage.repositories.study_ingest import SQLAlchemyStudyIngestReposito
 __all__ = [
     "ActionItemRepository",
     "ActionProposalRepository",
+    "ClassificationArtifactRepository",
     "DigestItemRepository",
     "DraftReplyRepository",
     "EmailAgentConfigPatch",
@@ -47,6 +53,7 @@ __all__ = [
     "EmailThreadRepository",
     "NewActionItem",
     "NewActionProposal",
+    "NewClassificationArtifact",
     "NewDigestItem",
     "NewDraftReply",
     "NewEmailDraft",
@@ -57,6 +64,7 @@ __all__ = [
     "SQLAlchemyActionItemRepository",
     "AgentRunStatus",
     "SQLAlchemyAgentRunRepository",
+    "SQLAlchemyClassificationArtifactRepository",
     "SQLAlchemyDigestItemRepository",
     "SQLAlchemyDraftReplyRepository",
     "SQLAlchemyDraftTransitionAuditRepository",

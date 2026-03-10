@@ -3,9 +3,13 @@ from datetime import UTC, datetime, timedelta
 from helm_storage.db import Base
 from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
+from helm_storage.repositories.classification_artifacts import (
+    SQLAlchemyClassificationArtifactRepository,
+)
 from helm_storage.repositories.contracts import (
     ActionItemRepository,
     ActionProposalRepository,
+    ClassificationArtifactRepository,
     DigestItemRepository,
     DraftReplyRepository,
     EmailAgentConfigPatch,
@@ -14,6 +18,7 @@ from helm_storage.repositories.contracts import (
     EmailThreadRepository,
     NewActionItem,
     NewActionProposal,
+    NewClassificationArtifact,
     NewDigestItem,
     NewDraftReply,
     NewEmailDraft,
@@ -25,6 +30,7 @@ from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepositor
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
 from helm_storage.repositories.email_agent_config import SQLAlchemyEmailAgentConfigRepository
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
+from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
 from helm_storage.repositories.scheduled_thread_tasks import (
     SQLAlchemyScheduledThreadTaskRepository,
@@ -207,6 +213,56 @@ def test_action_proposal_and_email_draft_repositories_preserve_lineage() -> None
         refreshed = draft_repo.get_by_id(draft.id)
         assert refreshed is not None
         assert refreshed.approval_status == "approved"
+
+
+def test_classification_artifact_repository_preserves_lineage() -> None:
+    with _session() as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        message_repo = SQLAlchemyEmailMessageRepository(session)
+        artifact_repo = SQLAlchemyClassificationArtifactRepository(session)
+
+        assert isinstance(artifact_repo, ClassificationArtifactRepository)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-220"))
+        message = message_repo.upsert_from_normalized(
+            type(
+                "Message",
+                (),
+                {
+                    "provider_message_id": "msg-220",
+                    "provider_thread_id": "thr-220",
+                    "from_address": "recruiter@example.com",
+                    "subject": "Checking in",
+                    "body_text": "Any update?",
+                    "snippet": "Any update?",
+                    "received_at": datetime.now(UTC),
+                    "normalized_at": datetime.now(UTC),
+                    "source": "gmail",
+                },
+            )(),
+            email_thread_id=thread.id,
+            direction="inbound",
+        )
+
+        artifact = artifact_repo.create(
+            NewClassificationArtifact(
+                email_thread_id=thread.id,
+                email_message_id=message.id,
+                classification="urgent",
+                priority_score=1,
+                business_state="waiting_on_user",
+                visible_labels=("Action", "Urgent"),
+                action_reason="reply_needed",
+                resurfacing_source="new_message",
+                confidence_band="High",
+                decision_context={"draft_reply_required": True},
+                model_name="rule_based_triage",
+                prompt_version="email_triage_v1",
+            )
+        )
+
+        assert artifact_repo.list_for_thread(email_thread_id=thread.id)[0].id == artifact.id
+        assert artifact_repo.list_for_message(email_message_id=message.id)[0].id == artifact.id
 
 
 def test_scheduled_thread_task_repository_lists_due_items_and_marks_completed() -> None:

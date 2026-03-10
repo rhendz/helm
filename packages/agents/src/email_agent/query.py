@@ -54,6 +54,28 @@ def list_email_drafts(
         return []
 
 
+def list_classification_artifacts_for_thread(
+    *,
+    thread_id: int,
+    runtime: EmailAgentRuntime,
+) -> list[dict]:
+    try:
+        return runtime.list_classification_artifacts_for_thread(thread_id=thread_id)
+    except SQLAlchemyError:
+        return []
+
+
+def list_classification_artifacts_for_message(
+    *,
+    message_id: int,
+    runtime: EmailAgentRuntime,
+) -> list[dict]:
+    try:
+        return runtime.list_classification_artifacts_for_message(message_id=message_id)
+    except SQLAlchemyError:
+        return []
+
+
 def get_email_thread_detail(
     *,
     thread_id: int,
