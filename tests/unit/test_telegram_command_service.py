@@ -262,3 +262,22 @@ def test_list_scheduled_tasks_applies_status_and_limit(monkeypatch) -> None:  # 
     assert len(results) == 1
     assert results[0].id == 11
     assert results[0].status == "pending"
+
+
+def test_complete_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(
+        command_service,
+        "complete_scheduled_task",
+        lambda **kwargs: type(
+            "Result",
+            (),
+            {"status": "accepted", "thread_id": 7, "task_id": 12, "reason": None},
+        )(),
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.complete_task(12)
+
+    assert result.ok is True
+    assert result.message == "Completed task 12 for thread 7."
