@@ -1,0 +1,27 @@
+[
+  {
+    "id": "greetings",
+    "name": "Greetings",
+    "summary": "Basic Thai greetings, politeness particles, and when to use formal versus informal phrasing."
+  },
+  {
+    "id": "pronouns",
+    "name": "Pronouns",
+    "summary": "Common Thai pronouns and how they shift with context and politeness."
+  },
+  {
+    "id": "basic-sentence-order",
+    "name": "Basic Sentence Order",
+    "summary": "Simple Thai sentence structure for subject, verb, object, and modifiers."
+  },
+  {
+    "id": "common-verbs",
+    "name": "Common Verbs",
+    "summary": "High-frequency verbs for daily situations such as go, want, have, eat, and like."
+  },
+  {
+    "id": "useful-particles",
+    "name": "Useful Particles",
+    "summary": "Particles that change tone, politeness, and emphasis in Thai speech."
+  }
+]

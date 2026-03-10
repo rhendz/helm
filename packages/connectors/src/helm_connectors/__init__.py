@@ -1,1 +1,1 @@
-"""External data connectors (Gmail, LinkedIn, Telegram events)."""
+"""External data connectors (Gmail and Telegram events)."""

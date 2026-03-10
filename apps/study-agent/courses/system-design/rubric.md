@@ -1,0 +1,3 @@
+- Strong answers explain tradeoffs, not just definitions.
+- The user should name at least one failure mode and one mitigation.
+- Good answers use a concrete example.

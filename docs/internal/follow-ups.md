@@ -7,6 +7,5 @@
 5. Implement digest builder and Telegram `/digest` flow from artifacts.
 6. Add approval/snooze command handlers and draft state transitions.
 7. Add study ingest endpoint and extraction flow.
-8. Decide LinkedIn ingestion feasibility and either implement or defer to V1.x.
 9. Add structured configuration module shared across all apps.
 10. Add CI integration tests for compose startup and API health.

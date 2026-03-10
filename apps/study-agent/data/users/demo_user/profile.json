@@ -1,0 +1,8 @@
+{
+  "user_id": "demo_user",
+  "name": "Demo User",
+  "preferences": {
+    "default_session_minutes": 25,
+    "tone": "direct"
+  }
+}

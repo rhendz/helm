@@ -6,7 +6,6 @@ from helm_storage.db import SessionLocal
 from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
-from helm_storage.repositories.opportunities import SQLAlchemyOpportunityRepository
 from sqlalchemy.exc import SQLAlchemyError
 
 
@@ -15,7 +14,6 @@ class DigestBuildResult:
     text: str
     action_count: int
     digest_item_count: int
-    linkedin_opportunity_count: int
     pending_draft_count: int
     stale_pending_draft_count: int
     ranked_signals: list["RankedDigestSignal"]
@@ -36,7 +34,6 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
         with SessionLocal() as session:
             actions = SQLAlchemyActionItemRepository(session).list_open()[:limit]
             digest_items = SQLAlchemyDigestItemRepository(session).list_ranked(limit=limit)
-            linkedin_opportunities = SQLAlchemyOpportunityRepository(session).list_open(limit=limit)
             drafts = SQLAlchemyDraftReplyRepository(session).list_pending()[:limit]
     except SQLAlchemyError:
         logger.warning("digest_query_failed")
@@ -44,7 +41,6 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
             text="Daily Brief\nNo artifact data available yet.",
             action_count=0,
             digest_item_count=0,
-            linkedin_opportunity_count=0,
             pending_draft_count=0,
             stale_pending_draft_count=0,
             ranked_signals=[],
@@ -59,7 +55,6 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
     ranked_signals = _build_ranked_signals(
         actions=actions,
         digest_items=digest_items,
-        linkedin_opportunities=linkedin_opportunities,
         drafts=drafts,
     )
     if ranked_signals:
@@ -84,14 +79,12 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
         "digest_built",
         actions=len(actions),
         digest_items=len(digest_items),
-        linkedin_opportunities=len(linkedin_opportunities),
         drafts=len(drafts),
     )
     return DigestBuildResult(
         text=text,
         action_count=len(actions),
         digest_item_count=len(digest_items),
-        linkedin_opportunity_count=len(linkedin_opportunities),
         pending_draft_count=len(drafts),
         stale_pending_draft_count=len(stale_drafts),
         ranked_signals=ranked_signals[:limit],
@@ -106,7 +99,6 @@ def _build_ranked_signals(
     *,
     actions: list[object],
     digest_items: list[object],
-    linkedin_opportunities: list[object],
     drafts: list[object],
 ) -> list[RankedDigestSignal]:
     signals: list[RankedDigestSignal] = []
@@ -128,20 +120,6 @@ def _build_ranked_signals(
         signals.append(
             _build_signal(
                 source="action",
-                title=title,
-                priority=priority,
-                created_at=getattr(item, "created_at", None),
-            )
-        )
-    for item in linkedin_opportunities:
-        priority_score = int(getattr(item, "priority_score", 50) or 50)
-        priority = 1 if priority_score >= 80 else 2 if priority_score >= 60 else 3
-        role_title = getattr(item, "role_title", "LinkedIn conversation follow-up")
-        company = getattr(item, "company", "(unknown)")
-        title = f"{role_title} @ {company}"
-        signals.append(
-            _build_signal(
-                source="linkedin",
                 title=title,
                 priority=priority,
                 created_at=getattr(item, "created_at", None),

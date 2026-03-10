@@ -14,7 +14,6 @@ class ContactORM(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(320), unique=True)
-    linkedin_url: Mapped[str | None] = mapped_column(String(512))
     telegram_handle: Mapped[str | None] = mapped_column(String(255))
     company: Mapped[str | None] = mapped_column(String(255))
     relationship_type: Mapped[str | None] = mapped_column(String(64))
@@ -266,28 +265,6 @@ class EmailAgentConfigORM(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
-
-
-class LinkedInMessageORM(Base):
-    __tablename__ = "linkedin_messages"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    provider_message_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    sender_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    body_text: Mapped[str] = mapped_column(Text(), nullable=False)
-    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-class LinkedInThreadORM(Base):
-    __tablename__ = "linkedin_threads"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    external_thread_id: Mapped[str | None] = mapped_column(String(255), unique=True)
-    thread_summary: Mapped[str | None] = mapped_column(Text())
-    category: Mapped[str | None] = mapped_column(String(64))
-    priority_score: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False)
 
 
 class OpportunityORM(Base):
