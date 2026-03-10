@@ -55,13 +55,25 @@ def get_email_threads(limit: int = Query(default=20, ge=1, le=100)) -> list[Emai
 @router.get("/proposals", response_model=list[EmailProposalResponse])
 def get_email_proposals(
     limit: int = Query(default=20, ge=1, le=100),
+    status: str | None = Query(default=None),
+    proposal_type: str | None = Query(default=None),
 ) -> list[EmailProposalResponse]:
-    return [EmailProposalResponse(**item) for item in list_proposals(limit=limit)]
+    return [
+        EmailProposalResponse(**item)
+        for item in list_proposals(limit=limit, status=status, proposal_type=proposal_type)
+    ]
 
 
 @router.get("/drafts", response_model=list[EmailDraftResponse])
-def get_email_drafts(limit: int = Query(default=20, ge=1, le=100)) -> list[EmailDraftResponse]:
-    return [EmailDraftResponse(**item) for item in list_drafts(limit=limit)]
+def get_email_drafts(
+    limit: int = Query(default=20, ge=1, le=100),
+    status: str | None = Query(default=None),
+    approval_status: str | None = Query(default=None),
+) -> list[EmailDraftResponse]:
+    return [
+        EmailDraftResponse(**item)
+        for item in list_drafts(limit=limit, status=status, approval_status=approval_status)
+    ]
 
 
 @router.get("/tasks", response_model=list[ScheduledTaskResponse])

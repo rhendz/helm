@@ -182,7 +182,13 @@ class EmailThreadRepository(Protocol):
 
 @runtime_checkable
 class ActionProposalRepository(Protocol):
-    def list_recent(self, *, limit: int | None = None) -> list[ActionProposalORM]: ...
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        proposal_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[ActionProposalORM]: ...
 
     def create(self, item: NewActionProposal) -> ActionProposalORM: ...
 
@@ -191,7 +197,13 @@ class ActionProposalRepository(Protocol):
 
 @runtime_checkable
 class EmailDraftRepository(Protocol):
-    def list_recent(self, *, limit: int | None = None) -> list[EmailDraftORM]: ...
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        approval_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[EmailDraftORM]: ...
 
     def create(self, item: NewEmailDraft) -> EmailDraftORM: ...
 

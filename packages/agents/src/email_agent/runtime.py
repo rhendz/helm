@@ -169,9 +169,21 @@ class EmailAgentRuntime(Protocol):
 
     def list_email_threads(self, *, limit: int = 20) -> list[dict]: ...
 
-    def list_email_proposals(self, *, limit: int = 20) -> list[dict]: ...
+    def list_email_proposals(
+        self,
+        *,
+        status: str | None = None,
+        proposal_type: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]: ...
 
-    def list_email_drafts(self, *, limit: int = 20) -> list[dict]: ...
+    def list_email_drafts(
+        self,
+        *,
+        status: str | None = None,
+        approval_status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]: ...
 
     def get_email_thread_detail(self, *, thread_id: int) -> dict | None: ...
 

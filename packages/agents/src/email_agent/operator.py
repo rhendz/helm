@@ -55,7 +55,8 @@ def list_pending_drafts(
     runtime: EmailAgentRuntime,
 ) -> list[DraftView]:
     try:
-        items = runtime.list_email_drafts(limit=limit * 4)
+        items = runtime.list_email_drafts(limit=limit, approval_status="pending_user")
+        items.extend(runtime.list_email_drafts(limit=limit, approval_status="snoozed"))
     except SQLAlchemyError:
         return []
 

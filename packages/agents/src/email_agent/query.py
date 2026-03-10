@@ -16,22 +16,34 @@ def list_email_threads(
 
 def list_email_proposals(
     *,
+    status: str | None = None,
+    proposal_type: str | None = None,
     limit: int = 20,
     runtime: EmailAgentRuntime,
 ) -> list[dict]:
     try:
-        return runtime.list_email_proposals(limit=limit)
+        return runtime.list_email_proposals(
+            status=status,
+            proposal_type=proposal_type,
+            limit=limit,
+        )
     except SQLAlchemyError:
         return []
 
 
 def list_email_drafts(
     *,
+    status: str | None = None,
+    approval_status: str | None = None,
     limit: int = 20,
     runtime: EmailAgentRuntime,
 ) -> list[dict]:
     try:
-        return runtime.list_email_drafts(limit=limit)
+        return runtime.list_email_drafts(
+            status=status,
+            approval_status=approval_status,
+            limit=limit,
+        )
     except SQLAlchemyError:
         return []
 

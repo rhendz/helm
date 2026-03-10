@@ -74,6 +74,66 @@ def test_email_service_lists_threads_proposals_and_drafts(monkeypatch) -> None: 
     assert drafts[0]["approval_status"] == "pending_user"
 
 
+def test_email_service_filters_proposals_and_drafts() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    with Session(engine) as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        proposal_repo = SQLAlchemyActionProposalRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-filter-1"))
+
+        proposal_repo.create(
+            NewActionProposal(
+                email_thread_id=thread.id,
+                proposal_type="reply",
+                rationale="Reply now",
+                status="proposed",
+            )
+        )
+        proposal_repo.create(
+            NewActionProposal(
+                email_thread_id=thread.id,
+                proposal_type="review",
+                rationale="Need manual review",
+                status="dismissed",
+            )
+        )
+        draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                draft_body="Pending approval",
+                approval_status="pending_user",
+            )
+        )
+        draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                draft_body="Already approved",
+                approval_status="approved",
+            )
+        )
+
+    filtered_proposals = email_query.list_email_proposals(
+        runtime=runtime,
+        status="proposed",
+        proposal_type="reply",
+    )
+    filtered_drafts = email_query.list_email_drafts(
+        runtime=runtime,
+        approval_status="approved",
+    )
+
+    assert len(filtered_proposals) == 1
+    assert filtered_proposals[0]["proposal_type"] == "reply"
+    assert filtered_proposals[0]["status"] == "proposed"
+    assert len(filtered_drafts) == 1
+    assert filtered_drafts[0]["approval_status"] == "approved"
+
+
 def test_email_thread_detail_and_reprocess() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)

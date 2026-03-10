@@ -9,8 +9,19 @@ class SQLAlchemyEmailDraftRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def list_recent(self, *, limit: int | None = None) -> list[EmailDraftORM]:
-        stmt = select(EmailDraftORM).order_by(
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        approval_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[EmailDraftORM]:
+        stmt = select(EmailDraftORM)
+        if status is not None:
+            stmt = stmt.where(EmailDraftORM.status == status)
+        if approval_status is not None:
+            stmt = stmt.where(EmailDraftORM.approval_status == approval_status)
+        stmt = stmt.order_by(
             EmailDraftORM.updated_at.desc(),
             EmailDraftORM.id.desc(),
         )
