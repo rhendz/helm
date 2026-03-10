@@ -17,6 +17,7 @@ from helm_api.schemas import (
     ScheduledTaskResponse,
 )
 from helm_api.services.email_service import (
+    complete_global_task,
     complete_task,
     create_thread_task,
     get_thread_detail,
@@ -139,4 +140,11 @@ def complete_email_thread_task(
 ) -> CompleteScheduledTaskResponse:
     return CompleteScheduledTaskResponse(
         **complete_task(thread_id=thread_id, task_id=task_id),
+    )
+
+
+@router.post("/tasks/{task_id}/complete", response_model=CompleteScheduledTaskResponse)
+def complete_email_task(task_id: int) -> CompleteScheduledTaskResponse:
+    return CompleteScheduledTaskResponse(
+        **complete_global_task(task_id=task_id),
     )

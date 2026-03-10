@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from email_agent import query as email_query
 from email_agent.adapters import build_helm_runtime
 from email_agent.reminders import (
+    complete_scheduled_task,
     complete_thread_task,
     create_thread_reminder,
     list_scheduled_tasks,
@@ -205,6 +206,34 @@ def test_email_service_lists_global_scheduled_tasks() -> None:
     assert pending_tasks[0]["task_type"] == "followup"
     assert len(completed_tasks) == 1
     assert completed_tasks[0]["task_type"] == "reminder"
+
+
+def test_email_service_completes_task_from_global_queue() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    with Session(engine) as session:
+        thread = SQLAlchemyEmailThreadRepository(session).create(
+            NewEmailThread(provider_thread_id="thr-task-complete")
+        )
+        thread_id = thread.id
+
+    scheduled = create_thread_reminder(
+        thread_id=thread_id,
+        due_at=datetime(2026, 1, 2, 9, 0, 0, tzinfo=UTC),
+        created_by="user",
+        task_type="reminder",
+        runtime=runtime,
+    )
+    assert scheduled.task_id is not None
+
+    completed = complete_scheduled_task(task_id=scheduled.task_id, runtime=runtime)
+
+    assert completed.status == "accepted"
+    assert completed.thread_id == thread_id
+    assert completed.completed is True
 
 
 def test_email_thread_override_updates_state(monkeypatch) -> None:  # noqa: ANN001

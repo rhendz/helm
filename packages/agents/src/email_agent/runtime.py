@@ -49,6 +49,7 @@ class ScheduledTaskRecord:
     id: int
     email_thread_id: int
     task_type: str
+    status: str
 
 
 class EmailAgentRuntime(Protocol):
@@ -163,6 +164,8 @@ class EmailAgentRuntime(Protocol):
     ) -> list[ScheduledTaskRecord]: ...
 
     def mark_task_completed(self, task_id: int) -> bool: ...
+
+    def get_scheduled_task_by_id(self, task_id: int) -> ScheduledTaskRecord | None: ...
 
     def list_email_threads(self, *, limit: int = 20) -> list[dict]: ...
 

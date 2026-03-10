@@ -4,6 +4,7 @@ from helm_telegram_bot.commands import (
     approve,
     common,
     digest,
+    done_task,
     drafts,
     followup,
     remind,
@@ -462,3 +463,30 @@ async def test_tasks_command_formats_queue(monkeypatch: pytest.MonkeyPatch) -> N
     assert update.message.replies == [
         "Pending email tasks:\n10: thread 4 reminder due 2026-01-03T09:00:00Z"
     ]
+
+
+@pytest.mark.asyncio
+async def test_done_task_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen_id: int | None = None
+
+        def complete_task(self, task_id: int) -> ThreadTaskTransitionResult:
+            self.seen_id = task_id
+            return ThreadTaskTransitionResult(
+                ok=True,
+                message="Completed task 10 for thread 4.",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(done_task, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(done_task, "_service", service)
+    update = _Update()
+
+    await done_task.handle(update, _Context(args=["10"]))
+
+    assert service.seen_id == 10
+    assert update.message.replies == ["Completed task 10 for thread 4."]

@@ -25,6 +25,9 @@ class SQLAlchemyScheduledThreadTaskRepository:
         self._session.refresh(record)
         return record
 
+    def get_by_id(self, task_id: int) -> ScheduledThreadTaskORM | None:
+        return self._session.get(ScheduledThreadTaskORM, task_id)
+
     def list_for_thread(self, *, email_thread_id: int) -> list[ScheduledThreadTaskORM]:
         stmt = (
             select(ScheduledThreadTaskORM)

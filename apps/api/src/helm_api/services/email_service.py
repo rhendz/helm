@@ -9,6 +9,7 @@ from email_agent.query import (
     list_email_threads,
 )
 from email_agent.reminders import (
+    complete_scheduled_task,
     complete_thread_task,
     create_thread_reminder,
     list_scheduled_tasks,
@@ -165,6 +166,15 @@ def complete_task(*, thread_id: int, task_id: int) -> dict:
     )
 
 
+def complete_global_task(*, task_id: int) -> dict:
+    return asdict(
+        complete_scheduled_task(
+            task_id=task_id,
+            runtime=_runtime(),
+        )
+    )
+
+
 def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:
     report = pull_new_messages_report(manual_payload=[dict(item) for item in messages])
     normalized_messages = report.messages
@@ -221,6 +231,7 @@ def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str
 __all__ = [
     "get_thread_detail",
     "create_thread_task",
+    "complete_global_task",
     "complete_task",
     "ingest_manual_email_messages",
     "list_drafts",

@@ -124,6 +124,40 @@ def complete_thread_task(
     )
 
 
+def complete_scheduled_task(
+    *,
+    task_id: int,
+    runtime: EmailAgentRuntime,
+) -> ScheduledTaskCompleteResult:
+    try:
+        task = runtime.get_scheduled_task_by_id(task_id)
+        if task is None:
+            return ScheduledTaskCompleteResult(
+                status="not_found",
+                thread_id=0,
+                task_id=task_id,
+                completed=False,
+                reason="task_not_found",
+            )
+        completed = runtime.mark_task_completed(task_id)
+    except SQLAlchemyError:
+        return ScheduledTaskCompleteResult(
+            status="unavailable",
+            thread_id=0,
+            task_id=task_id,
+            completed=False,
+            reason="storage_unavailable",
+        )
+
+    return ScheduledTaskCompleteResult(
+        status="accepted" if completed else "not_found",
+        thread_id=task.email_thread_id,
+        task_id=task_id,
+        completed=completed,
+        reason=None if completed else "task_not_found",
+    )
+
+
 def _task_reason(task_type: str) -> str:
     if task_type == "followup":
         return "followup_due"

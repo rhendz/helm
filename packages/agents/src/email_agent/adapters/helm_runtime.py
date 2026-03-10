@@ -249,6 +249,7 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                     id=record.id,
                     email_thread_id=record.email_thread_id,
                     task_type=record.task_type,
+                    status=record.status,
                 )
                 for record in records
             ]
@@ -256,6 +257,18 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
     def mark_task_completed(self, task_id: int) -> bool:
         with self.session_factory() as session:
             return SQLAlchemyScheduledThreadTaskRepository(session).mark_completed(task_id)
+
+    def get_scheduled_task_by_id(self, task_id: int) -> ScheduledTaskRecord | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyScheduledThreadTaskRepository(session).get_by_id(task_id)
+            if record is None:
+                return None
+            return ScheduledTaskRecord(
+                id=record.id,
+                email_thread_id=record.email_thread_id,
+                task_type=record.task_type,
+                status=record.status,
+            )
 
     def list_email_threads(self, *, limit: int = 20) -> list[dict]:
         with self.session_factory() as session:

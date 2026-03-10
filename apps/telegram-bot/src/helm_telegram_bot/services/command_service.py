@@ -11,7 +11,7 @@ from email_agent.operator import (
     list_pending_drafts,
     snooze_draft,
 )
-from email_agent.reminders import create_thread_reminder
+from email_agent.reminders import complete_scheduled_task, create_thread_reminder
 from helm_observability.logging import get_logger
 
 logger = get_logger("helm_telegram_bot.services.command_service")
@@ -147,6 +147,23 @@ class TelegramCommandService:
         return ThreadTaskTransitionResult(
             ok=True,
             message=f"Created {task_type} task {result.task_id} for thread {thread_id}.",
+        )
+
+    def complete_task(self, task_id: int) -> ThreadTaskTransitionResult:
+        result = complete_scheduled_task(task_id=task_id, runtime=build_helm_runtime())
+        if result.status != "accepted":
+            logger.warning(
+                "thread_task_complete_failed",
+                task_id=task_id,
+                reason=result.reason,
+            )
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Could not complete task {task_id}.",
+            )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"Completed task {task_id} for thread {result.thread_id}.",
         )
 
     def resolve_thread(self, thread_id: int) -> ThreadOverrideTransitionResult:
