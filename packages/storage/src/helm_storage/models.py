@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -195,6 +195,34 @@ class ActionProposalORM(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class ClassificationArtifactORM(Base):
+    __tablename__ = "classification_artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    internal_uuid: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), unique=True
+    )
+    email_thread_id: Mapped[int] = mapped_column(
+        ForeignKey("email_threads.id", ondelete="CASCADE")
+    )
+    email_message_id: Mapped[int] = mapped_column(
+        ForeignKey("email_messages.id", ondelete="CASCADE")
+    )
+    classification: Mapped[str] = mapped_column(String(64), nullable=False)
+    priority_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    business_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    visible_labels: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    action_reason: Mapped[str | None] = mapped_column(String(32))
+    resurfacing_source: Mapped[str | None] = mapped_column(String(32))
+    confidence_band: Mapped[str | None] = mapped_column(String(16))
+    decision_context: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    model_name: Mapped[str | None] = mapped_column(String(128))
+    prompt_version: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

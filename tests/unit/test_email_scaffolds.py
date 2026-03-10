@@ -10,6 +10,7 @@ from helm_storage.db import Base
 from helm_storage.models import (
     ActionProposalORM,
     AgentRunORM,
+    ClassificationArtifactORM,
     DigestItemORM,
     EmailDraftORM,
     EmailMessageORM,
@@ -224,6 +225,9 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
         email_threads = list(session.execute(select(EmailThreadORM)).scalars().all())
         action_proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
         email_drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
+        classification_artifacts = list(
+            session.execute(select(ClassificationArtifactORM)).scalars().all()
+        )
         digest_items = list(session.execute(select(DigestItemORM)).scalars().all())
         agent_runs = list(session.execute(select(AgentRunORM)).scalars().all())
 
@@ -236,9 +240,54 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert email_threads[0].visible_labels == "Action"
     assert len(action_proposals) == 1
     assert len(email_drafts) == 1
+    assert len(classification_artifacts) == 2
+    assert classification_artifacts[0].email_thread_id == first_result.email_thread_id
+    assert classification_artifacts[0].email_message_id == email_messages[0].id
     assert len(digest_items) == 1
     assert len(agent_runs) == 2
     assert all(run.status == AgentRunStatus.SUCCEEDED.value for run in agent_runs)
+
+
+def test_classification_artifact_failure_does_not_revert_thread_truth() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    runtime = build_helm_runtime(session_local)
+    original_create = runtime.create_classification_artifact
+
+    def _fail_create(**kwargs):  # noqa: ANN001
+        raise RuntimeError("artifact write failed")
+
+    runtime.create_classification_artifact = _fail_create  # type: ignore[method-assign]
+
+    message = normalize_message(
+        {
+            "id": "msg-fail-1",
+            "threadId": "thr-fail-1",
+            "from": "recruiter@example.com",
+            "subject": "Urgent role",
+            "snippet": "Need a reply today.",
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="artifact write failed"):
+        run_email_triage_workflow(
+            _email_message(message),
+            graph=build_email_triage_graph(),
+            runtime=runtime,
+        )
+
+    runtime.create_classification_artifact = original_create  # type: ignore[method-assign]
+
+    with Session(engine) as session:
+        thread = session.execute(select(EmailThreadORM)).scalars().one()
+        artifacts = list(session.execute(select(ClassificationArtifactORM)).scalars().all())
+
+    assert thread.provider_thread_id == "thr-fail-1"
+    assert thread.business_state == "waiting_on_user"
+    assert thread.visible_labels == "Action"
+    assert artifacts == []
 
 
 def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> None:

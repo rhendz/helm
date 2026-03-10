@@ -4,6 +4,8 @@ from dataclasses import asdict
 from email_agent.adapters import build_helm_runtime
 from email_agent.query import (
     get_email_thread_detail,
+    list_classification_artifacts_for_message,
+    list_classification_artifacts_for_thread,
     list_email_drafts,
     list_email_proposals,
     list_email_threads,
@@ -175,6 +177,14 @@ def list_thread_tasks(*, thread_id: int) -> list[dict]:
 
 def list_tasks(*, status: str | None = None, limit: int = 20) -> list[dict]:
     return list_scheduled_tasks(status=status, limit=limit, runtime=_runtime())
+
+
+def list_thread_classification_artifacts(*, thread_id: int) -> list[dict]:
+    return list_classification_artifacts_for_thread(thread_id=thread_id, runtime=_runtime())
+
+
+def list_message_classification_artifacts(*, message_id: int) -> list[dict]:
+    return list_classification_artifacts_for_message(message_id=message_id, runtime=_runtime())
 
 
 def create_thread_task(

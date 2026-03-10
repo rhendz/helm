@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from helm_api.schemas import (
+    ClassificationArtifactResponse,
     CompleteScheduledTaskResponse,
     CreateScheduledTaskRequest,
     CreateScheduledTaskResponse,
@@ -23,8 +24,10 @@ from helm_api.services.email_service import (
     get_thread_detail,
     ingest_manual_email_messages,
     list_drafts,
+    list_message_classification_artifacts,
     list_proposals,
     list_tasks,
+    list_thread_classification_artifacts,
     list_thread_tasks,
     list_threads,
     override_thread,
@@ -97,6 +100,32 @@ def get_email_thread_detail(thread_id: int) -> EmailThreadDetailResponse:
     if detail is None:
         raise HTTPException(status_code=404, detail="Email thread not found")
     return EmailThreadDetailResponse(**detail)
+
+
+@router.get(
+    "/threads/{thread_id}/classification-artifacts",
+    response_model=list[ClassificationArtifactResponse],
+)
+def get_email_thread_classification_artifacts(
+    thread_id: int,
+) -> list[ClassificationArtifactResponse]:
+    return [
+        ClassificationArtifactResponse(**item)
+        for item in list_thread_classification_artifacts(thread_id=thread_id)
+    ]
+
+
+@router.get(
+    "/messages/{message_id}/classification-artifacts",
+    response_model=list[ClassificationArtifactResponse],
+)
+def get_email_message_classification_artifacts(
+    message_id: int,
+) -> list[ClassificationArtifactResponse]:
+    return [
+        ClassificationArtifactResponse(**item)
+        for item in list_message_classification_artifacts(message_id=message_id)
+    ]
 
 
 @router.post(

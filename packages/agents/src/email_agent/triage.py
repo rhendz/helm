@@ -189,6 +189,25 @@ def _persist_triage_artifacts(
         last_inbound_message_id=thread_update.last_inbound_message_id,
         last_outbound_message_id=thread_update.last_outbound_message_id,
     )
+    runtime.create_classification_artifact(
+        email_thread_id=email_thread_id,
+        email_message_id=email_message_id,
+        classification=classification,
+        priority_score=priority,
+        business_state=thread_update.business_state,
+        visible_labels=thread_update.visible_labels,
+        action_reason=thread_update.action_reason,
+        resurfacing_source=thread_update.resurfacing_source,
+        confidence_band=thread_update.latest_confidence_band,
+        decision_context={
+            "action_item_required": state.get("action_item_required", False),
+            "draft_reply_required": state.get("draft_reply_required", False),
+            "digest_item_required": state.get("digest_item_required", False),
+            "thread_summary": thread_summary,
+        },
+        model_name="rule_based_triage",
+        prompt_version="email_triage_v1",
+    )
 
     if state.get("action_item_required", False):
         proposal_record = runtime.get_latest_proposal_for_thread(email_thread_id=email_thread_id)

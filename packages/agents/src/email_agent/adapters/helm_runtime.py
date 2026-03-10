@@ -6,8 +6,12 @@ from datetime import datetime
 from helm_storage.db import SessionLocal
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.agent_runs import SQLAlchemyAgentRunRepository
+from helm_storage.repositories.classification_artifacts import (
+    SQLAlchemyClassificationArtifactRepository,
+)
 from helm_storage.repositories.contracts import (
     NewActionProposal,
+    NewClassificationArtifact,
     NewDigestItem,
     NewEmailDraft,
     NewEmailThread,
@@ -21,6 +25,7 @@ from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduled
 from sqlalchemy.orm import Session
 
 from email_agent.runtime import (
+    ClassificationArtifactRecord,
     DigestRecord,
     DraftRecord,
     EmailAgentRuntime,
@@ -147,6 +152,41 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 )
             )
             return ProposalRecord(id=record.id)
+
+    def create_classification_artifact(
+        self,
+        *,
+        email_thread_id: int,
+        email_message_id: int,
+        classification: str,
+        priority_score: int,
+        business_state: str,
+        visible_labels: tuple[str, ...],
+        action_reason: str | None,
+        resurfacing_source: str | None,
+        confidence_band: str | None,
+        decision_context: dict[str, object],
+        model_name: str | None = None,
+        prompt_version: str | None = None,
+    ) -> ClassificationArtifactRecord:
+        with self.session_factory() as session:
+            record = SQLAlchemyClassificationArtifactRepository(session).create(
+                NewClassificationArtifact(
+                    email_thread_id=email_thread_id,
+                    email_message_id=email_message_id,
+                    classification=classification,
+                    priority_score=priority_score,
+                    business_state=business_state,
+                    visible_labels=visible_labels,
+                    action_reason=action_reason,
+                    resurfacing_source=resurfacing_source,
+                    confidence_band=confidence_band,
+                    decision_context=decision_context,
+                    model_name=model_name,
+                    prompt_version=prompt_version,
+                )
+            )
+            return ClassificationArtifactRecord(id=record.id)
 
     def get_latest_email_draft_for_thread(self, *, email_thread_id: int) -> DraftRecord | None:
         with self.session_factory() as session:
@@ -348,6 +388,20 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 for draft in records
             ]
 
+    def list_classification_artifacts_for_thread(self, *, thread_id: int) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyClassificationArtifactRepository(session).list_for_thread(
+                email_thread_id=thread_id,
+            )
+            return [_classification_artifact_payload(record) for record in records]
+
+    def list_classification_artifacts_for_message(self, *, message_id: int) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyClassificationArtifactRepository(session).list_for_message(
+                email_message_id=message_id,
+            )
+            return [_classification_artifact_payload(record) for record in records]
+
     def get_email_thread_detail(self, *, thread_id: int) -> dict | None:
         with self.session_factory() as session:
             thread = SQLAlchemyEmailThreadRepository(session).get_by_id(thread_id)
@@ -530,3 +584,22 @@ def _split_labels(value: str) -> list[str]:
     if not value:
         return []
     return [label for label in value.split(",") if label]
+
+
+def _classification_artifact_payload(record: object) -> dict:
+    return {
+        "id": record.id,
+        "email_thread_id": record.email_thread_id,
+        "email_message_id": record.email_message_id,
+        "classification": record.classification,
+        "priority_score": record.priority_score,
+        "business_state": record.business_state,
+        "visible_labels": record.visible_labels,
+        "action_reason": record.action_reason,
+        "resurfacing_source": record.resurfacing_source,
+        "confidence_band": record.confidence_band,
+        "decision_context": record.decision_context,
+        "model_name": record.model_name,
+        "prompt_version": record.prompt_version,
+        "created_at": record.created_at,
+    }

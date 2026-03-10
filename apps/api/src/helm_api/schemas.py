@@ -75,6 +75,23 @@ class EmailThreadDetailResponse(BaseModel):
     messages: list[EmailMessageResponse] = Field(default_factory=list)
 
 
+class ClassificationArtifactResponse(BaseModel):
+    id: int
+    email_thread_id: int
+    email_message_id: int
+    classification: str
+    priority_score: int
+    business_state: str
+    visible_labels: list[str] = Field(default_factory=list)
+    action_reason: str | None = None
+    resurfacing_source: str | None = None
+    confidence_band: str | None = None
+    decision_context: dict[str, object] = Field(default_factory=dict)
+    model_name: str | None = None
+    prompt_version: str | None = None
+    created_at: datetime
+
+
 class EmailThreadReprocessRequest(BaseModel):
     dry_run: bool = True
 

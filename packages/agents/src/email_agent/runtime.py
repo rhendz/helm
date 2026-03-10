@@ -52,6 +52,11 @@ class ScheduledTaskRecord:
     status: str
 
 
+@dataclass(slots=True, frozen=True)
+class ClassificationArtifactRecord:
+    id: int
+
+
 class EmailAgentRuntime(Protocol):
     def start_run(
         self,
@@ -114,6 +119,23 @@ class EmailAgentRuntime(Protocol):
         rationale: str | None,
         confidence_band: str | None,
     ) -> ProposalRecord: ...
+
+    def create_classification_artifact(
+        self,
+        *,
+        email_thread_id: int,
+        email_message_id: int,
+        classification: str,
+        priority_score: int,
+        business_state: str,
+        visible_labels: tuple[str, ...],
+        action_reason: str | None,
+        resurfacing_source: str | None,
+        confidence_band: str | None,
+        decision_context: dict[str, object],
+        model_name: str | None = None,
+        prompt_version: str | None = None,
+    ) -> ClassificationArtifactRecord: ...
 
     def get_latest_email_draft_for_thread(
         self,
@@ -190,6 +212,10 @@ class EmailAgentRuntime(Protocol):
         approval_status: str | None = None,
         limit: int = 20,
     ) -> list[dict]: ...
+
+    def list_classification_artifacts_for_thread(self, *, thread_id: int) -> list[dict]: ...
+
+    def list_classification_artifacts_for_message(self, *, message_id: int) -> list[dict]: ...
 
     def get_email_thread_detail(self, *, thread_id: int) -> dict | None: ...
 
