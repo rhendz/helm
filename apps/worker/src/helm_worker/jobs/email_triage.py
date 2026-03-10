@@ -1,5 +1,5 @@
 from email_agent.adapters import build_helm_runtime
-from email_agent.triage import run_email_triage_workflow
+from email_agent.triage import process_inbound_email_message
 from email_agent.types import EmailMessage
 from helm_connectors.gmail import pull_new_messages_report
 from helm_observability.logging import get_logger
@@ -17,7 +17,7 @@ def run() -> None:
     )
     messages = report.messages
     for message in messages:
-        result = run_email_triage_workflow(
+        result = process_inbound_email_message(
             EmailMessage(
                 provider_message_id=message.provider_message_id,
                 provider_thread_id=message.provider_thread_id,
@@ -33,6 +33,7 @@ def run() -> None:
         logger.info(
             "email_triage_scaffold_result",
             message_id=result.message_id,
+            trigger_family=result.trigger_family,
             classification=result.classification,
             priority_score=result.priority_score,
             workflow_status=result.workflow_status,

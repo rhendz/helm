@@ -22,6 +22,7 @@ from email_agent.scheduling import ScheduledThreadTaskRunResult, run_due_schedul
 from email_agent.triage import (
     EmailTriageWorkflowResult,
     build_email_triage_graph,
+    process_inbound_email_message,
     run_email_triage_workflow,
 )
 from email_agent.types import EmailMessage
@@ -42,6 +43,7 @@ __all__ = [
     "list_email_proposals",
     "list_email_threads",
     "list_thread_scheduled_tasks",
+    "process_inbound_email_message",
     "run_due_scheduled_thread_tasks",
     "run_email_triage_workflow",
 ]

@@ -26,6 +26,7 @@ class EmailTriageState(TypedDict, total=False):
 class EmailTriageWorkflowResult:
     email_thread_id: int | None
     message_id: str
+    trigger_family: str
     classification: str
     priority_score: int
     thread_summary: str
@@ -101,6 +102,7 @@ def run_email_triage_workflow(
     *,
     graph: Any | None = None,
     runtime: EmailAgentRuntime,
+    trigger_family: str = "inbound_email",
 ) -> EmailTriageWorkflowResult:
     compiled_graph = graph or build_email_triage_graph()
 
@@ -128,6 +130,7 @@ def run_email_triage_workflow(
             email_thread_id=thread_id,
             runtime=runtime,
             email_message_id=email_record.id,
+            trigger_family=trigger_family,
         )
         runtime.mark_message_processed(
             message.provider_message_id,
@@ -141,6 +144,7 @@ def run_email_triage_workflow(
     return EmailTriageWorkflowResult(
         email_thread_id=thread_id,
         message_id=message.provider_message_id,
+        trigger_family=trigger_family,
         classification=state.get("classification", "unclassified"),
         priority_score=state.get("priority_score", 3),
         thread_summary=state.get("thread_summary", ""),
@@ -161,6 +165,7 @@ def _persist_triage_artifacts(
     email_thread_id: int,
     runtime: EmailAgentRuntime,
     email_message_id: int,
+    trigger_family: str,
 ) -> tuple[int | None, int | None, int | None]:
     proposal_record = None
     email_draft_record = None
@@ -202,6 +207,7 @@ def _persist_triage_artifacts(
         resurfacing_source=thread_update.resurfacing_source,
         confidence_band=thread_update.latest_confidence_band,
         decision_context={
+            "trigger_family": trigger_family,
             "action_item_required": state.get("action_item_required", False),
             "draft_reply_required": state.get("draft_reply_required", False),
             "digest_item_required": state.get("digest_item_required", False),
@@ -257,6 +263,24 @@ def _persist_triage_artifacts(
 
 def _clamp_priority(value: int) -> int:
     return max(1, min(4, value))
+
+
+def process_inbound_email_message(
+    message: EmailMessage,
+    *,
+    graph: Any | None = None,
+    runtime: EmailAgentRuntime,
+) -> EmailTriageWorkflowResult:
+    existing_thread = runtime.get_thread_by_provider_thread_id(message.provider_thread_id)
+    trigger_family = (
+        "existing_thread_inbound" if existing_thread is not None else "new_thread_inbound"
+    )
+    return run_email_triage_workflow(
+        message,
+        graph=graph,
+        runtime=runtime,
+        trigger_family=trigger_family,
+    )
 
 
 def _build_digest_title(message: EmailMessage) -> str:

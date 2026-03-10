@@ -2,7 +2,11 @@ from datetime import UTC, datetime
 
 import pytest
 from email_agent.adapters import build_helm_runtime
-from email_agent.triage import build_email_triage_graph, run_email_triage_workflow
+from email_agent.triage import (
+    build_email_triage_graph,
+    process_inbound_email_message,
+    run_email_triage_workflow,
+)
 from email_agent.types import EmailMessage
 from helm_connectors import gmail
 from helm_connectors.gmail import normalize_message, pull_new_messages, pull_new_messages_report
@@ -165,13 +169,14 @@ def test_email_triage_graph_scaffold_result_shape() -> None:
     )
 
     graph = build_email_triage_graph()
-    result = run_email_triage_workflow(
+    result = process_inbound_email_message(
         _email_message(message),
         graph=graph,
         runtime=build_helm_runtime(session_local),
     )
 
     assert result.message_id == "msg-3"
+    assert result.trigger_family == "new_thread_inbound"
     assert result.classification == "unclassified"
     assert result.priority_score == 3
     assert result.action_item_required is False
@@ -196,12 +201,12 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     )
 
     graph = build_email_triage_graph()
-    first_result = run_email_triage_workflow(
+    first_result = process_inbound_email_message(
         _email_message(message),
         graph=graph,
         runtime=build_helm_runtime(session_local),
     )
-    second_result = run_email_triage_workflow(
+    second_result = process_inbound_email_message(
         _email_message(message),
         graph=graph,
         runtime=build_helm_runtime(session_local),
@@ -216,6 +221,8 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert first_result.digest_item_id is not None
 
     assert second_result.email_thread_id == first_result.email_thread_id
+    assert first_result.trigger_family == "new_thread_inbound"
+    assert second_result.trigger_family == "existing_thread_inbound"
     assert second_result.action_proposal_id == first_result.action_proposal_id
     assert second_result.email_draft_id == first_result.email_draft_id
     assert second_result.digest_item_id == first_result.digest_item_id
@@ -243,6 +250,11 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert len(classification_artifacts) == 2
     assert classification_artifacts[0].email_thread_id == first_result.email_thread_id
     assert classification_artifacts[0].email_message_id == email_messages[0].id
+    assert classification_artifacts[0].decision_context["trigger_family"] == "new_thread_inbound"
+    assert (
+        classification_artifacts[1].decision_context["trigger_family"]
+        == "existing_thread_inbound"
+    )
     assert len(digest_items) == 1
     assert len(agent_runs) == 2
     assert all(run.status == AgentRunStatus.SUCCEEDED.value for run in agent_runs)
@@ -315,18 +327,20 @@ def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> N
     )
 
     graph = build_email_triage_graph()
-    first_result = run_email_triage_workflow(
+    first_result = process_inbound_email_message(
         _email_message(first_message),
         graph=graph,
         runtime=build_helm_runtime(session_local),
     )
-    second_result = run_email_triage_workflow(
+    second_result = process_inbound_email_message(
         _email_message(second_message),
         graph=graph,
         runtime=build_helm_runtime(session_local),
     )
 
     assert first_result.email_thread_id is not None
+    assert first_result.trigger_family == "new_thread_inbound"
+    assert second_result.trigger_family == "existing_thread_inbound"
     assert second_result.email_thread_id == first_result.email_thread_id
     assert first_result.action_proposal_id is not None
     assert second_result.action_proposal_id == first_result.action_proposal_id
@@ -360,7 +374,7 @@ def test_email_triage_supports_proposal_only_path_without_draft() -> None:
         }
     )
 
-    result = run_email_triage_workflow(
+    result = process_inbound_email_message(
         _email_message(message),
         graph=build_email_triage_graph(),
         runtime=build_helm_runtime(session_local),
@@ -368,6 +382,7 @@ def test_email_triage_supports_proposal_only_path_without_draft() -> None:
 
     assert result.action_item_required is True
     assert result.draft_reply_required is False
+    assert result.trigger_family == "new_thread_inbound"
     assert result.action_proposal_id is not None
     assert result.email_draft_id is None
 
