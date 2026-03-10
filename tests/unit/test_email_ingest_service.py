@@ -33,7 +33,7 @@ def test_ingest_manual_email_messages_normalizes_failures_and_processes_valid(
     monkeypatch.setattr(email_service, "build_email_triage_graph", lambda: object())
     monkeypatch.setattr(
         email_service,
-        "run_email_triage_workflow",
+        "process_inbound_email_message",
         lambda *args, **kwargs: _Result(),
     )
     monkeypatch.setattr(

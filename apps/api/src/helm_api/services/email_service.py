@@ -19,7 +19,7 @@ from email_agent.reminders import (
 )
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.thread_state import transition_for_human_override
-from email_agent.triage import build_email_triage_graph, run_email_triage_workflow
+from email_agent.triage import build_email_triage_graph, process_inbound_email_message
 from email_agent.types import EmailMessage
 from helm_connectors.gmail import pull_new_messages_report
 from helm_observability.agent_runs import record_agent_run
@@ -236,7 +236,7 @@ def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str
     def _execute() -> None:
         nonlocal persisted, processed_count
         for message in normalized_messages:
-            result = run_email_triage_workflow(
+            result = process_inbound_email_message(
                 EmailMessage(
                     provider_message_id=message.provider_message_id,
                     provider_thread_id=message.provider_thread_id,

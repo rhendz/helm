@@ -61,6 +61,7 @@ def reprocess_email_thread(
         result = run_email_triage_workflow(
             EmailMessage(**latest_message),
             runtime=runtime,
+            trigger_family="manual_thread_reprocess",
         )
     except SQLAlchemyError:
         return ThreadReprocessResult(

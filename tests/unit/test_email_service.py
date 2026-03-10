@@ -236,6 +236,18 @@ def test_email_thread_detail_and_reprocess() -> None:
     executed = reprocess_email_thread(thread_id=thread_id, dry_run=False, runtime=runtime)
     assert executed.status == "accepted"
     assert executed.reprocessed is True
+    assert executed.workflow_status == "completed"
+
+    detail = email_query.get_email_thread_detail(thread_id=thread_id, runtime=runtime)
+    assert detail is not None
+    assert len(detail["messages"]) == 1
+
+    artifacts = email_query.list_classification_artifacts_for_thread(
+        thread_id=thread_id,
+        runtime=runtime,
+    )
+    assert len(artifacts) == 1
+    assert artifacts[0]["decision_context"]["trigger_family"] == "manual_thread_reprocess"
 
     scheduled = create_thread_reminder(
         thread_id=thread_id,
