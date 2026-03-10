@@ -98,6 +98,30 @@ def test_list_waiting_on_other_party_threads_uses_state_filter(monkeypatch) -> N
     assert threads[0].business_state == "waiting_on_other_party"
 
 
+def test_list_resolved_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_email_threads": lambda self, *, business_state, limit: [
+                {
+                    "id": 19,
+                    "business_state": business_state,
+                    "current_summary": "Closed recruiter thread",
+                }
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    threads = service.list_resolved_threads(limit=2)
+
+    assert len(threads) == 1
+    assert threads[0].id == 19
+    assert threads[0].business_state == "resolved"
+
+
 def test_list_needs_review_threads_uses_label(monkeypatch) -> None:  # noqa: ANN001
     runtime = type(
         "Runtime",
