@@ -12,6 +12,13 @@ def test_routes_exist() -> None:
     assert client.get("/v1/email/threads").status_code == 200
     assert client.get("/v1/email/proposals").status_code == 200
     assert client.get("/v1/email/drafts").status_code == 200
+    assert client.get("/v1/email/threads/999999").status_code == 404
+    reprocess_email_response = client.post(
+        "/v1/email/threads/999999/reprocess",
+        json={"dry_run": True},
+    )
+    assert reprocess_email_response.status_code == 200
+    assert reprocess_email_response.json()["status"] in {"not_found", "unavailable"}
     drafts_response = client.get("/v1/drafts")
     assert drafts_response.status_code == 200
     response = client.post(

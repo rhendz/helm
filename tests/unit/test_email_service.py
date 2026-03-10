@@ -1,9 +1,14 @@
+from datetime import UTC, datetime
+
 from email_agent import query as email_query
 from email_agent.adapters import build_helm_runtime
+from email_agent.reprocess import reprocess_email_thread
+from email_agent.types import EmailMessage
 from helm_storage.db import Base
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.contracts import NewActionProposal, NewEmailDraft, NewEmailThread
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
+from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -59,3 +64,70 @@ def test_email_service_lists_threads_proposals_and_drafts(monkeypatch) -> None: 
     assert proposals[0]["proposal_type"] == "reply"
     assert len(drafts) == 1
     assert drafts[0]["approval_status"] == "pending_user"
+
+
+def test_email_thread_detail_and_reprocess() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    with Session(engine) as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        proposal_repo = SQLAlchemyActionProposalRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+        message_repo = SQLAlchemyEmailMessageRepository(session)
+
+        thread = thread_repo.create(
+            NewEmailThread(
+                provider_thread_id="thr-api-detail",
+                business_state="waiting_on_user",
+                visible_labels=("Action",),
+                current_summary="Need to reply",
+            )
+        )
+        thread_id = thread.id
+        proposal = proposal_repo.create(
+            NewActionProposal(
+                email_thread_id=thread_id,
+                proposal_type="reply",
+                rationale="Reply to recruiter",
+                confidence_band="High",
+            )
+        )
+        draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread_id,
+                action_proposal_id=proposal.id,
+                draft_body="Thanks for reaching out.",
+                draft_subject="Re: Opportunity",
+            )
+        )
+        message_repo.upsert_from_normalized(
+            EmailMessage(
+                provider_message_id="msg-api-detail",
+                provider_thread_id="thr-api-detail",
+                from_address="recruiter@example.com",
+                subject="Opportunity",
+                body_text="Can we schedule time?",
+                received_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+                normalized_at=datetime(2026, 1, 2, 3, 4, 6, tzinfo=UTC),
+                source="gmail",
+            ),
+            email_thread_id=thread_id,
+        )
+
+    detail = email_query.get_email_thread_detail(thread_id=thread_id, runtime=runtime)
+    assert detail is not None
+    assert detail["thread"]["provider_thread_id"] == "thr-api-detail"
+    assert len(detail["proposals"]) == 1
+    assert len(detail["drafts"]) == 1
+    assert len(detail["messages"]) == 1
+
+    dry_run = reprocess_email_thread(thread_id=thread_id, dry_run=True, runtime=runtime)
+    assert dry_run.status == "accepted"
+    assert dry_run.reprocessed is False
+
+    executed = reprocess_email_thread(thread_id=thread_id, dry_run=False, runtime=runtime)
+    assert executed.status == "accepted"
+    assert executed.reprocessed is True

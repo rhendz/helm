@@ -34,3 +34,14 @@ def list_email_drafts(
         return runtime.list_email_drafts(limit=limit)
     except SQLAlchemyError:
         return []
+
+
+def get_email_thread_detail(
+    *,
+    thread_id: int,
+    runtime: EmailAgentRuntime,
+) -> dict | None:
+    try:
+        return runtime.get_email_thread_detail(thread_id=thread_id)
+    except SQLAlchemyError:
+        return None

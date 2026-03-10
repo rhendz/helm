@@ -40,3 +40,11 @@ class SQLAlchemyActionProposalRepository:
             .order_by(ActionProposalORM.id.desc())
         )
         return self._session.execute(stmt).scalars().first()
+
+    def list_for_thread(self, *, email_thread_id: int) -> list[ActionProposalORM]:
+        stmt = (
+            select(ActionProposalORM)
+            .where(ActionProposalORM.email_thread_id == email_thread_id)
+            .order_by(ActionProposalORM.id.desc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
