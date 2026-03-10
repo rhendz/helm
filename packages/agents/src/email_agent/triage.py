@@ -6,25 +6,9 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict
 
 from helm_connectors.gmail import NormalizedGmailMessage
-from helm_storage.db import SessionLocal
-from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
-from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
-from helm_storage.repositories.agent_runs import SQLAlchemyAgentRunRepository
-from helm_storage.repositories.contracts import (
-    NewActionItem,
-    NewActionProposal,
-    NewDigestItem,
-    NewDraftReply,
-    NewEmailDraft,
-    NewEmailThread,
-)
-from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
-from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
-from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
-from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
-from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy.orm import Session
+
+from email_agent.runtime import EmailAgentRuntime, build_runtime
 
 
 class EmailTriageState(TypedDict, total=False):
@@ -116,64 +100,47 @@ def run_email_triage_workflow(
     message: NormalizedGmailMessage,
     *,
     graph: Any | None = None,
-    session_factory: Callable[[], Session] | None = None,
+    session_factory: Callable[[], object] | None = None,
+    runtime: EmailAgentRuntime | None = None,
 ) -> EmailTriageWorkflowResult:
     compiled_graph = graph or build_email_triage_graph()
-    open_session = session_factory or SessionLocal
+    runtime_instance = runtime or build_runtime(session_factory=session_factory)
 
-    with open_session() as session:
-        thread_repo = SQLAlchemyEmailThreadRepository(session)
-        email_repo = SQLAlchemyEmailMessageRepository(session)
-        proposal_repo = SQLAlchemyActionProposalRepository(session)
-        email_draft_repo = SQLAlchemyEmailDraftRepository(session)
-        action_repo = SQLAlchemyActionItemRepository(session)
-        draft_repo = SQLAlchemyDraftReplyRepository(session)
-        digest_repo = SQLAlchemyDigestItemRepository(session)
-        run_repo = SQLAlchemyAgentRunRepository(session)
+    run = runtime_instance.start_run(
+        agent_name="email_triage",
+        source_type="email_message",
+        source_id=message.provider_message_id,
+    )
+    thread = runtime_instance.get_or_create_thread(provider_thread_id=message.provider_thread_id)
+    thread_id = thread.id
+    email_record = runtime_instance.upsert_inbound_message(
+        message=message,
+        email_thread_id=thread_id,
+    )
 
-        run = run_repo.start_run(
-            agent_name="email_triage",
-            source_type="email_message",
-            source_id=message.provider_message_id,
-        )
-        thread = thread_repo.get_or_create(
-            NewEmailThread(provider_thread_id=message.provider_thread_id)
-        )
-        thread_id = thread.id
-        email_record = email_repo.upsert_from_normalized(
-            message,
+    try:
+        state = compiled_graph.invoke({"normalized_message": message})
+        (
+            action_proposal_id,
+            email_draft_id,
+            action_item_id,
+            draft_reply_id,
+            digest_item_id,
+        ) = _persist_triage_artifacts(
+            state=state,
+            message=message,
             email_thread_id=thread_id,
-            direction="inbound",
+            runtime=runtime_instance,
+            email_message_id=email_record.id,
         )
-
-        try:
-            state = compiled_graph.invoke({"normalized_message": message})
-            (
-                action_proposal_id,
-                email_draft_id,
-                action_item_id,
-                draft_reply_id,
-                digest_item_id,
-            ) = _persist_triage_artifacts(
-                state=state,
-                message=message,
-                email_thread_id=thread_id,
-                thread_repo=thread_repo,
-                email_message_id=email_record.id,
-                proposal_repo=proposal_repo,
-                email_draft_repo=email_draft_repo,
-                action_repo=action_repo,
-                draft_repo=draft_repo,
-                digest_repo=digest_repo,
-            )
-            email_repo.mark_processed(
-                message.provider_message_id,
-                processed_at=datetime.now(tz=UTC),
-            )
-            run_repo.mark_succeeded(run.id)
-        except Exception as exc:
-            run_repo.mark_failed(run.id, str(exc))
-            raise
+        runtime_instance.mark_message_processed(
+            message.provider_message_id,
+            processed_at=datetime.now(tz=UTC),
+        )
+        runtime_instance.mark_run_succeeded(run.id)
+    except Exception as exc:
+        runtime_instance.mark_run_failed(run.id, str(exc))
+        raise
 
     return EmailTriageWorkflowResult(
         email_thread_id=thread_id,
@@ -198,13 +165,8 @@ def _persist_triage_artifacts(
     state: EmailTriageState,
     message: NormalizedGmailMessage,
     email_thread_id: int,
-    thread_repo: SQLAlchemyEmailThreadRepository,
+    runtime: EmailAgentRuntime,
     email_message_id: int,
-    proposal_repo: SQLAlchemyActionProposalRepository,
-    email_draft_repo: SQLAlchemyEmailDraftRepository,
-    action_repo: SQLAlchemyActionItemRepository,
-    draft_repo: SQLAlchemyDraftReplyRepository,
-    digest_repo: SQLAlchemyDigestItemRepository,
 ) -> tuple[int | None, int | None, int | None, int | None, int | None]:
     proposal_record = None
     email_draft_record = None
@@ -222,7 +184,7 @@ def _persist_triage_artifacts(
         classification=classification,
     )
 
-    thread_repo.update_state(
+    runtime.update_thread_state(
         email_thread_id,
         business_state=business_state,
         visible_labels=visible_labels,
@@ -235,85 +197,74 @@ def _persist_triage_artifacts(
     )
 
     if state.get("action_item_required", False):
-        proposal_record = proposal_repo.get_latest_for_thread(email_thread_id=email_thread_id)
+        proposal_record = runtime.get_latest_proposal_for_thread(email_thread_id=email_thread_id)
         if proposal_record is None:
-            proposal_record = proposal_repo.create(
-                NewActionProposal(
-                    email_thread_id=email_thread_id,
-                    proposal_type="reply" if state.get("draft_reply_required", False) else "review",
-                    rationale=thread_summary or None,
-                    confidence_band=confidence_band,
-                )
+            proposal_record = runtime.create_proposal(
+                email_thread_id=email_thread_id,
+                proposal_type="reply" if state.get("draft_reply_required", False) else "review",
+                rationale=thread_summary or None,
+                confidence_band=confidence_band,
             )
-        action_record = action_repo.get_open_by_source(
+        action_record = runtime.get_open_action_for_source(
             source_type="email_thread",
             source_id=message.provider_thread_id,
         )
         if action_record is None:
-            action_record = action_repo.get_open_by_source(
+            action_record = runtime.get_open_action_for_source(
                 source_type="email_message",
                 source_id=message.provider_message_id,
             )
         if action_record is None:
-            action_record = action_repo.get_open_by_source(
+            action_record = runtime.get_open_action_for_source(
                 source_type="email_thread",
                 source_id=message.provider_message_id,
             )
         if action_record is None:
-            action_record = action_repo.create(
-                NewActionItem(
-                    source_type="email_thread",
-                    source_id=message.provider_thread_id,
-                    title=_build_action_title(message),
-                    description=thread_summary or None,
-                    priority=priority,
-                )
+            action_record = runtime.create_action(
+                source_type="email_thread",
+                source_id=message.provider_thread_id,
+                title=_build_action_title(message),
+                description=thread_summary or None,
+                priority=priority,
             )
 
     if state.get("draft_reply_required", False):
-        email_draft_record = email_draft_repo.get_latest_for_thread(email_thread_id=email_thread_id)
+        email_draft_record = runtime.get_latest_email_draft_for_thread(
+            email_thread_id=email_thread_id
+        )
         if email_draft_record is None:
-            email_draft_record = email_draft_repo.create(
-                NewEmailDraft(
-                    email_thread_id=email_thread_id,
-                    action_proposal_id=proposal_record.id if proposal_record is not None else None,
-                    draft_body=_build_draft_stub(message=message, classification=classification),
-                    draft_subject=message.subject or None,
-                    status="generated",
-                    approval_status="pending_user",
-                )
+            email_draft_record = runtime.create_email_draft(
+                email_thread_id=email_thread_id,
+                action_proposal_id=proposal_record.id if proposal_record is not None else None,
+                draft_body=_build_draft_stub(message=message, classification=classification),
+                draft_subject=message.subject or None,
             )
-        draft_record = draft_repo.get_latest_for_thread(thread_id=message.provider_thread_id)
+        draft_record = runtime.get_latest_legacy_draft_for_thread(
+            thread_id=message.provider_thread_id
+        )
         if draft_record is None:
-            draft_record = draft_repo.create(
-                NewDraftReply(
-                    channel_type="email",
-                    thread_id=message.provider_thread_id,
-                    draft_text=_build_draft_stub(message=message, classification=classification),
-                    tone="professional",
-                    status="pending",
-                )
+            draft_record = runtime.create_legacy_draft_reply(
+                thread_id=message.provider_thread_id,
+                draft_text=_build_draft_stub(message=message, classification=classification),
             )
 
     if state.get("digest_item_required", False):
         digest_title = _build_digest_title(message)
         digest_summary = thread_summary or _build_fallback_summary(message)
         related_action_id = action_record.id if action_record is not None else None
-        digest_record = digest_repo.find_matching(
+        digest_record = runtime.find_matching_digest(
             domain="email",
             title=digest_title,
             summary=digest_summary,
             related_action_id=related_action_id,
         )
         if digest_record is None:
-            digest_record = digest_repo.create(
-                NewDigestItem(
-                    domain="email",
-                    title=digest_title,
-                    summary=digest_summary,
-                    priority=priority,
-                    related_action_id=related_action_id,
-                )
+            digest_record = runtime.create_digest(
+                domain="email",
+                title=digest_title,
+                summary=digest_summary,
+                priority=priority,
+                related_action_id=related_action_id,
             )
 
     action_proposal_id = proposal_record.id if proposal_record is not None else None

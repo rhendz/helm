@@ -4,10 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from helm_storage.db import SessionLocal
-from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
-from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
-from sqlalchemy.orm import Session
+from email_agent.runtime import EmailAgentRuntime, build_runtime
 
 
 @dataclass(slots=True, frozen=True)
@@ -18,42 +15,40 @@ class ScheduledThreadTaskRunResult:
 
 def run_due_scheduled_thread_tasks(
     *,
-    session_factory: Callable[[], Session] | None = None,
+    session_factory: Callable[[], object] | None = None,
+    runtime: EmailAgentRuntime | None = None,
     now: datetime | None = None,
     limit: int = 100,
 ) -> ScheduledThreadTaskRunResult:
-    open_session = session_factory or SessionLocal
     due_before = now or datetime.now(tz=UTC)
+    runtime_instance = runtime or build_runtime(session_factory=session_factory)
 
-    with open_session() as session:
-        thread_repo = SQLAlchemyEmailThreadRepository(session)
-        task_repo = SQLAlchemyScheduledThreadTaskRepository(session)
-        due_tasks = task_repo.list_due(due_before=due_before, limit=limit)
+    due_tasks = runtime_instance.list_due_tasks(due_before=due_before, limit=limit)
 
-        processed_count = 0
-        skipped_count = 0
-        for task in due_tasks:
-            thread = thread_repo.get_by_id(task.email_thread_id)
-            if thread is None:
-                skipped_count += 1
-                continue
+    processed_count = 0
+    skipped_count = 0
+    for task in due_tasks:
+        thread = runtime_instance.get_thread_by_id(task.email_thread_id)
+        if thread is None:
+            skipped_count += 1
+            continue
 
-            visible_labels = _merge_action_label(thread.visible_labels)
-            resurfacing_source, action_reason = _derive_task_metadata(task.task_type)
-            thread_repo.update_state(
-                thread.id,
-                business_state=thread.business_state,
-                visible_labels=visible_labels,
-                latest_confidence_band=thread.latest_confidence_band,
-                resurfacing_source=resurfacing_source,
-                action_reason=action_reason,
-                current_summary=thread.current_summary,
-                last_message_id=thread.last_message_id,
-                last_inbound_message_id=thread.last_inbound_message_id,
-                last_outbound_message_id=thread.last_outbound_message_id,
-            )
-            task_repo.mark_completed(task.id)
-            processed_count += 1
+        visible_labels = _merge_action_label(thread.visible_labels)
+        resurfacing_source, action_reason = _derive_task_metadata(task.task_type)
+        runtime_instance.update_thread_state(
+            thread.id,
+            business_state=thread.business_state,
+            visible_labels=visible_labels,
+            latest_confidence_band=thread.latest_confidence_band,
+            resurfacing_source=resurfacing_source,
+            action_reason=action_reason,
+            current_summary=thread.current_summary,
+            last_message_id=thread.last_message_id,
+            last_inbound_message_id=thread.last_inbound_message_id,
+            last_outbound_message_id=thread.last_outbound_message_id,
+        )
+        runtime_instance.mark_task_completed(task.id)
+        processed_count += 1
 
     return ScheduledThreadTaskRunResult(
         processed_count=processed_count,
