@@ -33,6 +33,22 @@ class SQLAlchemyScheduledThreadTaskRepository:
         )
         return list(self._session.execute(stmt).scalars().all())
 
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[ScheduledThreadTaskORM]:
+        stmt = select(ScheduledThreadTaskORM).order_by(
+            ScheduledThreadTaskORM.due_at.asc(),
+            ScheduledThreadTaskORM.id.asc(),
+        )
+        if status is not None:
+            stmt = stmt.where(ScheduledThreadTaskORM.status == status)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(self._session.execute(stmt).scalars().all())
+
     def list_due(
         self,
         *,

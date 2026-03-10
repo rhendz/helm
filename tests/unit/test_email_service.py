@@ -5,6 +5,7 @@ from email_agent.adapters import build_helm_runtime
 from email_agent.reminders import (
     complete_thread_task,
     create_thread_reminder,
+    list_scheduled_tasks,
     list_thread_scheduled_tasks,
 )
 from email_agent.reprocess import reprocess_email_thread
@@ -158,6 +159,52 @@ def test_email_thread_detail_and_reprocess() -> None:
     )
     assert completed.status == "accepted"
     assert completed.completed is True
+
+
+def test_email_service_lists_global_scheduled_tasks() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    with Session(engine) as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        first = thread_repo.create(NewEmailThread(provider_thread_id="thr-task-1"))
+        second = thread_repo.create(NewEmailThread(provider_thread_id="thr-task-2"))
+        first_id = first.id
+        second_id = second.id
+
+    create_thread_reminder(
+        thread_id=second_id,
+        due_at=datetime(2026, 1, 3, 9, 0, 0, tzinfo=UTC),
+        created_by="user",
+        task_type="followup",
+        runtime=runtime,
+    )
+    scheduled = create_thread_reminder(
+        thread_id=first_id,
+        due_at=datetime(2026, 1, 2, 9, 0, 0, tzinfo=UTC),
+        created_by="user",
+        task_type="reminder",
+        runtime=runtime,
+    )
+    assert scheduled.task_id is not None
+    complete_thread_task(
+        thread_id=first_id,
+        task_id=scheduled.task_id,
+        runtime=runtime,
+    )
+
+    all_tasks = list_scheduled_tasks(runtime=runtime, limit=10)
+    pending_tasks = list_scheduled_tasks(runtime=runtime, status="pending", limit=10)
+    completed_tasks = list_scheduled_tasks(runtime=runtime, status="completed", limit=10)
+
+    assert [task["task_type"] for task in all_tasks] == ["reminder", "followup"]
+    assert [task["status"] for task in all_tasks] == ["completed", "pending"]
+    assert len(pending_tasks) == 1
+    assert pending_tasks[0]["task_type"] == "followup"
+    assert len(completed_tasks) == 1
+    assert completed_tasks[0]["task_type"] == "reminder"
 
 
 def test_email_thread_override_updates_state(monkeypatch) -> None:  # noqa: ANN001

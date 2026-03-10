@@ -11,6 +11,7 @@ from email_agent.query import (
 from email_agent.reminders import (
     complete_thread_task,
     create_thread_reminder,
+    list_scheduled_tasks,
     list_thread_scheduled_tasks,
 )
 from email_agent.reprocess import reprocess_email_thread
@@ -132,6 +133,10 @@ def list_thread_tasks(*, thread_id: int) -> list[dict]:
     return list_thread_scheduled_tasks(thread_id=thread_id, runtime=_runtime())
 
 
+def list_tasks(*, status: str | None = None, limit: int = 20) -> list[dict]:
+    return list_scheduled_tasks(status=status, limit=limit, runtime=_runtime())
+
+
 def create_thread_task(
     *,
     thread_id: int,
@@ -220,6 +225,7 @@ __all__ = [
     "ingest_manual_email_messages",
     "list_drafts",
     "list_proposals",
+    "list_tasks",
     "list_thread_tasks",
     "list_threads",
     "override_thread",
