@@ -288,6 +288,41 @@ def test_list_pending_drafts_filters_by_approval_status(monkeypatch) -> None:  #
     assert drafts[0].status == "approved"
 
 
+def test_get_draft_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "get_email_draft_by_id": lambda self, draft_id: {
+                "id": draft_id,
+                "email_thread_id": 7,
+                "action_proposal_id": 11,
+                "status": "generated",
+                "approval_status": "approved",
+                "draft_body": "Thanks for reaching out.",
+                "draft_subject": "Re: Opportunity",
+            },
+            "list_draft_transition_audits_for_draft": lambda self, *, draft_id: [
+                {
+                    "action": "approve",
+                    "from_status": "pending_user",
+                    "to_status": "approved",
+                    "success": True,
+                }
+            ],
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    draft = service.get_draft_detail(5)
+
+    assert draft is not None
+    assert draft.id == 5
+    assert draft.email_thread_id == 7
+    assert draft.transition_audits[0]["action"] == "approve"
+
+
 def test_approve_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
 

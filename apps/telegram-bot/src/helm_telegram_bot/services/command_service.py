@@ -82,6 +82,18 @@ class ProposalView:
     rationale: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class DraftDetailView:
+    id: int
+    email_thread_id: int
+    action_proposal_id: int | None
+    status: str
+    approval_status: str
+    draft_subject: str | None
+    draft_body: str
+    transition_audits: list[dict]
+
+
 class TelegramCommandService:
     def list_action_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
         items = build_helm_runtime().list_email_threads(label="Action", limit=limit)
@@ -228,6 +240,23 @@ class TelegramCommandService:
                 approval_status=approval_status,
             )
         ]
+
+    def get_draft_detail(self, draft_id: int) -> DraftDetailView | None:
+        runtime = build_helm_runtime()
+        draft = runtime.get_email_draft_by_id(draft_id)
+        if draft is None:
+            return None
+        audits = runtime.list_draft_transition_audits_for_draft(draft_id=draft_id)
+        return DraftDetailView(
+            id=draft["id"],
+            email_thread_id=draft["email_thread_id"],
+            action_proposal_id=draft.get("action_proposal_id"),
+            status=draft["status"],
+            approval_status=draft["approval_status"],
+            draft_subject=draft.get("draft_subject"),
+            draft_body=draft["draft_body"],
+            transition_audits=audits,
+        )
 
     def list_review_threads(self, *, limit: int = 5) -> list[ThreadDetailView]:
         return self.list_threads(
