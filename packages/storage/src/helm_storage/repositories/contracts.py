@@ -4,7 +4,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from helm_storage.models import ActionItemORM, DigestItemORM, DraftReplyORM
+from helm_storage.models import (
+    ActionItemORM,
+    ActionProposalORM,
+    DigestItemORM,
+    DraftReplyORM,
+    EmailAgentConfigORM,
+    EmailDraftORM,
+    EmailThreadORM,
+    ScheduledThreadTaskORM,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +45,58 @@ class NewDigestItem:
     priority: int = 3
     related_contact_id: int | None = None
     related_action_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewEmailThread:
+    provider_thread_id: str
+    business_state: str = "uninitialized"
+    visible_labels: tuple[str, ...] = ()
+    current_summary: str | None = None
+    latest_confidence_band: str | None = None
+    resurfacing_source: str | None = None
+    action_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewActionProposal:
+    email_thread_id: int
+    proposal_type: str
+    rationale: str | None = None
+    confidence_band: str | None = None
+    status: str = "proposed"
+    model_name: str | None = None
+    prompt_version: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewEmailDraft:
+    email_thread_id: int
+    draft_body: str
+    action_proposal_id: int | None = None
+    draft_subject: str | None = None
+    status: str = "generated"
+    approval_status: str = "pending_user"
+    model_name: str | None = None
+    prompt_version: str | None = None
+    draft_reasoning_artifact_ref: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewScheduledThreadTask:
+    email_thread_id: int
+    task_type: str
+    created_by: str
+    due_at: datetime
+    status: str = "pending"
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EmailAgentConfigPatch:
+    approval_required_before_send: bool | None = None
+    default_follow_up_business_days: int | None = None
+    last_history_cursor: str | None = None
 
 
 @runtime_checkable
@@ -89,3 +150,71 @@ class DigestItemRepository(Protocol):
     ) -> DigestItemORM | None: ...
 
     def create(self, item: NewDigestItem) -> DigestItemORM: ...
+
+
+@runtime_checkable
+class EmailThreadRepository(Protocol):
+    def get_by_id(self, thread_id: int) -> EmailThreadORM | None: ...
+
+    def get_by_provider_thread_id(self, provider_thread_id: str) -> EmailThreadORM | None: ...
+
+    def create(self, item: NewEmailThread) -> EmailThreadORM: ...
+
+    def get_or_create(self, item: NewEmailThread) -> EmailThreadORM: ...
+
+    def update_state(
+        self,
+        thread_id: int,
+        *,
+        business_state: str,
+        visible_labels: tuple[str, ...],
+        latest_confidence_band: str | None,
+        resurfacing_source: str | None,
+        action_reason: str | None,
+        current_summary: str | None,
+        last_message_id: int | None = None,
+        last_inbound_message_id: int | None = None,
+        last_outbound_message_id: int | None = None,
+    ) -> EmailThreadORM | None: ...
+
+
+@runtime_checkable
+class ActionProposalRepository(Protocol):
+    def create(self, item: NewActionProposal) -> ActionProposalORM: ...
+
+    def get_latest_for_thread(self, *, email_thread_id: int) -> ActionProposalORM | None: ...
+
+
+@runtime_checkable
+class EmailDraftRepository(Protocol):
+    def create(self, item: NewEmailDraft) -> EmailDraftORM: ...
+
+    def get_by_id(self, draft_id: int) -> EmailDraftORM | None: ...
+
+    def get_latest_for_thread(self, *, email_thread_id: int) -> EmailDraftORM | None: ...
+
+    def set_approval_status(self, draft_id: int, *, approval_status: str) -> bool: ...
+
+
+@runtime_checkable
+class ScheduledThreadTaskRepository(Protocol):
+    def create(self, item: NewScheduledThreadTask) -> ScheduledThreadTaskORM: ...
+
+    def list_due(
+        self,
+        *,
+        due_before: datetime,
+        status: str = "pending",
+        limit: int | None = None,
+    ) -> list[ScheduledThreadTaskORM]: ...
+
+    def mark_completed(self, task_id: int) -> bool: ...
+
+
+@runtime_checkable
+class EmailAgentConfigRepository(Protocol):
+    def get(self) -> EmailAgentConfigORM | None: ...
+
+    def get_or_create(self) -> EmailAgentConfigORM: ...
+
+    def update(self, patch: EmailAgentConfigPatch) -> EmailAgentConfigORM: ...
