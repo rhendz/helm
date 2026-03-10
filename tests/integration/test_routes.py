@@ -37,6 +37,22 @@ def test_routes_exist() -> None:
     assert client.get("/v1/email/proposals?status=proposed&proposal_type=reply").status_code == 200
     assert client.get("/v1/email/drafts").status_code == 200
     assert client.get("/v1/email/drafts?approval_status=pending_user").status_code == 200
+    seed_plan_response = client.post(
+        "/v1/email/seed/plan",
+        json={
+            "source_type": "email_manual",
+            "messages": [
+                {
+                    "id": "seed-1",
+                    "threadId": "seed-thread-1",
+                    "from": "recruiter@example.com",
+                    "subject": "Interview request",
+                }
+            ],
+        },
+    )
+    assert seed_plan_response.status_code == 200
+    assert seed_plan_response.json()["bucket_counts"]["deep_seed"] == 1
     assert client.get("/v1/email/tasks").status_code == 200
     assert client.get("/v1/email/tasks?status=pending").status_code == 200
     assert client.get("/v1/email/threads/999999").status_code == 404

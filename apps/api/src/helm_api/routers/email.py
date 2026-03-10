@@ -9,6 +9,7 @@ from helm_api.schemas import (
     EmailIngestRequest,
     EmailIngestResponse,
     EmailProposalResponse,
+    EmailSeedPlanResponse,
     EmailThreadDetailResponse,
     EmailThreadOverrideRequest,
     EmailThreadOverrideResponse,
@@ -31,6 +32,7 @@ from helm_api.services.email_service import (
     list_thread_tasks,
     list_threads,
     override_thread,
+    plan_seed_email_messages,
     reprocess_thread,
 )
 
@@ -41,6 +43,19 @@ router = APIRouter(prefix="/v1/email", tags=["email"])
 def ingest_email(payload: EmailIngestRequest) -> EmailIngestResponse:
     return EmailIngestResponse(
         **ingest_manual_email_messages(
+            source_type=payload.source_type,
+            messages=[
+                message.model_dump(mode="json", by_alias=True)
+                for message in payload.messages
+            ],
+        )
+    )
+
+
+@router.post("/seed/plan", response_model=EmailSeedPlanResponse)
+def plan_email_seed(payload: EmailIngestRequest) -> EmailSeedPlanResponse:
+    return EmailSeedPlanResponse(
+        **plan_seed_email_messages(
             source_type=payload.source_type,
             messages=[
                 message.model_dump(mode="json", by_alias=True)

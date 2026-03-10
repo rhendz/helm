@@ -152,6 +152,28 @@ class EmailIngestResponse(BaseModel):
     normalization_failures: dict[str, int] = Field(default_factory=dict)
 
 
+class SeedThreadDecisionResponse(BaseModel):
+    provider_thread_id: str
+    bucket: str
+    reason: str
+    message_count: int
+    latest_received_at: datetime
+    sample_subject: str
+    from_addresses: list[str] = Field(default_factory=list)
+
+
+class EmailSeedPlanResponse(BaseModel):
+    status: str
+    source_type: str
+    message_count: int
+    thread_count: int
+    failed_message_count: int = 0
+    normalization_failures: dict[str, int] = Field(default_factory=dict)
+    bucket_counts: dict[str, int] = Field(default_factory=dict)
+    bucket_thread_ids: dict[str, list[str]] = Field(default_factory=dict)
+    decisions: list[SeedThreadDecisionResponse] = Field(default_factory=list)
+
+
 class ScheduledTaskResponse(BaseModel):
     id: int
     email_thread_id: int
