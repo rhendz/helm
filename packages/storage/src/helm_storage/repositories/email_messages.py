@@ -17,23 +17,42 @@ class SQLAlchemyEmailMessageRepository:
         )
         return self._session.execute(stmt).scalars().first()
 
-    def upsert_from_normalized(self, message: NormalizedGmailMessage) -> EmailMessageORM:
+    def upsert_from_normalized(
+        self,
+        message: NormalizedGmailMessage,
+        *,
+        email_thread_id: int | None = None,
+        direction: str = "inbound",
+        source_draft_id: int | None = None,
+    ) -> EmailMessageORM:
         record = self.get_by_provider_message_id(message.provider_message_id)
         if record is None:
             record = EmailMessageORM(
                 provider_message_id=message.provider_message_id,
-                thread_id=message.provider_thread_id,
+                provider_thread_id=message.provider_thread_id,
+                email_thread_id=email_thread_id,
+                source_draft_id=source_draft_id,
+                direction=direction,
                 from_address=message.from_address,
                 subject=message.subject,
+                snippet=message.body_text[:200] or None,
                 body_text=message.body_text,
                 received_at=message.received_at,
+                normalized_at=message.normalized_at,
+                source=message.source,
             )
         else:
-            record.thread_id = message.provider_thread_id
+            record.provider_thread_id = message.provider_thread_id
+            record.email_thread_id = email_thread_id
+            record.source_draft_id = source_draft_id
+            record.direction = direction
             record.from_address = message.from_address
             record.subject = message.subject
+            record.snippet = message.body_text[:200] or None
             record.body_text = message.body_text
             record.received_at = message.received_at
+            record.normalized_at = message.normalized_at
+            record.source = message.source
         self._session.add(record)
         self._session.commit()
         self._session.refresh(record)

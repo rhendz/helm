@@ -2,16 +2,33 @@ from datetime import UTC, datetime, timedelta
 
 from helm_storage.db import Base
 from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
+from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.contracts import (
     ActionItemRepository,
+    ActionProposalRepository,
     DigestItemRepository,
     DraftReplyRepository,
+    EmailAgentConfigPatch,
+    EmailAgentConfigRepository,
+    EmailDraftRepository,
+    EmailThreadRepository,
     NewActionItem,
+    NewActionProposal,
     NewDigestItem,
     NewDraftReply,
+    NewEmailDraft,
+    NewEmailThread,
+    NewScheduledThreadTask,
+    ScheduledThreadTaskRepository,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
+from helm_storage.repositories.email_agent_config import SQLAlchemyEmailAgentConfigRepository
+from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
+from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
+from helm_storage.repositories.scheduled_thread_tasks import (
+    SQLAlchemyScheduledThreadTaskRepository,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -120,3 +137,126 @@ def test_digest_item_repository_contract_and_filters() -> None:
             )
             is not None
         )
+
+
+def test_email_thread_repository_contract_and_state_updates() -> None:
+    with _session() as session:
+        repo = SQLAlchemyEmailThreadRepository(session)
+        assert isinstance(repo, EmailThreadRepository)
+
+        created = repo.get_or_create(
+            NewEmailThread(
+                provider_thread_id="thr-100",
+                business_state="waiting_on_user",
+                visible_labels=("Action", "Urgent"),
+                current_summary="Need to reply",
+                latest_confidence_band="High",
+                resurfacing_source="new_message",
+                action_reason="reply_needed",
+            )
+        )
+        duplicate = repo.get_or_create(NewEmailThread(provider_thread_id="thr-100"))
+
+        assert duplicate.id == created.id
+
+        updated = repo.update_state(
+            created.id,
+            business_state="waiting_on_other_party",
+            visible_labels=("Action",),
+            latest_confidence_band="Medium",
+            resurfacing_source="stale_followup",
+            action_reason="followup_due",
+            current_summary="Waiting on response",
+        )
+        assert updated is not None
+        assert updated.business_state == "waiting_on_other_party"
+        assert updated.visible_labels == "Action"
+        assert updated.resurfacing_source == "stale_followup"
+
+
+def test_action_proposal_and_email_draft_repositories_preserve_lineage() -> None:
+    with _session() as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        proposal_repo = SQLAlchemyActionProposalRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+
+        assert isinstance(proposal_repo, ActionProposalRepository)
+        assert isinstance(draft_repo, EmailDraftRepository)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-200"))
+        proposal = proposal_repo.create(
+            NewActionProposal(
+                email_thread_id=thread.id,
+                proposal_type="reply",
+                rationale="Recruiter asked for availability",
+                confidence_band="High",
+            )
+        )
+        draft = draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                action_proposal_id=proposal.id,
+                draft_body="Thanks, I am interested.",
+                draft_subject="Re: Intro",
+            )
+        )
+
+        assert proposal_repo.get_latest_for_thread(email_thread_id=thread.id) is not None
+        assert draft_repo.get_latest_for_thread(email_thread_id=thread.id) is not None
+        assert draft_repo.set_approval_status(draft.id, approval_status="approved") is True
+        refreshed = draft_repo.get_by_id(draft.id)
+        assert refreshed is not None
+        assert refreshed.approval_status == "approved"
+
+
+def test_scheduled_thread_task_repository_lists_due_items_and_marks_completed() -> None:
+    with _session() as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        task_repo = SQLAlchemyScheduledThreadTaskRepository(session)
+        assert isinstance(task_repo, ScheduledThreadTaskRepository)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-300"))
+        due_task = task_repo.create(
+            NewScheduledThreadTask(
+                email_thread_id=thread.id,
+                task_type="followup",
+                created_by="system",
+                due_at=datetime.now(UTC) - timedelta(hours=1),
+                reason="followup_due",
+            )
+        )
+        task_repo.create(
+            NewScheduledThreadTask(
+                email_thread_id=thread.id,
+                task_type="reminder",
+                created_by="user",
+                due_at=datetime.now(UTC) + timedelta(hours=1),
+                reason="reminder_due",
+            )
+        )
+
+        due = task_repo.list_due(due_before=datetime.now(UTC))
+        assert [item.id for item in due] == [due_task.id]
+        assert task_repo.mark_completed(due_task.id) is True
+
+
+def test_email_agent_config_repository_creates_singleton_config() -> None:
+    with _session() as session:
+        repo = SQLAlchemyEmailAgentConfigRepository(session)
+        assert isinstance(repo, EmailAgentConfigRepository)
+
+        initial = repo.get_or_create()
+        assert initial.approval_required_before_send is True
+        assert initial.default_follow_up_business_days == 3
+
+        updated = repo.update(
+            EmailAgentConfigPatch(
+                approval_required_before_send=False,
+                default_follow_up_business_days=5,
+                last_history_cursor="cursor-1",
+            )
+        )
+        assert updated.id == initial.id
+        assert updated.approval_required_before_send is False
+        assert updated.default_follow_up_business_days == 5
+        assert updated.last_history_cursor == "cursor-1"

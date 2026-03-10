@@ -7,10 +7,13 @@ from helm_orchestration.email_flow import build_email_triage_graph, run_email_tr
 from helm_storage.db import Base
 from helm_storage.models import (
     ActionItemORM,
+    ActionProposalORM,
     AgentRunORM,
     DigestItemORM,
     DraftReplyORM,
+    EmailDraftORM,
     EmailMessageORM,
+    EmailThreadORM,
 )
 from helm_storage.repositories.agent_runs import AgentRunStatus
 from sqlalchemy import create_engine, select
@@ -202,16 +205,25 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert first_result.action_item_required is True
     assert first_result.draft_reply_required is True
     assert first_result.digest_item_required is True
+    assert first_result.email_thread_id is not None
+    assert first_result.action_proposal_id is not None
+    assert first_result.email_draft_id is not None
     assert first_result.action_item_id is not None
     assert first_result.draft_reply_id is not None
     assert first_result.digest_item_id is not None
 
+    assert second_result.email_thread_id == first_result.email_thread_id
+    assert second_result.action_proposal_id == first_result.action_proposal_id
+    assert second_result.email_draft_id == first_result.email_draft_id
     assert second_result.action_item_id == first_result.action_item_id
     assert second_result.draft_reply_id == first_result.draft_reply_id
     assert second_result.digest_item_id == first_result.digest_item_id
 
     with Session(engine) as session:
         email_messages = list(session.execute(select(EmailMessageORM)).scalars().all())
+        email_threads = list(session.execute(select(EmailThreadORM)).scalars().all())
+        action_proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
+        email_drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
         action_items = list(session.execute(select(ActionItemORM)).scalars().all())
         draft_replies = list(session.execute(select(DraftReplyORM)).scalars().all())
         digest_items = list(session.execute(select(DigestItemORM)).scalars().all())
@@ -219,6 +231,13 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
 
     assert len(email_messages) == 1
     assert email_messages[0].processed_at is not None
+    assert email_messages[0].email_thread_id == first_result.email_thread_id
+    assert len(email_threads) == 1
+    assert email_threads[0].provider_thread_id == "thr-4"
+    assert email_threads[0].business_state == "waiting_on_user"
+    assert email_threads[0].visible_labels == "Action"
+    assert len(action_proposals) == 1
+    assert len(email_drafts) == 1
     assert len(action_items) == 1
     assert len(draft_replies) == 1
     assert len(digest_items) == 1
@@ -263,15 +282,27 @@ def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> N
     )
 
     assert first_result.action_item_id is not None
+    assert first_result.email_thread_id is not None
     assert second_result.action_item_id == first_result.action_item_id
+    assert second_result.email_thread_id == first_result.email_thread_id
     assert first_result.draft_reply_id is not None
     assert second_result.draft_reply_id == first_result.draft_reply_id
+    assert first_result.action_proposal_id is not None
+    assert second_result.action_proposal_id == first_result.action_proposal_id
+    assert first_result.email_draft_id is not None
+    assert second_result.email_draft_id == first_result.email_draft_id
 
     with Session(engine) as session:
+        email_threads = list(session.execute(select(EmailThreadORM)).scalars().all())
+        action_proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
+        email_drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
         action_items = list(session.execute(select(ActionItemORM)).scalars().all())
         draft_replies = list(session.execute(select(DraftReplyORM)).scalars().all())
         email_messages = list(session.execute(select(EmailMessageORM)).scalars().all())
 
+    assert len(email_threads) == 1
+    assert len(action_proposals) == 1
+    assert len(email_drafts) == 1
     assert len(action_items) == 1
     assert len(draft_replies) == 1
     assert len(email_messages) == 2
