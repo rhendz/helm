@@ -8,6 +8,7 @@ from helm_telegram_bot.commands import (
     done_task,
     drafts,
     followup,
+    proposals,
     remind,
     resolve,
     review,
@@ -35,6 +36,7 @@ def main() -> None:
     application.add_handler(CommandHandler("digest", digest.handle))
     application.add_handler(CommandHandler("actions", actions.handle))
     application.add_handler(CommandHandler("drafts", drafts.handle))
+    application.add_handler(CommandHandler("proposals", proposals.handle))
     application.add_handler(CommandHandler("study", study.handle))
     application.add_handler(CommandHandler("approve", approve.handle))
     application.add_handler(CommandHandler("done_task", done_task.handle))
