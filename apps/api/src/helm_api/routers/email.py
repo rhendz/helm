@@ -8,6 +8,8 @@ from helm_api.schemas import (
     EmailIngestResponse,
     EmailProposalResponse,
     EmailThreadDetailResponse,
+    EmailThreadOverrideRequest,
+    EmailThreadOverrideResponse,
     EmailThreadReprocessRequest,
     EmailThreadReprocessResponse,
     EmailThreadResponse,
@@ -21,6 +23,7 @@ from helm_api.services.email_service import (
     list_proposals,
     list_thread_tasks,
     list_threads,
+    override_thread,
     reprocess_thread,
 )
 
@@ -75,6 +78,23 @@ def reprocess_email_thread_route(
 ) -> EmailThreadReprocessResponse:
     return EmailThreadReprocessResponse(
         **reprocess_thread(thread_id=thread_id, dry_run=payload.dry_run),
+    )
+
+
+@router.post("/threads/{thread_id}/override", response_model=EmailThreadOverrideResponse)
+def override_email_thread(
+    thread_id: int,
+    payload: EmailThreadOverrideRequest,
+) -> EmailThreadOverrideResponse:
+    return EmailThreadOverrideResponse(
+        **override_thread(
+            thread_id=thread_id,
+            business_state=payload.business_state,
+            visible_labels=payload.visible_labels,
+            current_summary=payload.current_summary,
+            latest_confidence_band=payload.latest_confidence_band,
+            action_reason=payload.action_reason,
+        )
     )
 
 

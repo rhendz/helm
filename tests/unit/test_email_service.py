@@ -5,6 +5,7 @@ from email_agent.adapters import build_helm_runtime
 from email_agent.reminders import create_thread_reminder, list_thread_scheduled_tasks
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.types import EmailMessage
+from helm_api.services.email_service import override_thread
 from helm_storage.db import Base
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.contracts import NewActionProposal, NewEmailDraft, NewEmailThread
@@ -146,3 +147,37 @@ def test_email_thread_detail_and_reprocess() -> None:
     tasks = list_thread_scheduled_tasks(thread_id=thread_id, runtime=runtime)
     assert len(tasks) == 1
     assert tasks[0]["task_type"] == "reminder"
+
+
+def test_email_thread_override_updates_state(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    with Session(engine) as session:
+        thread = SQLAlchemyEmailThreadRepository(session).create(
+            NewEmailThread(
+                provider_thread_id="thr-api-override",
+                business_state="waiting_on_user",
+                visible_labels=("Action",),
+                current_summary="Need reply",
+            )
+        )
+        thread_id = thread.id
+
+    monkeypatch.setattr("helm_api.services.email_service._runtime", lambda: runtime)
+
+    result = override_thread(
+        thread_id=thread_id,
+        business_state="resolved",
+        visible_labels=[],
+        current_summary="Resolved manually",
+        latest_confidence_band="High",
+        action_reason="user_marked_done",
+    )
+
+    assert result["status"] == "accepted"
+    assert result["thread"]["business_state"] == "resolved"
+    assert result["thread"]["visible_labels"] == []
+    assert result["thread"]["resurfacing_source"] == "user_override"

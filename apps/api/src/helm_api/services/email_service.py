@@ -47,6 +47,83 @@ def reprocess_thread(*, thread_id: int, dry_run: bool) -> dict:
     )
 
 
+def override_thread(
+    *,
+    thread_id: int,
+    business_state: str,
+    visible_labels: list[str],
+    current_summary: str | None,
+    latest_confidence_band: str | None,
+    action_reason: str | None,
+) -> dict:
+    runtime = _runtime()
+    try:
+        thread = runtime.get_thread_by_id(thread_id)
+        detail = runtime.get_email_thread_detail(thread_id=thread_id)
+    except SQLAlchemyError:
+        return {
+            "status": "unavailable",
+            "thread_id": thread_id,
+            "found": False,
+            "reason": "storage_unavailable",
+            "thread": None,
+        }
+    if thread is None or detail is None:
+        return {
+            "status": "not_found",
+            "thread_id": thread_id,
+            "found": False,
+            "reason": "thread_not_found",
+            "thread": None,
+        }
+
+    try:
+        updated = runtime.update_thread_state(
+            thread_id,
+            business_state=business_state,
+            visible_labels=tuple(visible_labels),
+            latest_confidence_band=latest_confidence_band,
+            resurfacing_source="user_override",
+            action_reason=action_reason,
+            current_summary=current_summary,
+            last_message_id=thread.last_message_id,
+            last_inbound_message_id=thread.last_inbound_message_id,
+            last_outbound_message_id=thread.last_outbound_message_id,
+        )
+    except SQLAlchemyError:
+        return {
+            "status": "unavailable",
+            "thread_id": thread_id,
+            "found": False,
+            "reason": "storage_unavailable",
+            "thread": None,
+        }
+    if updated is None:
+        return {
+            "status": "not_found",
+            "thread_id": thread_id,
+            "found": False,
+            "reason": "thread_not_found",
+            "thread": None,
+        }
+    return {
+        "status": "accepted",
+        "thread_id": thread_id,
+        "found": True,
+        "reason": None,
+        "thread": {
+            "id": updated.id,
+            "provider_thread_id": detail["thread"]["provider_thread_id"],
+            "business_state": updated.business_state,
+            "visible_labels": [label for label in updated.visible_labels.split(",") if label],
+            "current_summary": updated.current_summary,
+            "latest_confidence_band": updated.latest_confidence_band,
+            "resurfacing_source": updated.resurfacing_source,
+            "action_reason": updated.action_reason,
+        },
+    }
+
+
 def list_thread_tasks(*, thread_id: int) -> list[dict]:
     return list_thread_scheduled_tasks(thread_id=thread_id, runtime=_runtime())
 
@@ -130,5 +207,6 @@ __all__ = [
     "list_proposals",
     "list_thread_tasks",
     "list_threads",
+    "override_thread",
     "reprocess_thread",
 ]

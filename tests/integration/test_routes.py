@@ -38,6 +38,18 @@ def test_routes_exist() -> None:
     )
     assert reprocess_email_response.status_code == 200
     assert reprocess_email_response.json()["status"] in {"not_found", "unavailable"}
+    override_email_response = client.post(
+        "/v1/email/threads/999999/override",
+        json={
+            "business_state": "resolved",
+            "visible_labels": [],
+            "current_summary": "Resolved manually",
+            "latest_confidence_band": "High",
+            "action_reason": "user_marked_done",
+        },
+    )
+    assert override_email_response.status_code == 200
+    assert override_email_response.json()["status"] in {"not_found", "unavailable"}
     assert client.get("/v1/email/threads/999999/tasks").status_code == 200
     create_task_response = client.post(
         "/v1/email/threads/999999/tasks",
