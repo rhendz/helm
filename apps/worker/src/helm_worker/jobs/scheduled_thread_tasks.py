@@ -11,4 +11,5 @@ def run() -> None:
         "scheduled_thread_tasks_job_tick",
         processed_count=result.processed_count,
         skipped_count=result.skipped_count,
+        failed_count=result.failed_count,
     )
