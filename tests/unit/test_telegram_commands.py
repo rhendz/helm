@@ -7,6 +7,7 @@ from helm_telegram_bot.commands import (
     done_task,
     drafts,
     followup,
+    proposals,
     remind,
     resolve,
     review,
@@ -19,6 +20,7 @@ from helm_telegram_bot.commands import (
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
+    ProposalView,
     ScheduledTaskView,
     ThreadDetailView,
     ThreadOverrideTransitionResult,
@@ -269,6 +271,46 @@ async def test_drafts_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> 
             "Use /approve <id> or /snooze <id>."
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_proposals_command_rejects_invalid_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(proposals, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await proposals.handle(update, _Context(args=["bad"]))
+
+    assert update.message.replies == ["Usage: /proposals [reply|review]"]
+
+
+@pytest.mark.asyncio
+async def test_proposals_command_formats_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_proposals(self, proposal_type=None) -> list[ProposalView]:
+            assert proposal_type == "reply"
+            return [
+                ProposalView(
+                    id=8,
+                    email_thread_id=3,
+                    proposal_type="reply",
+                    status="proposed",
+                    rationale="Reply with availability",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(proposals, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(proposals, "_service", _Service())
+    update = _Update()
+
+    await proposals.handle(update, _Context(args=["reply"]))
+
+    assert update.message.replies == ["Proposals (reply):\n8: thread 3 Reply with availability"]
 
 
 @pytest.mark.asyncio

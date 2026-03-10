@@ -49,6 +49,15 @@ class ScheduledTaskView:
     reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ProposalView:
+    id: int
+    email_thread_id: int
+    proposal_type: str
+    status: str
+    rationale: str | None
+
+
 class TelegramCommandService:
     def list_threads(
         self,
@@ -75,6 +84,28 @@ class TelegramCommandService:
 
     def list_open_actions(self, *, limit: int = 5) -> list[object]:
         return list_open_actions(limit=limit, runtime=build_helm_runtime())
+
+    def list_proposals(
+        self,
+        *,
+        limit: int = 5,
+        proposal_type: str | None = None,
+    ) -> list[ProposalView]:
+        items = build_helm_runtime().list_email_proposals(
+            status="proposed",
+            proposal_type=proposal_type,
+            limit=limit,
+        )
+        return [
+            ProposalView(
+                id=item["id"],
+                email_thread_id=item["email_thread_id"],
+                proposal_type=item["proposal_type"],
+                status=item["status"],
+                rationale=item.get("rationale"),
+            )
+            for item in items
+        ]
 
     def list_pending_drafts(
         self,
