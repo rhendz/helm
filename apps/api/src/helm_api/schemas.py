@@ -25,6 +25,36 @@ class DraftResponse(BaseModel):
     is_stale: bool = False
 
 
+class EmailThreadResponse(BaseModel):
+    id: int
+    provider_thread_id: str
+    business_state: str
+    visible_labels: list[str] = Field(default_factory=list)
+    current_summary: str | None = None
+    latest_confidence_band: str | None = None
+    resurfacing_source: str | None = None
+    action_reason: str | None = None
+
+
+class EmailProposalResponse(BaseModel):
+    id: int
+    email_thread_id: int
+    proposal_type: str
+    status: str
+    confidence_band: str | None = None
+    rationale: str | None = None
+
+
+class EmailDraftResponse(BaseModel):
+    id: int
+    email_thread_id: int
+    action_proposal_id: int | None = None
+    status: str
+    approval_status: str
+    preview: str
+    draft_subject: str | None = None
+
+
 class StudyIngestRequest(BaseModel):
     source_type: str = "manual"
     raw_text: str

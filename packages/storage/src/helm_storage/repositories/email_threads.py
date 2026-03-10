@@ -11,6 +11,15 @@ class SQLAlchemyEmailThreadRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def list_recent(self, *, limit: int | None = None) -> list[EmailThreadORM]:
+        stmt = select(EmailThreadORM).order_by(
+            EmailThreadORM.updated_at.desc(),
+            EmailThreadORM.id.desc(),
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(self._session.execute(stmt).scalars().all())
+
     def get_by_id(self, thread_id: int) -> EmailThreadORM | None:
         stmt = select(EmailThreadORM).where(EmailThreadORM.id == thread_id)
         return self._session.execute(stmt).scalars().first()

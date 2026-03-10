@@ -9,6 +9,15 @@ class SQLAlchemyActionProposalRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def list_recent(self, *, limit: int | None = None) -> list[ActionProposalORM]:
+        stmt = select(ActionProposalORM).order_by(
+            ActionProposalORM.updated_at.desc(),
+            ActionProposalORM.id.desc(),
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(self._session.execute(stmt).scalars().all())
+
     def create(self, item: NewActionProposal) -> ActionProposalORM:
         record = ActionProposalORM(
             email_thread_id=item.email_thread_id,
