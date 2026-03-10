@@ -20,6 +20,7 @@ from helm_telegram_bot.commands import (
     threads,
     threads_label,
     urgent_threads,
+    waiting_on_user_threads,
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
@@ -288,6 +289,32 @@ async def test_urgent_threads_command_formats_items(monkeypatch: pytest.MonkeyPa
     await urgent_threads.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Urgent threads:\n18: Urgent response needed"]
+
+
+@pytest.mark.asyncio
+async def test_waiting_on_user_threads_command_formats_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Service:
+        def list_waiting_on_user_threads(self) -> list[ThreadQueueView]:
+            return [
+                ThreadQueueView(
+                    id=23,
+                    business_state="waiting_on_user",
+                    current_summary="Reply to founder",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(waiting_on_user_threads, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(waiting_on_user_threads, "_service", _Service())
+    update = _Update()
+
+    await waiting_on_user_threads.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Waiting-on-user threads:\n23: Reply to founder"]
 
 
 @pytest.mark.asyncio
