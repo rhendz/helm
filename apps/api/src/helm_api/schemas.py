@@ -89,6 +89,34 @@ class EmailThreadReprocessResponse(BaseModel):
     workflow_status: str | None = None
 
 
+class EmailManualMessageRequest(BaseModel):
+    id: str
+    threadId: str | None = None
+    from_address: str | None = Field(default=None, alias="from")
+    subject: str = ""
+    body_text: str = ""
+    snippet: str | None = None
+    received_at: datetime | None = None
+
+    model_config = {"populate_by_name": True}
+
+
+class EmailIngestRequest(BaseModel):
+    source_type: str = "email_manual"
+    messages: list[EmailManualMessageRequest]
+
+
+class EmailIngestResponse(BaseModel):
+    status: str
+    source_type: str
+    message_count: int
+    persisted: bool
+    thread_count: int
+    processed_count: int
+    failed_message_count: int = 0
+    normalization_failures: dict[str, int] = Field(default_factory=dict)
+
+
 class ScheduledTaskResponse(BaseModel):
     id: int
     email_thread_id: int

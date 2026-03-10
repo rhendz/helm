@@ -9,6 +9,25 @@ def test_routes_exist() -> None:
     assert client.get("/v1/status/draft-transitions/failures").status_code == 200
     assert client.get("/v1/job-controls").status_code == 200
     assert client.get("/v1/actions").status_code == 200
+    email_ingest_response = client.post(
+        "/v1/email/ingest",
+        json={
+            "source_type": "email_manual",
+            "messages": [
+                {
+                    "id": "email-msg-1",
+                    "threadId": "email-thread-1",
+                    "from": "recruiter@example.com",
+                    "subject": "Role update",
+                    "body_text": "Would you be open to talking?",
+                }
+            ],
+        },
+    )
+    assert email_ingest_response.status_code == 200
+    assert email_ingest_response.json()["status"] == "accepted"
+    assert "processed_count" in email_ingest_response.json()
+    assert "normalization_failures" in email_ingest_response.json()
     assert client.get("/v1/email/threads").status_code == 200
     assert client.get("/v1/email/proposals").status_code == 200
     assert client.get("/v1/email/drafts").status_code == 200

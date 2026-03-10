@@ -4,6 +4,8 @@ from helm_api.schemas import (
     CreateScheduledTaskRequest,
     CreateScheduledTaskResponse,
     EmailDraftResponse,
+    EmailIngestRequest,
+    EmailIngestResponse,
     EmailProposalResponse,
     EmailThreadDetailResponse,
     EmailThreadReprocessRequest,
@@ -14,6 +16,7 @@ from helm_api.schemas import (
 from helm_api.services.email_service import (
     create_thread_task,
     get_thread_detail,
+    ingest_manual_email_messages,
     list_drafts,
     list_proposals,
     list_thread_tasks,
@@ -22,6 +25,19 @@ from helm_api.services.email_service import (
 )
 
 router = APIRouter(prefix="/v1/email", tags=["email"])
+
+
+@router.post("/ingest", response_model=EmailIngestResponse)
+def ingest_email(payload: EmailIngestRequest) -> EmailIngestResponse:
+    return EmailIngestResponse(
+        **ingest_manual_email_messages(
+            source_type=payload.source_type,
+            messages=[
+                message.model_dump(mode="json", by_alias=True)
+                for message in payload.messages
+            ],
+        )
+    )
 
 
 @router.get("/threads", response_model=list[EmailThreadResponse])
