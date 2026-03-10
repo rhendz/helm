@@ -1,277 +1,125 @@
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
-from dataclasses import dataclass
-
-import pytest
+from email_agent.operator import ActionView, DraftTransitionResult, DraftView
 from helm_telegram_bot.services import command_service
-from sqlalchemy.exc import SQLAlchemyError
 
 
-class _Session(AbstractContextManager[object]):
-    def __enter__(self) -> object:
-        return object()
+def test_list_open_actions_applies_limit(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
-        return None
+    def fake_list_open_actions(*, limit: int = 5, runtime: object) -> list[ActionView]:
+        return [
+            ActionView(id=i, priority=2, title=f"action-{i}")
+            for i in range(1, limit + 1)
+        ]
 
-
-class _BrokenSession(AbstractContextManager[object]):
-    def __enter__(self) -> object:
-        raise SQLAlchemyError("db down")
-
-    def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
-        return None
-
-
-@dataclass
-class _Action:
-    id: int
-
-
-@dataclass
-class _Draft:
-    id: int
-    status: str
-
-
-class _ActionRepo:
-    def __init__(self, _session: object) -> None:
-        self._data = [_Action(id=i) for i in range(1, 8)]
-
-    def list_open(self) -> list[_Action]:
-        return self._data
-
-
-class _DraftRepo:
-    def __init__(self, _session: object) -> None:
-        self._by_id: dict[int, _Draft] = {
-            1: _Draft(id=1, status="pending"),
-            2: _Draft(id=2, status="snoozed"),
-            3: _Draft(id=3, status="approved"),
-        }
-        self.approved_ids: list[int] = []
-        self.snoozed_ids: list[int] = []
-
-    def list_pending(self) -> list[_Draft]:
-        return [_Draft(id=i, status="pending") for i in range(1, 8)]
-
-    def get_by_id(self, draft_id: int) -> _Draft | None:
-        return self._by_id.get(draft_id)
-
-    def approve(self, draft_id: int) -> None:
-        self.approved_ids.append(draft_id)
-
-    def snooze(self, draft_id: int) -> None:
-        self.snoozed_ids.append(draft_id)
-
-
-class _AuditRepo:
-    def __init__(self, _session: object) -> None:
-        self.records: list[dict[str, object]] = []
-
-    def create(
-        self,
-        *,
-        draft_id: int,
-        action: str,
-        from_status: str | None,
-        to_status: str | None,
-        success: bool,
-        reason: str | None,
-    ) -> None:
-        self.records.append(
-            {
-                "draft_id": draft_id,
-                "action": action,
-                "from_status": from_status,
-                "to_status": to_status,
-                "success": success,
-                "reason": reason,
-            }
-        )
-
-
-@pytest.mark.parametrize("limit", [1, 3, 5])
-def test_list_open_actions_applies_limit(monkeypatch: pytest.MonkeyPatch, limit: int) -> None:
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyActionItemRepository", _ActionRepo)
-
-    service = command_service.TelegramCommandService()
-
-    actions = service.list_open_actions(limit=limit)
-
-    assert [a.id for a in actions] == list(range(1, limit + 1))
-
-
-@pytest.mark.parametrize("limit", [1, 4, 6])
-def test_list_pending_drafts_applies_limit(monkeypatch: pytest.MonkeyPatch, limit: int) -> None:
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", _DraftRepo)
-
-    service = command_service.TelegramCommandService()
-
-    drafts = service.list_pending_drafts(limit=limit)
-
-    assert [d.id for d in drafts] == list(range(1, limit + 1))
-
-
-def test_list_queries_handle_storage_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(command_service, "SessionLocal", _BrokenSession)
-
-    service = command_service.TelegramCommandService()
-
-    assert service.list_open_actions() == []
-    assert service.list_pending_drafts() == []
-
-
-def test_approve_draft_happy_path_from_pending(monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = _DraftRepo(object())
-    audit_repo = _AuditRepo(object())
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
     monkeypatch.setattr(
-        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+        command_service,
+        "list_open_actions",
+        fake_list_open_actions,
     )
 
     service = command_service.TelegramCommandService()
+    actions = service.list_open_actions(limit=3)
 
+    assert [a.id for a in actions] == [1, 2, 3]
+
+
+def test_list_pending_drafts_applies_limit(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+
+    def fake_list_pending_drafts(*, limit: int = 5, runtime: object) -> list[DraftView]:
+        return [
+            DraftView(id=i, status="pending_user", draft_text=f"draft-{i}")
+            for i in range(1, limit + 1)
+        ]
+
+    monkeypatch.setattr(
+        command_service,
+        "list_pending_drafts",
+        fake_list_pending_drafts,
+    )
+
+    service = command_service.TelegramCommandService()
+    drafts = service.list_pending_drafts(limit=4)
+
+    assert [d.id for d in drafts] == [1, 2, 3, 4]
+
+
+def test_approve_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+
+    monkeypatch.setattr(
+        command_service,
+        "approve_draft",
+        lambda draft_id, runtime: DraftTransitionResult(
+            ok=True,
+            message=f"Approved draft {draft_id}. Not sent yet.",
+        ),
+    )
+
+    service = command_service.TelegramCommandService()
     result = service.approve_draft(1)
 
     assert result.ok is True
     assert result.message == "Approved draft 1. Not sent yet."
-    assert repo.approved_ids == [1]
-    assert audit_repo.records[-1]["success"] is True
 
 
-def test_approve_draft_allows_snoozed(monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = _DraftRepo(object())
-    audit_repo = _AuditRepo(object())
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+def test_approve_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+
+    def fake_approve_draft(draft_id: int, runtime: object) -> DraftTransitionResult:
+        return DraftTransitionResult(
+            ok=False,
+            message=f"Draft {draft_id} not found.",
+        )
+
     monkeypatch.setattr(
-        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+        command_service,
+        "approve_draft",
+        fake_approve_draft,
     )
 
     service = command_service.TelegramCommandService()
-
-    result = service.approve_draft(2)
-
-    assert result.ok is True
-    assert repo.approved_ids == [2]
-    assert audit_repo.records[-1]["from_status"] == "snoozed"
-
-
-def test_approve_draft_rejects_non_actionable_status(monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = _DraftRepo(object())
-    audit_repo = _AuditRepo(object())
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
-    monkeypatch.setattr(
-        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
-    )
-
-    service = command_service.TelegramCommandService()
-
-    result = service.approve_draft(3)
+    result = service.approve_draft(99)
 
     assert result.ok is False
-    assert result.message == "Draft 3 is approved; cannot approve."
-    assert repo.approved_ids == []
-    assert audit_repo.records[-1]["reason"] == "invalid_status"
+    assert result.message == "Draft 99 not found."
 
 
-def test_approve_draft_handles_missing_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = _DraftRepo(object())
-    audit_repo = _AuditRepo(object())
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+def test_snooze_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+
     monkeypatch.setattr(
-        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+        command_service,
+        "snooze_draft",
+        lambda draft_id, runtime: DraftTransitionResult(
+            ok=True,
+            message=f"Snoozed draft {draft_id} for later review.",
+        ),
     )
 
     service = command_service.TelegramCommandService()
-
-    result = service.approve_draft(999)
-
-    assert result.ok is False
-    assert result.message == "Draft 999 not found."
-    assert audit_repo.records[-1]["reason"] == "draft_not_found"
-
-
-def test_approve_draft_handles_storage_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(command_service, "SessionLocal", _BrokenSession)
-
-    service = command_service.TelegramCommandService()
-
-    result = service.approve_draft(1)
-
-    assert result.ok is False
-    assert result.message == "Storage unavailable."
-
-
-def test_snooze_draft_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = _DraftRepo(object())
-    audit_repo = _AuditRepo(object())
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
-    monkeypatch.setattr(
-        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
-    )
-
-    service = command_service.TelegramCommandService()
-
     result = service.snooze_draft(1)
 
     assert result.ok is True
     assert result.message == "Snoozed draft 1 for later review."
-    assert repo.snoozed_ids == [1]
-    assert audit_repo.records[-1]["to_status"] == "snoozed"
 
 
-def test_snooze_draft_rejects_non_pending_status(monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = _DraftRepo(object())
-    audit_repo = _AuditRepo(object())
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
+def test_snooze_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+
     monkeypatch.setattr(
-        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
+        command_service,
+        "snooze_draft",
+        lambda draft_id, runtime: DraftTransitionResult(
+            ok=False,
+            message=f"Draft {draft_id} is approved; cannot snooze.",
+        ),
     )
 
     service = command_service.TelegramCommandService()
-
-    result = service.snooze_draft(2)
-
-    assert result.ok is False
-    assert result.message == "Draft 2 is snoozed; cannot snooze."
-    assert repo.snoozed_ids == []
-    assert audit_repo.records[-1]["reason"] == "invalid_status"
-
-
-def test_snooze_draft_handles_missing_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = _DraftRepo(object())
-    audit_repo = _AuditRepo(object())
-    monkeypatch.setattr(command_service, "SessionLocal", _Session)
-    monkeypatch.setattr(command_service, "SQLAlchemyDraftReplyRepository", lambda _session: repo)
-    monkeypatch.setattr(
-        command_service, "SQLAlchemyDraftTransitionAuditRepository", lambda _session: audit_repo
-    )
-
-    service = command_service.TelegramCommandService()
-
-    result = service.snooze_draft(999)
+    result = service.snooze_draft(3)
 
     assert result.ok is False
-    assert result.message == "Draft 999 not found."
-    assert audit_repo.records[-1]["reason"] == "draft_not_found"
-
-
-def test_snooze_draft_handles_storage_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(command_service, "SessionLocal", _BrokenSession)
-
-    service = command_service.TelegramCommandService()
-
-    result = service.snooze_draft(1)
-
-    assert result.ok is False
-    assert result.message == "Storage unavailable."
+    assert result.message == "Draft 3 is approved; cannot snooze."

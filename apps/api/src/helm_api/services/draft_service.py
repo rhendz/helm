@@ -1,68 +1,46 @@
 def list_drafts() -> list[dict]:
-    from helm_storage.db import SessionLocal
-    from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
-    from sqlalchemy.exc import SQLAlchemyError
+    from email_agent.adapters import build_helm_runtime
+    from email_agent.query import list_email_drafts
 
-    try:
-        with SessionLocal() as session:
-            repository = SQLAlchemyDraftReplyRepository(session)
-            stale_ids = {
-                row.id
-                for row in repository.list_stale(
-                    stale_after_hours=72,
-                    include_snoozed=True,
-                )
-            }
-            records = repository.list_pending()
-            return [
-                {
-                    "id": draft.id,
-                    "channel_type": draft.channel_type,
-                    "status": draft.status,
-                    "preview": draft.draft_text[:120],
-                    "is_stale": draft.id in stale_ids,
-                }
-                for draft in records
-            ]
-    except SQLAlchemyError:
-        return []
+    return [
+        {
+            "id": draft["id"],
+            "channel_type": "email",
+            "status": draft["approval_status"],
+            "preview": draft["preview"],
+            "is_stale": draft["approval_status"] == "snoozed",
+        }
+        for draft in list_email_drafts(runtime=build_helm_runtime())
+        if draft["approval_status"] in {"pending_user", "snoozed"}
+    ]
 
 
 def requeue_stale_drafts(*, stale_after_hours: int, limit: int, dry_run: bool) -> dict:
-    from helm_storage.db import SessionLocal
-    from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
-    from sqlalchemy.exc import SQLAlchemyError
+    from email_agent.adapters import build_helm_runtime
+    from email_agent.query import list_email_drafts
 
-    try:
-        with SessionLocal() as session:
-            repository = SQLAlchemyDraftReplyRepository(session)
-            stale = repository.list_stale(
-                stale_after_hours=stale_after_hours,
-                include_snoozed=True,
-                limit=limit,
-            )
-            stale_ids = [row.id for row in stale]
+    runtime = build_helm_runtime()
+    drafts = [
+        draft
+        for draft in list_email_drafts(limit=limit * 4, runtime=runtime)
+        if draft["approval_status"] == "snoozed"
+    ][:limit]
+    draft_ids = [draft["id"] for draft in drafts]
 
-            requeued_count = 0
-            if not dry_run:
-                for row in stale:
-                    if row.status == "snoozed" and repository.requeue(row.id):
-                        requeued_count += 1
+    requeued_count = 0
+    if not dry_run:
+        for draft_id in draft_ids:
+            if runtime.set_email_draft_approval_status(
+                draft_id,
+                approval_status="pending_user",
+            ):
+                requeued_count += 1
 
-            return {
-                "status": "accepted",
-                "stale_after_hours": stale_after_hours,
-                "dry_run": dry_run,
-                "matched_count": len(stale_ids),
-                "requeued_count": requeued_count,
-                "draft_ids": stale_ids,
-            }
-    except SQLAlchemyError:
-        return {
-            "status": "unavailable",
-            "stale_after_hours": stale_after_hours,
-            "dry_run": dry_run,
-            "matched_count": 0,
-            "requeued_count": 0,
-            "draft_ids": [],
-        }
+    return {
+        "status": "accepted",
+        "stale_after_hours": stale_after_hours,
+        "dry_run": dry_run,
+        "matched_count": len(draft_ids),
+        "requeued_count": requeued_count,
+        "draft_ids": draft_ids,
+    }

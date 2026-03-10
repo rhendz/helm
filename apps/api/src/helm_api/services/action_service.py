@@ -1,20 +1,13 @@
 def list_actions() -> list[dict]:
-    from helm_storage.db import SessionLocal
-    from helm_storage.repositories.action_items import SQLAlchemyActionItemRepository
-    from sqlalchemy.exc import SQLAlchemyError
+    from email_agent.adapters import build_helm_runtime
+    from email_agent.operator import list_open_actions
 
-    try:
-        with SessionLocal() as session:
-            repository = SQLAlchemyActionItemRepository(session)
-            records = repository.list_open()
-            return [
-                {
-                    "id": item.id,
-                    "title": item.title,
-                    "priority": item.priority,
-                    "status": item.status,
-                }
-                for item in records
-            ]
-    except SQLAlchemyError:
-        return []
+    return [
+        {
+            "id": item.id,
+            "title": item.title,
+            "priority": item.priority,
+            "status": "open",
+        }
+        for item in list_open_actions(runtime=build_helm_runtime())
+    ]

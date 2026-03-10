@@ -13,8 +13,8 @@ The Email Agent sits inside the Helm V1 architecture as the email-domain special
 Boundaries in this repository:
 - `packages/connectors`: Gmail change detection, normalization, message fetch.
 - `packages/storage`: Email operational tables, artifact tables, repositories, migrations.
-- `packages/agents`: email-domain business logic for classification, action selection, and drafting.
-- `packages/orchestration`: seed, incremental update, reminder, and follow-up workflows with explicit state transitions.
+- `packages/agents`: standalone email-domain business logic, runtime ports, and repo-local adapters.
+- `packages/orchestration`: non-email shared workflow logic only; Email Agent no longer depends on Helm orchestration wrappers.
 - `apps/worker`: scheduled scans, queue consumers, replay/recovery jobs.
 - `apps/api`: structured operator and debug endpoints for surfaced items, thread inspection, seed/reprocess triggers, and approval/send actions.
 - `apps/telegram-bot`: Telegram-first UX for approvals, reminders, review-needed items, and action lists.
@@ -56,6 +56,11 @@ Implementation stance:
 - the current email-agent implementation should be treated as a bootstrap scaffold, not a design constraint.
 - when the existing generic models or workflow shortcuts conflict with the system definition, replace them instead of layering more behavior onto the wrong abstraction.
 - prefer bounded migration work over compatibility shims unless a shim is required to preserve repository stability during the transition.
+
+Decoupling status:
+- `packages/agents/src/email_agent` now defines the Email Agent core boundary.
+- Helm app layers call Email Agent through explicit ports plus the Helm-backed adapter in `email_agent.adapters`.
+- legacy Helm compatibility wrappers for email triage and scheduling have been removed.
 
 ## Priority Order
 
