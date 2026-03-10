@@ -345,6 +345,44 @@ def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> N
     assert len(email_messages) == 2
 
 
+def test_email_triage_supports_proposal_only_path_without_draft() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    message = normalize_message(
+        {
+            "id": "msg-review-1",
+            "threadId": "thr-review-1",
+            "from": "founder@example.com",
+            "subject": "FYI review this intro deck",
+            "snippet": "Heads up, please review when you have time.",
+        }
+    )
+
+    result = run_email_triage_workflow(
+        _email_message(message),
+        graph=build_email_triage_graph(),
+        runtime=build_helm_runtime(session_local),
+    )
+
+    assert result.action_item_required is True
+    assert result.draft_reply_required is False
+    assert result.action_proposal_id is not None
+    assert result.email_draft_id is None
+
+    with Session(engine) as session:
+        thread = session.execute(select(EmailThreadORM)).scalars().one()
+        proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
+        drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
+
+    assert thread.business_state == "waiting_on_user"
+    assert thread.action_reason == "awareness_needed"
+    assert len(proposals) == 1
+    assert proposals[0].proposal_type == "review"
+    assert drafts == []
+
+
 def _email_message(message) -> EmailMessage:  # noqa: ANN001
     return EmailMessage(
         provider_message_id=message.provider_message_id,

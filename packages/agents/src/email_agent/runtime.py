@@ -161,6 +161,17 @@ class EmailAgentRuntime(Protocol):
         approval_status: str,
     ) -> bool: ...
 
+    def create_draft_transition_audit(
+        self,
+        *,
+        draft_id: int,
+        action: str,
+        from_status: str | None,
+        to_status: str | None,
+        success: bool,
+        reason: str | None,
+    ) -> None: ...
+
     def find_matching_digest(
         self,
         *,

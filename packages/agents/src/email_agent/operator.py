@@ -86,9 +86,25 @@ def approve_draft(
     except SQLAlchemyError:
         return DraftTransitionResult(ok=False, message="Storage unavailable.")
     if draft is None:
+        runtime.create_draft_transition_audit(
+            draft_id=draft_id,
+            action="approve",
+            from_status=None,
+            to_status=None,
+            success=False,
+            reason="draft_not_found",
+        )
         return DraftTransitionResult(ok=False, message=f"Draft {draft_id} not found.")
     if draft["approval_status"] not in {"pending_user", "snoozed"}:
         status = draft["approval_status"]
+        runtime.create_draft_transition_audit(
+            draft_id=draft_id,
+            action="approve",
+            from_status=status,
+            to_status=status,
+            success=False,
+            reason="invalid_transition",
+        )
         return DraftTransitionResult(
             ok=False,
             message=f"Draft {draft_id} is {status}; cannot approve.",
@@ -96,6 +112,14 @@ def approve_draft(
     runtime.set_email_draft_approval_status(
         draft_id,
         approval_status="approved",
+    )
+    runtime.create_draft_transition_audit(
+        draft_id=draft_id,
+        action="approve",
+        from_status=draft["approval_status"],
+        to_status="approved",
+        success=True,
+        reason=None,
     )
     return DraftTransitionResult(
         ok=True,
@@ -113,9 +137,25 @@ def snooze_draft(
     except SQLAlchemyError:
         return DraftTransitionResult(ok=False, message="Storage unavailable.")
     if draft is None:
+        runtime.create_draft_transition_audit(
+            draft_id=draft_id,
+            action="snooze",
+            from_status=None,
+            to_status=None,
+            success=False,
+            reason="draft_not_found",
+        )
         return DraftTransitionResult(ok=False, message=f"Draft {draft_id} not found.")
     if draft["approval_status"] != "pending_user":
         status = draft["approval_status"]
+        runtime.create_draft_transition_audit(
+            draft_id=draft_id,
+            action="snooze",
+            from_status=status,
+            to_status=status,
+            success=False,
+            reason="invalid_transition",
+        )
         return DraftTransitionResult(
             ok=False,
             message=f"Draft {draft_id} is {status}; cannot snooze.",
@@ -123,6 +163,14 @@ def snooze_draft(
     runtime.set_email_draft_approval_status(
         draft_id,
         approval_status="snoozed",
+    )
+    runtime.create_draft_transition_audit(
+        draft_id=draft_id,
+        action="snooze",
+        from_status=draft["approval_status"],
+        to_status="snoozed",
+        success=True,
+        reason=None,
     )
     return DraftTransitionResult(
         ok=True,
