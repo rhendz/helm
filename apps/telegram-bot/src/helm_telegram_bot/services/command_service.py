@@ -45,6 +45,26 @@ class TelegramCommandService:
     def list_pending_drafts(self, *, limit: int = 5) -> list[object]:
         return list_pending_drafts(limit=limit, runtime=build_helm_runtime())
 
+    def list_review_threads(self, *, limit: int = 5) -> list[ThreadDetailView]:
+        items = build_helm_runtime().list_email_threads(limit=limit * 4)
+        results: list[ThreadDetailView] = []
+        for item in items:
+            labels = item.get("visible_labels", [])
+            if item.get("business_state") != "needs_review" and "NeedsReview" not in labels:
+                continue
+            results.append(
+                ThreadDetailView(
+                    id=item["id"],
+                    business_state=item["business_state"],
+                    visible_labels=labels,
+                    current_summary=item.get("current_summary"),
+                    action_reason=item.get("action_reason"),
+                )
+            )
+            if len(results) >= limit:
+                break
+        return results
+
     def get_thread_detail(self, thread_id: int) -> ThreadDetailView | None:
         detail = build_helm_runtime().get_email_thread_detail(thread_id=thread_id)
         if detail is None:

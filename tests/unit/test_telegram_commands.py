@@ -9,6 +9,7 @@ from helm_telegram_bot.commands import (
     remind,
     resolve,
     review,
+    reviews,
     snooze,
     thread,
 )
@@ -404,3 +405,29 @@ async def test_thread_command_formats_detail(monkeypatch: pytest.MonkeyPatch) ->
             "Summary: Reply to recruiter"
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_reviews_command_formats_threads(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_review_threads(self) -> list[ThreadDetailView]:
+            return [
+                ThreadDetailView(
+                    id=4,
+                    business_state="needs_review",
+                    visible_labels=["NeedsReview"],
+                    current_summary="Check recruiter note",
+                    action_reason="user_requested_review",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(reviews, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(reviews, "_service", _Service())
+    update = _Update()
+
+    await reviews.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Review threads:\n4: Check recruiter note"]
