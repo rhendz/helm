@@ -7,10 +7,13 @@ from helm_telegram_bot.commands import (
     drafts,
     followup,
     remind,
+    resolve,
+    review,
     snooze,
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
+    ThreadOverrideTransitionResult,
     ThreadTaskTransitionResult,
 )
 
@@ -327,3 +330,43 @@ async def test_followup_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert service.calls == [(3, "followup")]
     assert update.message.replies == ["Created followup task 9 for thread 3."]
+
+
+@pytest.mark.asyncio
+async def test_resolve_usage_message_when_id_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(resolve, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await resolve.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /resolve <thread_id>"]
+
+
+@pytest.mark.asyncio
+async def test_review_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen_id: int | None = None
+
+        def mark_thread_needs_review(self, thread_id: int) -> ThreadOverrideTransitionResult:
+            self.seen_id = thread_id
+            return ThreadOverrideTransitionResult(
+                ok=True,
+                message="Marked thread 5 for review.",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(review, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(review, "_service", service)
+    update = _Update()
+
+    await review.handle(update, _Context(args=["5"]))
+
+    assert service.seen_id == 5
+    assert update.message.replies == ["Marked thread 5 for review."]

@@ -148,3 +148,33 @@ def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
     assert result.ok is True
     assert result.message == "Created reminder task 12 for thread 7."
+
+
+def test_resolve_thread_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "get_thread_by_id": lambda self, thread_id: type(
+                "Thread",
+                (),
+                {
+                    "id": thread_id,
+                    "visible_labels": "Action",
+                    "latest_confidence_band": "High",
+                    "current_summary": "Need reply",
+                    "last_message_id": None,
+                    "last_inbound_message_id": None,
+                    "last_outbound_message_id": None,
+                },
+            )(),
+            "update_thread_state": lambda self, *args, **kwargs: object(),
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    result = service.resolve_thread(7)
+
+    assert result.ok is True
+    assert result.message == "Marked thread 7 resolved."

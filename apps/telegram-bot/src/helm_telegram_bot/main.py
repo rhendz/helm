@@ -8,6 +8,8 @@ from helm_telegram_bot.commands import (
     drafts,
     followup,
     remind,
+    resolve,
+    review,
     snooze,
     start,
     study,
@@ -32,6 +34,8 @@ def main() -> None:
     application.add_handler(CommandHandler("snooze", snooze.handle))
     application.add_handler(CommandHandler("remind", remind.handle))
     application.add_handler(CommandHandler("followup", followup.handle))
+    application.add_handler(CommandHandler("resolve", resolve.handle))
+    application.add_handler(CommandHandler("review", review.handle))
 
     logger.info("telegram_bot_started")
     application.run_polling()
