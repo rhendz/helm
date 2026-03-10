@@ -287,9 +287,19 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 for thread in records
             ]
 
-    def list_email_proposals(self, *, limit: int = 20) -> list[dict]:
+    def list_email_proposals(
+        self,
+        *,
+        status: str | None = None,
+        proposal_type: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
         with self.session_factory() as session:
-            records = SQLAlchemyActionProposalRepository(session).list_recent(limit=limit)
+            records = SQLAlchemyActionProposalRepository(session).list_recent(
+                status=status,
+                proposal_type=proposal_type,
+                limit=limit,
+            )
             return [
                 {
                     "id": proposal.id,
@@ -302,9 +312,19 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 for proposal in records
             ]
 
-    def list_email_drafts(self, *, limit: int = 20) -> list[dict]:
+    def list_email_drafts(
+        self,
+        *,
+        status: str | None = None,
+        approval_status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
         with self.session_factory() as session:
-            records = SQLAlchemyEmailDraftRepository(session).list_recent(limit=limit)
+            records = SQLAlchemyEmailDraftRepository(session).list_recent(
+                status=status,
+                approval_status=approval_status,
+                limit=limit,
+            )
             return [
                 {
                     "id": draft.id,

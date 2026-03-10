@@ -30,7 +30,9 @@ def test_routes_exist() -> None:
     assert "normalization_failures" in email_ingest_response.json()
     assert client.get("/v1/email/threads").status_code == 200
     assert client.get("/v1/email/proposals").status_code == 200
+    assert client.get("/v1/email/proposals?status=proposed&proposal_type=reply").status_code == 200
     assert client.get("/v1/email/drafts").status_code == 200
+    assert client.get("/v1/email/drafts?approval_status=pending_user").status_code == 200
     assert client.get("/v1/email/tasks").status_code == 200
     assert client.get("/v1/email/tasks?status=pending").status_code == 200
     assert client.get("/v1/email/threads/999999").status_code == 404

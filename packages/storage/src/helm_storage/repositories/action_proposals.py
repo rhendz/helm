@@ -9,8 +9,19 @@ class SQLAlchemyActionProposalRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def list_recent(self, *, limit: int | None = None) -> list[ActionProposalORM]:
-        stmt = select(ActionProposalORM).order_by(
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        proposal_type: str | None = None,
+        limit: int | None = None,
+    ) -> list[ActionProposalORM]:
+        stmt = select(ActionProposalORM)
+        if status is not None:
+            stmt = stmt.where(ActionProposalORM.status == status)
+        if proposal_type is not None:
+            stmt = stmt.where(ActionProposalORM.proposal_type == proposal_type)
+        stmt = stmt.order_by(
             ActionProposalORM.updated_at.desc(),
             ActionProposalORM.id.desc(),
         )

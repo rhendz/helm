@@ -31,12 +31,32 @@ def list_threads(*, limit: int = 20) -> list[dict]:
     return list_email_threads(limit=limit, runtime=_runtime())
 
 
-def list_proposals(*, limit: int = 20) -> list[dict]:
-    return list_email_proposals(limit=limit, runtime=_runtime())
+def list_proposals(
+    *,
+    status: str | None = None,
+    proposal_type: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    return list_email_proposals(
+        status=status,
+        proposal_type=proposal_type,
+        limit=limit,
+        runtime=_runtime(),
+    )
 
 
-def list_drafts(*, limit: int = 20) -> list[dict]:
-    return list_email_drafts(limit=limit, runtime=_runtime())
+def list_drafts(
+    *,
+    status: str | None = None,
+    approval_status: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    return list_email_drafts(
+        status=status,
+        approval_status=approval_status,
+        limit=limit,
+        runtime=_runtime(),
+    )
 
 
 def get_thread_detail(*, thread_id: int) -> dict | None:
