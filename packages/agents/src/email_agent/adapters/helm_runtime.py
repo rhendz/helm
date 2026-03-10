@@ -270,9 +270,19 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 status=record.status,
             )
 
-    def list_email_threads(self, *, limit: int = 20) -> list[dict]:
+    def list_email_threads(
+        self,
+        *,
+        business_state: str | None = None,
+        label: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
         with self.session_factory() as session:
-            records = SQLAlchemyEmailThreadRepository(session).list_recent(limit=limit)
+            records = SQLAlchemyEmailThreadRepository(session).list_recent(
+                business_state=business_state,
+                label=label,
+                limit=limit,
+            )
             return [
                 {
                     "id": thread.id,

@@ -5,11 +5,17 @@ from email_agent.runtime import EmailAgentRuntime
 
 def list_email_threads(
     *,
+    business_state: str | None = None,
+    label: str | None = None,
     limit: int = 20,
     runtime: EmailAgentRuntime,
 ) -> list[dict]:
     try:
-        return runtime.list_email_threads(limit=limit)
+        return runtime.list_email_threads(
+            business_state=business_state,
+            label=label,
+            limit=limit,
+        )
     except SQLAlchemyError:
         return []
 

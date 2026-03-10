@@ -27,8 +27,18 @@ def _runtime():
     return build_helm_runtime()
 
 
-def list_threads(*, limit: int = 20) -> list[dict]:
-    return list_email_threads(limit=limit, runtime=_runtime())
+def list_threads(
+    *,
+    business_state: str | None = None,
+    label: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    return list_email_threads(
+        business_state=business_state,
+        label=label,
+        limit=limit,
+        runtime=_runtime(),
+    )
 
 
 def list_proposals(

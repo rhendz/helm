@@ -11,8 +11,24 @@ class SQLAlchemyEmailThreadRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def list_recent(self, *, limit: int | None = None) -> list[EmailThreadORM]:
-        stmt = select(EmailThreadORM).order_by(
+    def list_recent(
+        self,
+        *,
+        business_state: str | None = None,
+        label: str | None = None,
+        limit: int | None = None,
+    ) -> list[EmailThreadORM]:
+        stmt = select(EmailThreadORM)
+        if business_state is not None:
+            stmt = stmt.where(EmailThreadORM.business_state == business_state)
+        if label is not None:
+            stmt = stmt.where(
+                (EmailThreadORM.visible_labels == label)
+                | (EmailThreadORM.visible_labels.like(f"{label},%"))
+                | (EmailThreadORM.visible_labels.like(f"%,{label}"))
+                | (EmailThreadORM.visible_labels.like(f"%,{label},%"))
+            )
+        stmt = stmt.order_by(
             EmailThreadORM.updated_at.desc(),
             EmailThreadORM.id.desc(),
         )

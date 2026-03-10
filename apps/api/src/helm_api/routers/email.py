@@ -48,8 +48,15 @@ def ingest_email(payload: EmailIngestRequest) -> EmailIngestResponse:
 
 
 @router.get("/threads", response_model=list[EmailThreadResponse])
-def get_email_threads(limit: int = Query(default=20, ge=1, le=100)) -> list[EmailThreadResponse]:
-    return [EmailThreadResponse(**item) for item in list_threads(limit=limit)]
+def get_email_threads(
+    limit: int = Query(default=20, ge=1, le=100),
+    business_state: str | None = Query(default=None),
+    label: str | None = Query(default=None),
+) -> list[EmailThreadResponse]:
+    return [
+        EmailThreadResponse(**item)
+        for item in list_threads(limit=limit, business_state=business_state, label=label)
+    ]
 
 
 @router.get("/proposals", response_model=list[EmailProposalResponse])

@@ -230,26 +230,30 @@ def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_list_review_threads_filters_results(monkeypatch) -> None:  # noqa: ANN001
+    def _list_email_threads(self, *, business_state, limit, label=None):  # noqa: ANN001
+        items = [
+            {
+                "id": 1,
+                "business_state": "needs_review",
+                "visible_labels": ["NeedsReview"],
+                "current_summary": "Review recruiter thread",
+                "action_reason": "user_requested_review",
+            },
+            {
+                "id": 2,
+                "business_state": "waiting_on_user",
+                "visible_labels": ["Action"],
+                "current_summary": "Reply later",
+                "action_reason": "reply_needed",
+            },
+        ]
+        return [item for item in items if item["business_state"] == business_state][:limit]
+
     runtime = type(
         "Runtime",
         (),
         {
-            "list_email_threads": lambda self, *, limit: [
-                {
-                    "id": 1,
-                    "business_state": "needs_review",
-                    "visible_labels": ["NeedsReview"],
-                    "current_summary": "Review recruiter thread",
-                    "action_reason": "user_requested_review",
-                },
-                {
-                    "id": 2,
-                    "business_state": "waiting_on_user",
-                    "visible_labels": ["Action"],
-                    "current_summary": "Reply later",
-                    "action_reason": "reply_needed",
-                },
-            ]
+            "list_email_threads": _list_email_threads,
         },
     )()
     monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)

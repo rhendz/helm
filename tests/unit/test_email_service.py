@@ -74,6 +74,43 @@ def test_email_service_lists_threads_proposals_and_drafts(monkeypatch) -> None: 
     assert drafts[0]["approval_status"] == "pending_user"
 
 
+def test_email_service_filters_threads_by_state_and_label() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    with Session(engine) as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        thread_repo.create(
+            NewEmailThread(
+                provider_thread_id="thr-review",
+                business_state="needs_review",
+                visible_labels=("NeedsReview", "Action"),
+            )
+        )
+        thread_repo.create(
+            NewEmailThread(
+                provider_thread_id="thr-waiting",
+                business_state="waiting_on_user",
+                visible_labels=("Action",),
+            )
+        )
+
+    review_threads = email_query.list_email_threads(
+        runtime=runtime,
+        business_state="needs_review",
+    )
+    action_threads = email_query.list_email_threads(
+        runtime=runtime,
+        label="Action",
+    )
+
+    assert len(review_threads) == 1
+    assert review_threads[0]["provider_thread_id"] == "thr-review"
+    assert len(action_threads) == 2
+
+
 def test_email_service_filters_proposals_and_drafts() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
