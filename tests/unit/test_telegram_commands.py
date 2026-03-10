@@ -10,9 +10,11 @@ from helm_telegram_bot.commands import (
     resolve,
     review,
     snooze,
+    thread,
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
+    ThreadDetailView,
     ThreadOverrideTransitionResult,
     ThreadTaskTransitionResult,
 )
@@ -370,3 +372,35 @@ async def test_review_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert service.seen_id == 5
     assert update.message.replies == ["Marked thread 5 for review."]
+
+
+@pytest.mark.asyncio
+async def test_thread_command_formats_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_thread_detail(self, thread_id: int) -> ThreadDetailView | None:
+            return ThreadDetailView(
+                id=thread_id,
+                business_state="waiting_on_user",
+                visible_labels=["Action", "Urgent"],
+                current_summary="Reply to recruiter",
+                action_reason="reply_needed",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(thread, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(thread, "_service", _Service())
+    update = _Update()
+
+    await thread.handle(update, _Context(args=["8"]))
+
+    assert update.message.replies == [
+        (
+            "Thread 8\n"
+            "State: waiting_on_user\n"
+            "Labels: Action, Urgent\n"
+            "Reason: reply_needed\n"
+            "Summary: Reply to recruiter"
+        )
+    ]
