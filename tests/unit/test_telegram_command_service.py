@@ -465,6 +465,29 @@ def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
     assert result.pending_task_count == 1
 
 
+def test_reprocess_thread_passes_dry_run(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(
+        command_service,
+        "reprocess_email_thread",
+        lambda *, thread_id, dry_run, runtime: type(
+            "Result",
+            (),
+            {
+                "status": "accepted",
+                "workflow_status": "completed",
+                "reason": None,
+            },
+        )(),
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.reprocess_thread(7, dry_run=True)
+
+    assert result.ok is True
+    assert result.message == "Reprocess dry-run for thread 7: completed."
+
+
 def test_list_review_threads_filters_results(monkeypatch) -> None:  # noqa: ANN001
     def _list_email_threads(self, *, business_state, limit, label=None):  # noqa: ANN001
         items = [

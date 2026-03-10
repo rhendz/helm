@@ -13,6 +13,7 @@ from email_agent.operator import (
     snooze_draft,
 )
 from email_agent.reminders import complete_scheduled_task, create_thread_reminder
+from email_agent.reprocess import reprocess_email_thread
 from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
 from helm_observability.logging import get_logger
 
@@ -27,6 +28,12 @@ class ThreadTaskTransitionResult:
 
 @dataclass(frozen=True, slots=True)
 class ThreadOverrideTransitionResult:
+    ok: bool
+    message: str
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadReprocessResult:
     ok: bool
     message: str
 
@@ -408,4 +415,21 @@ class TelegramCommandService:
         return ThreadOverrideTransitionResult(
             ok=True,
             message=f"Marked thread {thread_id} for review.",
+        )
+
+    def reprocess_thread(self, thread_id: int, *, dry_run: bool = True) -> ThreadReprocessResult:
+        result = reprocess_email_thread(
+            thread_id=thread_id,
+            dry_run=dry_run,
+            runtime=build_helm_runtime(),
+        )
+        if result.status != "accepted":
+            return ThreadReprocessResult(
+                ok=False,
+                message=f"Could not reprocess thread {thread_id}: {result.reason}.",
+            )
+        mode = "dry-run" if dry_run else "executed"
+        return ThreadReprocessResult(
+            ok=True,
+            message=f"Reprocess {mode} for thread {thread_id}: {result.workflow_status}.",
         )

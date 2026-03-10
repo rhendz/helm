@@ -11,6 +11,7 @@ from helm_telegram_bot.commands import (
     needsreview_threads,
     proposals,
     remind,
+    reprocess_thread,
     resolve,
     resolved_threads,
     review,
@@ -32,6 +33,7 @@ from helm_telegram_bot.services.command_service import (
     ThreadDetailView,
     ThreadOverrideTransitionResult,
     ThreadQueueView,
+    ThreadReprocessResult,
     ThreadTaskTransitionResult,
 )
 
@@ -777,6 +779,35 @@ async def test_review_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert service.seen_id == 5
     assert update.message.replies == ["Marked thread 5 for review."]
+
+
+@pytest.mark.asyncio
+async def test_reprocess_thread_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, bool]] = []
+
+        def reprocess_thread(
+            self, thread_id: int, *, dry_run: bool = True
+        ) -> ThreadReprocessResult:
+            self.calls.append((thread_id, dry_run))
+            return ThreadReprocessResult(
+                ok=True,
+                message="Reprocess dry-run for thread 8: completed.",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(reprocess_thread, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(reprocess_thread, "_service", service)
+    update = _Update()
+
+    await reprocess_thread.handle(update, _Context(args=["8"]))
+
+    assert service.calls == [(8, True)]
+    assert update.message.replies == ["Reprocess dry-run for thread 8: completed."]
 
 
 @pytest.mark.asyncio
