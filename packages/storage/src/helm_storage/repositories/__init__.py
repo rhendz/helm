@@ -31,8 +31,6 @@ from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepositor
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
 from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepository
-from helm_storage.repositories.linkedin_messages import SQLAlchemyLinkedInMessageRepository
-from helm_storage.repositories.linkedin_triage import SQLAlchemyLinkedInTriageRepository
 from helm_storage.repositories.opportunities import SQLAlchemyOpportunityRepository
 from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
@@ -67,8 +65,6 @@ __all__ = [
     "SQLAlchemyEmailMessageRepository",
     "SQLAlchemyEmailThreadRepository",
     "SQLAlchemyJobControlRepository",
-    "SQLAlchemyLinkedInMessageRepository",
-    "SQLAlchemyLinkedInTriageRepository",
     "SQLAlchemyOpportunityRepository",
     "SQLAlchemyReplayQueueRepository",
     "SQLAlchemyScheduledThreadTaskRepository",

@@ -39,7 +39,6 @@ This file defines low-conflict tracks for parallel Codex agents.
 - Deliverables:
   - Gmail ingest path.
   - LLM prompt contract helpers.
-  - Optional LinkedIn manual connector scaffolding.
 
 
 

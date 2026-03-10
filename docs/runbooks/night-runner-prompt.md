@@ -17,7 +17,6 @@ Project-specific guardrails (Helm V1):
 - DB-first artifact model (`Postgres` is source of truth, not prompt memory).
 - Meaningful outbound actions require explicit human approval.
 - No frontend dashboard work unless explicitly added to scope.
-- LinkedIn remains optional/V1.x unless explicit ingestion path is selected.
 
 ## Config (Edit Without Changing Core Policy)
 

@@ -13,7 +13,6 @@ class _DigestResult:
         self.action_count = 2
         self.digest_item_count = 1
         self.pending_draft_count = 3
-        self.linkedin_opportunity_count = 0
         self.stale_pending_draft_count = 0
 
 
@@ -50,7 +49,6 @@ def test_run_skips_delivery_when_no_signals(monkeypatch: pytest.MonkeyPatch) -> 
     empty_digest.action_count = 0
     empty_digest.digest_item_count = 0
     empty_digest.pending_draft_count = 0
-    empty_digest.linkedin_opportunity_count = 0
     seen: dict[str, str] = {}
 
     monkeypatch.setattr(digest, "generate_daily_digest", lambda: empty_digest)

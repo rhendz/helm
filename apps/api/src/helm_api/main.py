@@ -7,7 +7,6 @@ from helm_api.routers import (
     drafts,
     email,
     job_controls,
-    linkedin,
     replay,
     status,
     study,
@@ -22,7 +21,6 @@ app.include_router(email.router)
 app.include_router(study.router)
 app.include_router(workflows.router)
 app.include_router(status.router)
-app.include_router(linkedin.router)
 app.include_router(replay.router)
 app.include_router(job_controls.router)
 

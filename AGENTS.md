@@ -14,7 +14,6 @@ This repository is intentionally organized for multiple Codex agents to work in 
 - DB-first artifact model (Postgres as truth, not prompt memory).
 - Human approval required for meaningful outbound actions.
 - No frontend dashboard unless explicitly added by scope decision.
-- LinkedIn integration remains optional/V1.x unless an explicit ingestion path is selected.
 
 ## Parallel Work Boundaries
 
@@ -25,7 +24,7 @@ Default split is one agent per boundary:
 - `apps/telegram-bot`: command handlers and approval interactions.
 - `packages/storage`: SQLAlchemy models, repositories, migrations.
 - `packages/connectors`: external system ingress.
-- `packages/agents`: business logic per agent (email/linkedin/study/digest).
+- `packages/agents`: business logic per agent (email/study/digest).
 - `packages/orchestration`: LangGraph orchestration and workflow state transitions.
 - `packages/llm`: model invocation and prompt contracts.
 - `packages/observability`: logging, metrics, run traces.

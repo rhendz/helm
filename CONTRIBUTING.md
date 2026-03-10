@@ -37,4 +37,3 @@ make test
 
 - Persist workflow state in DB artifacts, not in process memory.
 - Keep human approval for meaningful outbound actions.
-- Keep LinkedIn integration optional unless explicitly enabled.
