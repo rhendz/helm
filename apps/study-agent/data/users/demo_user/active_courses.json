@@ -1,4 +1,5 @@
 {
+  "schema_version": 3,
   "active_courses": [
     "system-design",
     "thai-intro"

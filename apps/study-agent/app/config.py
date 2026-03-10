@@ -9,6 +9,7 @@ COURSES_DIR = BASE_DIR / "courses"
 DATA_DIR = BASE_DIR / "data"
 USERS_DIR = DATA_DIR / "users"
 DEFAULT_USER_ID = "demo_user"
+DEMO_TEMPLATE_USER_ID = "demo_user"
 DEFAULT_MODEL = "gpt-5-mini"
 
 

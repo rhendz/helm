@@ -2,26 +2,61 @@
   {
     "id": "greetings",
     "name": "Greetings",
-    "summary": "Basic Thai greetings, politeness particles, and when to use formal versus informal phrasing."
+    "summary": "Basic Thai greetings, politeness particles, and when to use formal versus informal phrasing.",
+    "priority_within_course": 5,
+    "prerequisites": [],
+    "next_topics": ["pronouns", "common-verbs"],
+    "starter": true,
+    "review_weight": 1.0,
+    "mode_preference": "lite",
+    "group": "conversation"
   },
   {
     "id": "pronouns",
     "name": "Pronouns",
-    "summary": "Common Thai pronouns and how they shift with context and politeness."
-  },
-  {
-    "id": "basic-sentence-order",
-    "name": "Basic Sentence Order",
-    "summary": "Simple Thai sentence structure for subject, verb, object, and modifiers."
+    "summary": "Common Thai pronouns and how they shift with context and politeness.",
+    "priority_within_course": 4,
+    "prerequisites": ["greetings"],
+    "next_topics": ["basic-sentence-order"],
+    "starter": false,
+    "review_weight": 1.2,
+    "mode_preference": "either",
+    "group": "conversation"
   },
   {
     "id": "common-verbs",
     "name": "Common Verbs",
-    "summary": "High-frequency verbs for daily situations such as go, want, have, eat, and like."
+    "summary": "High-frequency verbs for daily situations such as go, want, have, eat, and like.",
+    "priority_within_course": 4,
+    "prerequisites": ["greetings"],
+    "next_topics": ["basic-sentence-order"],
+    "starter": false,
+    "review_weight": 1.1,
+    "mode_preference": "either",
+    "group": "conversation"
+  },
+  {
+    "id": "basic-sentence-order",
+    "name": "Basic Sentence Order",
+    "summary": "Simple Thai sentence structure for subject, verb, object, and modifiers.",
+    "priority_within_course": 5,
+    "prerequisites": ["pronouns", "common-verbs"],
+    "next_topics": ["useful-particles"],
+    "starter": false,
+    "review_weight": 1.3,
+    "mode_preference": "full",
+    "group": "grammar"
   },
   {
     "id": "useful-particles",
     "name": "Useful Particles",
-    "summary": "Particles that change tone, politeness, and emphasis in Thai speech."
+    "summary": "Particles that change tone, politeness, and emphasis in Thai speech.",
+    "priority_within_course": 3,
+    "prerequisites": ["basic-sentence-order"],
+    "next_topics": [],
+    "starter": false,
+    "review_weight": 1.0,
+    "mode_preference": "lite",
+    "group": "grammar"
   }
 ]

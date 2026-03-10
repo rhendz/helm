@@ -1,4 +1,5 @@
 {
+  "schema_version": 3,
   "course_id": "thai-intro",
   "title": "Thai Intro",
   "goal": "Build steady beginner Thai conversation skills.",
@@ -11,8 +12,10 @@
   },
   "adherence": {
     "scheduled": 5,
-    "completed": 4,
+    "completed_full": 2,
+    "completed_lite": 2,
     "missed": 1,
+    "abandoned": 0,
     "miss_streak": 0,
     "recent_miss_reasons": [
       "Too tired at night"
@@ -25,9 +28,19 @@
       "state": "solid",
       "mastery": 0.82,
       "confidence": "high",
+      "cooldown_until": null,
       "last_seen": "2026-03-06",
       "next_review": "2026-03-13",
-      "weak_signals": []
+      "weak_signals": [],
+      "recent_history": [
+        {
+          "date": "2026-03-06",
+          "mode": "lite",
+          "score": 0.86,
+          "weak_signals": [],
+          "outcome": "completed_lite"
+        }
+      ]
     },
     {
       "id": "pronouns",
@@ -35,10 +48,22 @@
       "state": "shaky",
       "mastery": 0.45,
       "confidence": "low",
+      "cooldown_until": null,
       "last_seen": "2026-03-04",
       "next_review": "2026-03-09",
       "weak_signals": [
         "Male vs female polite pronouns"
+      ],
+      "recent_history": [
+        {
+          "date": "2026-03-04",
+          "mode": "full",
+          "score": 0.44,
+          "weak_signals": [
+            "Male vs female polite pronouns"
+          ],
+          "outcome": "completed_full"
+        }
       ]
     },
     {
@@ -47,9 +72,11 @@
       "state": "learning",
       "mastery": 0.58,
       "confidence": "medium",
+      "cooldown_until": null,
       "last_seen": "2026-03-02",
       "next_review": "2026-03-12",
-      "weak_signals": []
+      "weak_signals": [],
+      "recent_history": []
     },
     {
       "id": "common-verbs",
@@ -57,11 +84,13 @@
       "state": "learning",
       "mastery": 0.5,
       "confidence": "medium",
+      "cooldown_until": null,
       "last_seen": "2026-03-01",
       "next_review": "2026-03-11",
       "weak_signals": [
         "Want vs like distinction"
-      ]
+      ],
+      "recent_history": []
     },
     {
       "id": "useful-particles",
@@ -69,9 +98,11 @@
       "state": "unseen",
       "mastery": 0.1,
       "confidence": "low",
+      "cooldown_until": null,
       "last_seen": null,
       "next_review": null,
-      "weak_signals": []
+      "weak_signals": [],
+      "recent_history": []
     }
   ],
   "last_session_date": "2026-03-06",
