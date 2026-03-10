@@ -176,6 +176,13 @@ class EmailAgentRuntime(Protocol):
 
     def list_scheduled_tasks_for_thread(self, *, thread_id: int) -> list[dict]: ...
 
+    def list_scheduled_tasks(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]: ...
+
     def create_scheduled_task(
         self,
         *,

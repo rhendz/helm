@@ -13,6 +13,7 @@ from email_agent.query import (
 from email_agent.reminders import (
     ScheduledTaskCreateResult,
     create_thread_reminder,
+    list_scheduled_tasks,
     list_thread_scheduled_tasks,
 )
 from email_agent.reprocess import ThreadReprocessResult, reprocess_email_thread
@@ -33,6 +34,7 @@ __all__ = [
     "build_email_triage_graph",
     "create_thread_reminder",
     "get_email_thread_detail",
+    "list_scheduled_tasks",
     "reprocess_email_thread",
     "list_email_drafts",
     "list_email_proposals",

@@ -36,6 +36,18 @@ def list_thread_scheduled_tasks(
         return []
 
 
+def list_scheduled_tasks(
+    *,
+    runtime: EmailAgentRuntime,
+    status: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    try:
+        return runtime.list_scheduled_tasks(status=status, limit=limit)
+    except SQLAlchemyError:
+        return []
+
+
 def create_thread_reminder(
     *,
     thread_id: int,

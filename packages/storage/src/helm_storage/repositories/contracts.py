@@ -206,6 +206,15 @@ class EmailDraftRepository(Protocol):
 class ScheduledThreadTaskRepository(Protocol):
     def create(self, item: NewScheduledThreadTask) -> ScheduledThreadTaskORM: ...
 
+    def list_for_thread(self, *, email_thread_id: int) -> list[ScheduledThreadTaskORM]: ...
+
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[ScheduledThreadTaskORM]: ...
+
     def list_due(
         self,
         *,

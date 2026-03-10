@@ -31,6 +31,8 @@ def test_routes_exist() -> None:
     assert client.get("/v1/email/threads").status_code == 200
     assert client.get("/v1/email/proposals").status_code == 200
     assert client.get("/v1/email/drafts").status_code == 200
+    assert client.get("/v1/email/tasks").status_code == 200
+    assert client.get("/v1/email/tasks?status=pending").status_code == 200
     assert client.get("/v1/email/threads/999999").status_code == 404
     reprocess_email_response = client.post(
         "/v1/email/threads/999999/reprocess",

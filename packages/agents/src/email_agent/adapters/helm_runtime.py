@@ -408,6 +408,30 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 for record in records
             ]
 
+    def list_scheduled_tasks(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyScheduledThreadTaskRepository(session).list_recent(
+                status=status,
+                limit=limit,
+            )
+            return [
+                {
+                    "id": record.id,
+                    "email_thread_id": record.email_thread_id,
+                    "task_type": record.task_type,
+                    "created_by": record.created_by,
+                    "due_at": record.due_at,
+                    "status": record.status,
+                    "reason": record.reason,
+                }
+                for record in records
+            ]
+
     def create_scheduled_task(
         self,
         *,

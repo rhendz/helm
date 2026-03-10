@@ -23,6 +23,7 @@ from helm_api.services.email_service import (
     ingest_manual_email_messages,
     list_drafts,
     list_proposals,
+    list_tasks,
     list_thread_tasks,
     list_threads,
     override_thread,
@@ -60,6 +61,14 @@ def get_email_proposals(
 @router.get("/drafts", response_model=list[EmailDraftResponse])
 def get_email_drafts(limit: int = Query(default=20, ge=1, le=100)) -> list[EmailDraftResponse]:
     return [EmailDraftResponse(**item) for item in list_drafts(limit=limit)]
+
+
+@router.get("/tasks", response_model=list[ScheduledTaskResponse])
+def get_email_tasks(
+    limit: int = Query(default=20, ge=1, le=100),
+    status: str | None = Query(default=None, pattern="^(pending|completed)$"),
+) -> list[ScheduledTaskResponse]:
+    return [ScheduledTaskResponse(**item) for item in list_tasks(status=status, limit=limit)]
 
 
 @router.get("/threads/{thread_id}", response_model=EmailThreadDetailResponse)
