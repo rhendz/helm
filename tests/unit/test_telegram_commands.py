@@ -1,5 +1,6 @@
 import pytest
 from helm_telegram_bot.commands import (
+    action_threads,
     actions,
     approve,
     common,
@@ -24,6 +25,7 @@ from helm_telegram_bot.services.command_service import (
     ScheduledTaskView,
     ThreadDetailView,
     ThreadOverrideTransitionResult,
+    ThreadQueueView,
     ThreadTaskTransitionResult,
 )
 
@@ -212,6 +214,30 @@ async def test_actions_command_formats_items(monkeypatch: pytest.MonkeyPatch) ->
     assert update.message.replies == [
         "Open actions:\n3: P1 Reply to recruiter\n2: P2 Review draft"
     ]
+
+
+@pytest.mark.asyncio
+async def test_action_threads_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_action_threads(self) -> list[ThreadQueueView]:
+            return [
+                ThreadQueueView(
+                    id=14,
+                    business_state="waiting_on_user",
+                    current_summary="Reply to recruiter",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(action_threads, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(action_threads, "_service", _Service())
+    update = _Update()
+
+    await action_threads.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Action threads:\n14: Reply to recruiter"]
 
 
 @pytest.mark.asyncio

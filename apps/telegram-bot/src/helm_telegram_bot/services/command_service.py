@@ -40,6 +40,13 @@ class ThreadDetailView:
 
 
 @dataclass(frozen=True, slots=True)
+class ThreadQueueView:
+    id: int
+    business_state: str
+    current_summary: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class ScheduledTaskView:
     id: int
     email_thread_id: int
@@ -59,6 +66,17 @@ class ProposalView:
 
 
 class TelegramCommandService:
+    def list_action_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
+        items = build_helm_runtime().list_email_threads(label="Action", limit=limit)
+        return [
+            ThreadQueueView(
+                id=item["id"],
+                business_state=item["business_state"],
+                current_summary=item.get("current_summary"),
+            )
+            for item in items
+        ]
+
     def list_threads(
         self,
         *,

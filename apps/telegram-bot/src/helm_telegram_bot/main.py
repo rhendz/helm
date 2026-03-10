@@ -2,6 +2,7 @@ from helm_observability.logging import get_logger, setup_logging
 from telegram.ext import Application, CommandHandler
 
 from helm_telegram_bot.commands import (
+    action_threads,
     actions,
     approve,
     digest,
@@ -34,6 +35,7 @@ def main() -> None:
     application = Application.builder().token(settings.telegram_bot_token).build()
     application.add_handler(CommandHandler("start", start.handle))
     application.add_handler(CommandHandler("digest", digest.handle))
+    application.add_handler(CommandHandler("action_threads", action_threads.handle))
     application.add_handler(CommandHandler("actions", actions.handle))
     application.add_handler(CommandHandler("drafts", drafts.handle))
     application.add_handler(CommandHandler("proposals", proposals.handle))
