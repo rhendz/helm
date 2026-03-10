@@ -6,6 +6,7 @@ from helm_telegram_bot.commands import (
     common,
     digest,
     done_task,
+    draft,
     drafts,
     followup,
     needsreview_threads,
@@ -693,6 +694,72 @@ async def test_drafts_unauthorized_short_circuit(monkeypatch: pytest.MonkeyPatch
     await drafts.handle(update, _Context(args=[]))
 
     assert update.message.replies == []
+
+
+@pytest.mark.asyncio
+async def test_draft_usage_message_when_id_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(draft, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await draft.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /draft <draft_id>"]
+
+
+@pytest.mark.asyncio
+async def test_draft_command_formats_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_draft_detail(self, draft_id: int):
+            assert draft_id == 8
+            return type(
+                "DraftDetail",
+                (),
+                {
+                    "id": 8,
+                    "email_thread_id": 4,
+                    "action_proposal_id": 12,
+                    "status": "generated",
+                    "approval_status": "approved",
+                    "draft_subject": "Re: Opportunity",
+                    "draft_body": "Thanks for reaching out.",
+                    "transition_audits": [
+                        {
+                            "action": "approve",
+                            "from_status": "pending_user",
+                            "to_status": "approved",
+                            "success": True,
+                        }
+                    ],
+                },
+            )()
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(draft, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(draft, "_service", _Service())
+    update = _Update()
+
+    await draft.handle(update, _Context(args=["8"]))
+
+    assert update.message.replies == [
+        "\n".join(
+            [
+                "Draft 8",
+                "Thread: 4",
+                "Proposal: 12",
+                "Status: generated",
+                "Approval: approved",
+                "Subject: Re: Opportunity",
+                "Body: Thanks for reaching out.",
+                "Recent audits:",
+                "approve: pending_user -> approved (ok)",
+            ]
+        )
+    ]
 
 
 @pytest.mark.asyncio
