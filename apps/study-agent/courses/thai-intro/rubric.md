@@ -1,0 +1,3 @@
+- Strong answers use the correct basic structure.
+- Prioritize practical everyday phrasing over edge cases.
+- Surface uncertainty when a form may be context-sensitive.

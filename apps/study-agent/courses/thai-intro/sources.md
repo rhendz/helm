@@ -1,0 +1,3 @@
+- Beginner Thai self-study notes
+- Phrasebook-style examples
+- High-frequency vocabulary lists

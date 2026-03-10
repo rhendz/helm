@@ -1,0 +1,79 @@
+{
+  "course_id": "thai-intro",
+  "title": "Thai Intro",
+  "goal": "Build steady beginner Thai conversation skills.",
+  "status": "active",
+  "priority": 3,
+  "cadence": {
+    "sessions_per_week": 3,
+    "target_minutes": 20,
+    "deadline": null
+  },
+  "adherence": {
+    "scheduled": 5,
+    "completed": 4,
+    "missed": 1,
+    "miss_streak": 0,
+    "recent_miss_reasons": [
+      "Too tired at night"
+    ]
+  },
+  "topics": [
+    {
+      "id": "greetings",
+      "name": "Greetings",
+      "state": "solid",
+      "mastery": 0.82,
+      "confidence": "high",
+      "last_seen": "2026-03-06",
+      "next_review": "2026-03-13",
+      "weak_signals": []
+    },
+    {
+      "id": "pronouns",
+      "name": "Pronouns",
+      "state": "shaky",
+      "mastery": 0.45,
+      "confidence": "low",
+      "last_seen": "2026-03-04",
+      "next_review": "2026-03-09",
+      "weak_signals": [
+        "Male vs female polite pronouns"
+      ]
+    },
+    {
+      "id": "basic-sentence-order",
+      "name": "Basic Sentence Order",
+      "state": "learning",
+      "mastery": 0.58,
+      "confidence": "medium",
+      "last_seen": "2026-03-02",
+      "next_review": "2026-03-12",
+      "weak_signals": []
+    },
+    {
+      "id": "common-verbs",
+      "name": "Common Verbs",
+      "state": "learning",
+      "mastery": 0.5,
+      "confidence": "medium",
+      "last_seen": "2026-03-01",
+      "next_review": "2026-03-11",
+      "weak_signals": [
+        "Want vs like distinction"
+      ]
+    },
+    {
+      "id": "useful-particles",
+      "name": "Useful Particles",
+      "state": "unseen",
+      "mastery": 0.1,
+      "confidence": "low",
+      "last_seen": null,
+      "next_review": null,
+      "weak_signals": []
+    }
+  ],
+  "last_session_date": "2026-03-06",
+  "weekly_checkin_needed": true
+}

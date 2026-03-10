@@ -1,0 +1,3 @@
+- System design interview notes
+- Internal architecture study notes
+- Common distributed systems patterns

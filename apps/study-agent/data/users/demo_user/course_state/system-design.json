@@ -1,0 +1,82 @@
+{
+  "course_id": "system-design",
+  "title": "System Design",
+  "goal": "Prepare for senior software engineering system design interviews.",
+  "status": "active",
+  "priority": 5,
+  "cadence": {
+    "sessions_per_week": 4,
+    "target_minutes": 30,
+    "deadline": "2026-05-15"
+  },
+  "adherence": {
+    "scheduled": 6,
+    "completed": 4,
+    "missed": 2,
+    "miss_streak": 1,
+    "recent_miss_reasons": [
+      "Late work block"
+    ]
+  },
+  "topics": [
+    {
+      "id": "caching-basics",
+      "name": "Caching Basics",
+      "state": "shaky",
+      "mastery": 0.42,
+      "confidence": "low",
+      "last_seen": "2026-03-07",
+      "next_review": "2026-03-09",
+      "weak_signals": [
+        "Cache invalidation tradeoffs",
+        "When write-through helps"
+      ]
+    },
+    {
+      "id": "load-balancing",
+      "name": "Load Balancing",
+      "state": "learning",
+      "mastery": 0.5,
+      "confidence": "medium",
+      "last_seen": "2026-03-05",
+      "next_review": "2026-03-12",
+      "weak_signals": [
+        "Health check behavior"
+      ]
+    },
+    {
+      "id": "sql-vs-nosql",
+      "name": "SQL vs NoSQL",
+      "state": "learning",
+      "mastery": 0.55,
+      "confidence": "medium",
+      "last_seen": "2026-03-03",
+      "next_review": "2026-03-13",
+      "weak_signals": []
+    },
+    {
+      "id": "queues-and-async-processing",
+      "name": "Queues and Async Processing",
+      "state": "unseen",
+      "mastery": 0.15,
+      "confidence": "low",
+      "last_seen": null,
+      "next_review": null,
+      "weak_signals": []
+    },
+    {
+      "id": "consistency-basics",
+      "name": "Consistency Basics",
+      "state": "learning",
+      "mastery": 0.4,
+      "confidence": "low",
+      "last_seen": "2026-03-01",
+      "next_review": "2026-03-10",
+      "weak_signals": [
+        "Eventual consistency examples"
+      ]
+    }
+  ],
+  "last_session_date": "2026-03-07",
+  "weekly_checkin_needed": true
+}

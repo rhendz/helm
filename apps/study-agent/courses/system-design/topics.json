@@ -1,0 +1,27 @@
+[
+  {
+    "id": "caching-basics",
+    "name": "Caching Basics",
+    "summary": "What caches do, common cache patterns, and tradeoffs around freshness and invalidation."
+  },
+  {
+    "id": "load-balancing",
+    "name": "Load Balancing",
+    "summary": "Why load balancers exist, distribution strategies, health checks, and failure handling."
+  },
+  {
+    "id": "sql-vs-nosql",
+    "name": "SQL vs NoSQL",
+    "summary": "Data modeling and tradeoffs between relational consistency and flexible scale-oriented stores."
+  },
+  {
+    "id": "queues-and-async-processing",
+    "name": "Queues and Async Processing",
+    "summary": "When to decouple work with queues, retries, throughput smoothing, and failure isolation."
+  },
+  {
+    "id": "consistency-basics",
+    "name": "Consistency Basics",
+    "summary": "Strong versus eventual consistency and the impact on product and data guarantees."
+  }
+]
