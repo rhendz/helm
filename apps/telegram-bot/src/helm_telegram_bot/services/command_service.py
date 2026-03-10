@@ -37,6 +37,15 @@ class ThreadDetailView:
     visible_labels: list[str]
     current_summary: str | None
     action_reason: str | None
+    latest_confidence_band: str | None = None
+    latest_message_from: str | None = None
+    latest_message_subject: str | None = None
+    latest_message_snippet: str | None = None
+    latest_proposal_type: str | None = None
+    latest_proposal_status: str | None = None
+    latest_draft_approval_status: str | None = None
+    latest_draft_preview: str | None = None
+    pending_task_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,16 +247,45 @@ class TelegramCommandService:
         ]
 
     def get_thread_detail(self, thread_id: int) -> ThreadDetailView | None:
-        detail = build_helm_runtime().get_email_thread_detail(thread_id=thread_id)
+        runtime = build_helm_runtime()
+        detail = runtime.get_email_thread_detail(thread_id=thread_id)
         if detail is None:
             return None
         thread = detail["thread"]
+        proposals = detail.get("proposals", [])
+        drafts = detail.get("drafts", [])
+        messages = detail.get("messages", [])
+        tasks = runtime.list_scheduled_tasks_for_thread(thread_id=thread_id)
+        latest_proposal = proposals[0] if proposals else None
+        latest_draft = drafts[0] if drafts else None
+        latest_message = messages[0] if messages else None
         return ThreadDetailView(
             id=thread["id"],
             business_state=thread["business_state"],
             visible_labels=thread["visible_labels"],
             current_summary=thread["current_summary"],
             action_reason=thread["action_reason"],
+            latest_confidence_band=thread.get("latest_confidence_band"),
+            latest_message_from=(
+                latest_message.get("from_address") if latest_message is not None else None
+            ),
+            latest_message_subject=(
+                latest_message.get("subject") if latest_message is not None else None
+            ),
+            latest_message_snippet=(
+                latest_message.get("snippet") if latest_message is not None else None
+            ),
+            latest_proposal_type=(
+                latest_proposal.get("proposal_type") if latest_proposal is not None else None
+            ),
+            latest_proposal_status=(
+                latest_proposal.get("status") if latest_proposal is not None else None
+            ),
+            latest_draft_approval_status=(
+                latest_draft.get("approval_status") if latest_draft is not None else None
+            ),
+            latest_draft_preview=latest_draft.get("preview") if latest_draft is not None else None,
+            pending_task_count=sum(1 for task in tasks if task.get("status") == "pending"),
         )
 
     def approve_draft(self, draft_id: int) -> DraftTransitionResult:

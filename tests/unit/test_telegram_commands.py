@@ -633,6 +633,15 @@ async def test_threads_label_command_formats_queue(monkeypatch: pytest.MonkeyPat
                     visible_labels=["Action"],
                     current_summary="Reply to recruiter",
                     action_reason="reply_needed",
+                    latest_confidence_band=None,
+                    latest_message_from=None,
+                    latest_message_subject=None,
+                    latest_message_snippet=None,
+                    latest_proposal_type=None,
+                    latest_proposal_status=None,
+                    latest_draft_approval_status=None,
+                    latest_draft_preview=None,
+                    pending_task_count=0,
                 )
             ]
 
@@ -780,6 +789,15 @@ async def test_thread_command_formats_detail(monkeypatch: pytest.MonkeyPatch) ->
                 visible_labels=["Action", "Urgent"],
                 current_summary="Reply to recruiter",
                 action_reason="reply_needed",
+                latest_confidence_band="high",
+                latest_message_from="founder@example.com",
+                latest_message_subject="Checking in",
+                latest_message_snippet="Wanted to follow up.",
+                latest_proposal_type="reply",
+                latest_proposal_status="proposed",
+                latest_draft_approval_status="pending_user",
+                latest_draft_preview="Draft reply preview",
+                pending_task_count=2,
             )
 
     async def _allow(_update: _Update, _context: _Context) -> bool:
@@ -796,8 +814,15 @@ async def test_thread_command_formats_detail(monkeypatch: pytest.MonkeyPatch) ->
             "Thread 8\n"
             "State: waiting_on_user\n"
             "Labels: Action, Urgent\n"
+            "Confidence: high\n"
             "Reason: reply_needed\n"
-            "Summary: Reply to recruiter"
+            "Summary: Reply to recruiter\n"
+            "Latest proposal: reply [proposed]\n"
+            "Latest draft: pending_user: Draft reply preview\n"
+            "Pending tasks: 2\n"
+            "Latest message from: founder@example.com\n"
+            "Latest message subject: Checking in\n"
+            "Latest message snippet: Wanted to follow up."
         )
     ]
 
@@ -813,6 +838,15 @@ async def test_reviews_command_formats_threads(monkeypatch: pytest.MonkeyPatch) 
                     visible_labels=["NeedsReview"],
                     current_summary="Check recruiter note",
                     action_reason="user_requested_review",
+                    latest_confidence_band=None,
+                    latest_message_from=None,
+                    latest_message_subject=None,
+                    latest_message_snippet=None,
+                    latest_proposal_type=None,
+                    latest_proposal_status=None,
+                    latest_draft_approval_status=None,
+                    latest_draft_preview=None,
+                    pending_task_count=0,
                 )
             ]
 
