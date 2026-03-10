@@ -50,6 +50,29 @@ class ScheduledTaskView:
 
 
 class TelegramCommandService:
+    def list_threads(
+        self,
+        *,
+        limit: int = 5,
+        business_state: str | None = None,
+        label: str | None = None,
+    ) -> list[ThreadDetailView]:
+        items = build_helm_runtime().list_email_threads(
+            business_state=business_state,
+            label=label,
+            limit=limit,
+        )
+        return [
+            ThreadDetailView(
+                id=item["id"],
+                business_state=item["business_state"],
+                visible_labels=item.get("visible_labels", []),
+                current_summary=item.get("current_summary"),
+                action_reason=item.get("action_reason"),
+            )
+            for item in items
+        ]
+
     def list_open_actions(self, *, limit: int = 5) -> list[object]:
         return list_open_actions(limit=limit, runtime=build_helm_runtime())
 
@@ -74,20 +97,10 @@ class TelegramCommandService:
         ]
 
     def list_review_threads(self, *, limit: int = 5) -> list[ThreadDetailView]:
-        items = build_helm_runtime().list_email_threads(
+        return self.list_threads(
             business_state="needs_review",
             limit=limit,
         )
-        return [
-            ThreadDetailView(
-                id=item["id"],
-                business_state=item["business_state"],
-                visible_labels=item.get("visible_labels", []),
-                current_summary=item.get("current_summary"),
-                action_reason=item.get("action_reason"),
-            )
-            for item in items
-        ]
 
     def list_scheduled_tasks(
         self,

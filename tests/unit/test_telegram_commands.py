@@ -14,6 +14,7 @@ from helm_telegram_bot.commands import (
     snooze,
     tasks,
     thread,
+    threads,
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
@@ -288,6 +289,51 @@ async def test_drafts_command_formats_filtered_items(monkeypatch: pytest.MonkeyP
     await drafts.handle(update, _Context(args=["approved"]))
 
     assert update.message.replies == ["Drafts (approved):\n7: approved Ready to inspect"]
+
+
+@pytest.mark.asyncio
+async def test_threads_command_rejects_invalid_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(threads, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await threads.handle(update, _Context(args=["bad"]))
+
+    assert update.message.replies == [
+        (
+            "Usage: /threads "
+            "[uninitialized|waiting_on_user|waiting_on_other_party|needs_review|resolved]"
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_threads_command_formats_filtered_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_threads(self, business_state=None) -> list[ThreadDetailView]:
+            assert business_state == "needs_review"
+            return [
+                ThreadDetailView(
+                    id=9,
+                    business_state="needs_review",
+                    visible_labels=["NeedsReview"],
+                    current_summary="Check recruiter note",
+                    action_reason="user_requested_review",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(threads, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(threads, "_service", _Service())
+    update = _Update()
+
+    await threads.handle(update, _Context(args=["needs_review"]))
+
+    assert update.message.replies == ["Threads (needs_review):\n9: Check recruiter note"]
 
 
 @pytest.mark.asyncio
