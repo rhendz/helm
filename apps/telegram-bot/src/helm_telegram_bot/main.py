@@ -23,6 +23,7 @@ from helm_telegram_bot.commands import (
     thread,
     threads,
     threads_label,
+    uninitialized_threads,
     waiting_on_other_party_threads,
     waiting_on_user_threads,
 )
@@ -58,6 +59,7 @@ def main() -> None:
     application.add_handler(CommandHandler("thread", thread.handle))
     application.add_handler(CommandHandler("threads", threads.handle))
     application.add_handler(CommandHandler("threads_label", threads_label.handle))
+    application.add_handler(CommandHandler("uninitialized_threads", uninitialized_threads.handle))
     application.add_handler(
         CommandHandler("waiting_on_other_party_threads", waiting_on_other_party_threads.handle)
     )
