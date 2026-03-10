@@ -25,6 +25,14 @@ class SQLAlchemyScheduledThreadTaskRepository:
         self._session.refresh(record)
         return record
 
+    def list_for_thread(self, *, email_thread_id: int) -> list[ScheduledThreadTaskORM]:
+        stmt = (
+            select(ScheduledThreadTaskORM)
+            .where(ScheduledThreadTaskORM.email_thread_id == email_thread_id)
+            .order_by(ScheduledThreadTaskORM.due_at.asc(), ScheduledThreadTaskORM.id.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
     def list_due(
         self,
         *,

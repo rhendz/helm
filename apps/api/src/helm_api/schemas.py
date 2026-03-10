@@ -89,6 +89,29 @@ class EmailThreadReprocessResponse(BaseModel):
     workflow_status: str | None = None
 
 
+class ScheduledTaskResponse(BaseModel):
+    id: int
+    email_thread_id: int
+    task_type: str
+    created_by: str
+    due_at: datetime
+    status: str
+    reason: str | None = None
+
+
+class CreateScheduledTaskRequest(BaseModel):
+    task_type: str = Field(pattern="^(reminder|followup)$")
+    due_at: datetime
+    created_by: str = "user"
+
+
+class CreateScheduledTaskResponse(BaseModel):
+    status: str
+    thread_id: int
+    task_id: int | None
+    reason: str | None = None
+
+
 class StudyIngestRequest(BaseModel):
     source_type: str = "manual"
     raw_text: str

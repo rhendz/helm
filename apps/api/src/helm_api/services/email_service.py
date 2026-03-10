@@ -7,6 +7,7 @@ from email_agent.query import (
     list_email_proposals,
     list_email_threads,
 )
+from email_agent.reminders import create_thread_reminder, list_thread_scheduled_tasks
 from email_agent.reprocess import reprocess_email_thread
 
 
@@ -40,10 +41,34 @@ def reprocess_thread(*, thread_id: int, dry_run: bool) -> dict:
     )
 
 
+def list_thread_tasks(*, thread_id: int) -> list[dict]:
+    return list_thread_scheduled_tasks(thread_id=thread_id, runtime=_runtime())
+
+
+def create_thread_task(
+    *,
+    thread_id: int,
+    task_type: str,
+    due_at,
+    created_by: str,
+) -> dict:
+    return asdict(
+        create_thread_reminder(
+            thread_id=thread_id,
+            due_at=due_at,
+            created_by=created_by,
+            task_type=task_type,
+            runtime=_runtime(),
+        )
+    )
+
+
 __all__ = [
     "get_thread_detail",
+    "create_thread_task",
     "list_drafts",
     "list_proposals",
+    "list_thread_tasks",
     "list_threads",
     "reprocess_thread",
 ]
