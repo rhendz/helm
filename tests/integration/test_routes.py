@@ -9,6 +9,9 @@ def test_routes_exist() -> None:
     assert client.get("/v1/status/draft-transitions/failures").status_code == 200
     assert client.get("/v1/job-controls").status_code == 200
     assert client.get("/v1/actions").status_code == 200
+    assert client.get("/v1/email/threads").status_code == 200
+    assert client.get("/v1/email/proposals").status_code == 200
+    assert client.get("/v1/email/drafts").status_code == 200
     drafts_response = client.get("/v1/drafts")
     assert drafts_response.status_code == 200
     response = client.post(

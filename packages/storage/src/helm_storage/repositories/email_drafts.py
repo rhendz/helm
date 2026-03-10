@@ -9,6 +9,15 @@ class SQLAlchemyEmailDraftRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
+    def list_recent(self, *, limit: int | None = None) -> list[EmailDraftORM]:
+        stmt = select(EmailDraftORM).order_by(
+            EmailDraftORM.updated_at.desc(),
+            EmailDraftORM.id.desc(),
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        return list(self._session.execute(stmt).scalars().all())
+
     def create(self, item: NewEmailDraft) -> EmailDraftORM:
         record = EmailDraftORM(
             email_thread_id=item.email_thread_id,
