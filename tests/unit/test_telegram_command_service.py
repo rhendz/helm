@@ -52,6 +52,31 @@ def test_list_threads_filters_by_business_state(monkeypatch) -> None:  # noqa: A
     assert threads[0].business_state == "waiting_on_user"
 
 
+def test_list_threads_filters_by_label(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_email_threads": lambda self, *, business_state, label, limit: [
+                {
+                    "id": 8,
+                    "business_state": "waiting_on_user",
+                    "visible_labels": [label],
+                    "current_summary": "Urgent recruiter reply",
+                    "action_reason": "reply_needed",
+                }
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    threads = service.list_threads(limit=2, label="Urgent")
+
+    assert len(threads) == 1
+    assert threads[0].visible_labels == ["Urgent"]
+
+
 def test_list_pending_drafts_applies_limit(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
 

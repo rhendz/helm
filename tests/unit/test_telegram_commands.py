@@ -15,6 +15,7 @@ from helm_telegram_bot.commands import (
     tasks,
     thread,
     threads,
+    threads_label,
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
@@ -334,6 +335,46 @@ async def test_threads_command_formats_filtered_queue(monkeypatch: pytest.Monkey
     await threads.handle(update, _Context(args=["needs_review"]))
 
     assert update.message.replies == ["Threads (needs_review):\n9: Check recruiter note"]
+
+
+@pytest.mark.asyncio
+async def test_threads_label_command_rejects_missing_label(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(threads_label, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await threads_label.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /threads_label <Action|Urgent|NeedsReview>"]
+
+
+@pytest.mark.asyncio
+async def test_threads_label_command_formats_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_threads(self, business_state=None, label=None) -> list[ThreadDetailView]:
+            assert label == "Action"
+            return [
+                ThreadDetailView(
+                    id=12,
+                    business_state="waiting_on_user",
+                    visible_labels=["Action"],
+                    current_summary="Reply to recruiter",
+                    action_reason="reply_needed",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(threads_label, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(threads_label, "_service", _Service())
+    update = _Update()
+
+    await threads_label.handle(update, _Context(args=["Action"]))
+
+    assert update.message.replies == ["Threads (Action):\n12: Reply to recruiter"]
 
 
 @pytest.mark.asyncio
