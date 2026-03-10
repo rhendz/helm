@@ -93,30 +93,6 @@ class DraftTransitionFailureResponse(BaseModel):
     created_at: datetime
 
 
-class LinkedInManualEventRequest(BaseModel):
-    id: str
-    thread_id: str | None = None
-    sender_name: str = ""
-    body_text: str = ""
-    received_at: datetime | None = None
-
-
-class LinkedInIngestRequest(BaseModel):
-    source_type: str = "linkedin_manual"
-    events: list[LinkedInManualEventRequest]
-
-
-class LinkedInIngestResponse(BaseModel):
-    status: str
-    source_type: str
-    event_count: int
-    persisted: bool
-    message_count: int
-    thread_count: int
-    failed_event_count: int = 0
-    normalization_failures: dict[str, int] = Field(default_factory=dict)
-
-
 class ReplayEnqueueRequest(BaseModel):
     agent_run_id: int
 

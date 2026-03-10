@@ -103,9 +103,6 @@ No abstraction should be added solely for hypothetical future users unless it cl
 ### Inputs
 
 - Gmail messages  
-    
-- LinkedIn messages/signals (if available in v1 scope)  
-    
 - manually added items if needed
 
 ### Outputs
@@ -200,7 +197,7 @@ No abstraction should be added solely for hypothetical future users unless it cl
 
 ### Inputs
 
-- important email/LinkedIn threads  
+- important email threads  
     
 - reply context  
     
@@ -294,9 +291,7 @@ Initial connectors:
 
 - Gmail  
     
-- Telegram  
-    
-- LinkedIn (optional or partial in V1 depending on implementation complexity)
+- Telegram
 
 ### B. Agent / workflow layer
 
@@ -418,8 +413,6 @@ personal-ai-secretary/
 
 │  │  ├─ email\_agent/
 
-│  │  ├─ linkedin\_agent/
-
 │  │  ├─ study\_agent/
 
 │  │  └─ digest\_agent/
@@ -453,7 +446,6 @@ Suggested fields:
 * `id`  
 * `name`  
 * `email`  
-* `linkedin_url`  
 * `telegram_handle`  
 * `company`  
 * `relationship_type`  
@@ -550,25 +542,6 @@ Suggested fields:
 * `priority_score`  
 * `status`
 
-### LinkedIn
-
-#### `linkedin_messages`
-
-* `id`  
-* `provider_message_id`  
-* `thread_id`  
-* `sender_name`  
-* `body_text`  
-* `received_at`
-
-#### `linkedin_threads`
-
-* `id`  
-* `thread_summary`  
-* `category`  
-* `priority_score`  
-* `status`
-
 #### `opportunities`
 
 * `id`  
@@ -627,18 +600,7 @@ Responsibilities:
 * generate draft replies for relevant threads  
 * generate digest items for important cases
 
-## 11.2 LinkedIn Agent
-
-Responsibilities:
-
-* ingest messages/signals  
-* classify recruiter/networking/spam  
-* create opportunities  
-* create action items  
-* generate draft replies  
-* generate digest items
-
-## 11.3 Study Agent
+## 11.2 Study Agent
 
 Responsibilities:
 
@@ -647,7 +609,7 @@ Responsibilities:
 * detect knowledge gaps  
 * generate digest items for important weaknesses
 
-## 11.4 Digest Agent
+## 11.3 Digest Agent
 
 Responsibilities:
 
@@ -672,18 +634,7 @@ Responsibilities:
 8. Notify Telegram if high priority  
 9. Log agent run
 
-## 12.2 LinkedIn Triage Workflow
-
-1. New LinkedIn message ingested  
-2. Classify message  
-3. Link/create contact  
-4. Create/update opportunity if relevant  
-5. Create action item  
-6. Generate reply draft if needed  
-7. Create digest item  
-8. Log agent run
-
-## 12.3 Study Ingest Workflow
+## 12.2 Study Ingest Workflow
 
 1. Study note/transcript submitted  
 2. Summarize session  
@@ -862,14 +813,7 @@ Not in V1:
 * knowledge gap tracking  
 * study summary query flow
 
-## Phase 5 — LinkedIn loop
-
-* LinkedIn ingestion if implementation path is practical  
-* opportunity creation  
-* draft generation  
-* digest integration
-
-## Phase 6 — Reliability, Operator Control, and Autonomy Acceleration
+## Phase 5 — Reliability, Operator Control, and Autonomy Acceleration
 
 * reliability hardening across ingest/triage/digest/study flows  
 * operator-safe reprocess controls and run visibility  
@@ -908,17 +852,15 @@ This repo should be prepared so multiple Codex agents can work in parallel.
 ## 21\. Open Questions
 
 1. What is the exact Gmail ingestion method for V1?  
-2. What is the feasible LinkedIn ingestion method for V1?  
-3. Should study ingest begin as manual text input only?  
-4. Do we want simple admin endpoints in V1 for reprocessing/debugging?  
-5. Do we want a minimal web dashboard in V1, or Telegram only?
+2. Should study ingest begin as manual text input only?  
+3. Do we want simple admin endpoints in V1 for reprocessing/debugging?  
+4. Do we want a minimal web dashboard in V1, or Telegram only?
 
 Current recommendation:
 
 * Telegram only for V1  
 * no web dashboard yet  
-* manual study ingest is acceptable initially  
-* LinkedIn may be a later V1.x addition depending on integration complexity
+* manual study ingest is acceptable initially
 
 ---
 
@@ -945,8 +887,6 @@ Its purpose is to:
 A couple of refinements I’d make when you create the GitHub project:
 
 First, set the runtime assumption in the repo to \*\*OpenAI API key \+ Responses API\*\*, while continuing to use \*\*Codex with ChatGPT sign-in\*\* for development workflows. That matches the current official docs much better than assuming your backend can run on ChatGPT OAuth alone. :contentReference\[oaicite:2\]{index=2}
-
-Second, keep LinkedIn explicitly marked as \*\*V1 optional / V1.x\*\* until you choose the ingestion path, because that is likely to be the least clean part of the first build.
 
 If you want, next I’ll turn this into:
 
@@ -1040,7 +980,7 @@ Validation:
 
 Acceptance criteria:
 
-* operator can pause and resume scheduled job families (email/digest/study/linkedin)  
+* operator can pause and resume scheduled job families (email/digest/study)  
 * paused jobs emit explicit status in `/v1/status` family endpoints  
 * worker respects pause state before executing job body
 
@@ -1070,7 +1010,7 @@ Goal: improve decision usefulness while staying deterministic and testable.
 
 Acceptance criteria:
 
-* ranking policy combines existing digest items with action urgency, study signals, and LinkedIn opportunities  
+* ranking policy combines existing digest items with action urgency and study signals  
 * policy is deterministic and implemented in explicit code path (no hidden prompt-only ranking)  
 * no-source fallback path remains stable and tested
 
@@ -1092,7 +1032,7 @@ Validation:
 * `bash scripts/lint.sh`
 * `bash scripts/test.sh`
 
-### 23.5 Workstream D: Triage Maturity (Email + LinkedIn)
+### 23.5 Workstream D: Triage Maturity
 
 Goal: increase quality and confidence of triage artifacts.
 
@@ -1232,7 +1172,4 @@ V1 is complete when all conditions are true:
 * phase 6 reliability/operator priorities are completed or explicitly deferred with rationale  
 * no unresolved high-priority open issues remain in active sprint  
 * required CI checks are green on final merged set  
-* runbooks reflect final supported operator workflows  
-* LinkedIn remains either:
-  * manual-ingest-only with explicit documented boundary, or  
-  * expanded via approved and policy-safe integration path
+* runbooks reflect final supported operator workflows

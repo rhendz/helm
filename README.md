@@ -28,8 +28,8 @@ Primary product spec: [`docs/internal/helm-v1.md`](docs/internal/helm-v1.md)
 - `apps/telegram-bot`: Telegram UX for digest, drafts, approvals, and status commands.
 - `packages/domain`: shared domain primitives and value objects.
 - `packages/storage`: SQLAlchemy models, session setup, and repositories.
-- `packages/connectors`: external ingestion connectors (Gmail/LinkedIn/Telegram adapters).
-- `packages/agents`: domain agents (email/linkedin/study/digest).
+- `packages/connectors`: external ingestion connectors (Gmail/Telegram adapters).
+- `packages/agents`: domain agents (email/study/digest).
 - `packages/orchestration`: LangGraph graphs and workflow control logic.
 - `packages/llm`: OpenAI Responses API client wrappers and prompt interfaces.
 - `packages/observability`: structured logging, run instrumentation, and health metadata.

@@ -1,11 +1,10 @@
 # Connector Troubleshooting
 
-Use this runbook for Gmail/LinkedIn connector behavior and credential/auth failures in V1.
+Use this runbook for Gmail connector behavior and credential/auth failures in V1.
 
 ## Scope (V1 Today)
 
 - Gmail connector exists as a normalization scaffold plus credential smoke script.
-- LinkedIn connector is manual/stub mode only (no always-on authenticated pull path).
 
 ## 1) Fast Environment Checks
 
@@ -60,7 +59,6 @@ docker compose logs --tail=150 worker
 Expected V1 connector log patterns:
 
 - Gmail scaffold with no manual payload: `gmail_pull_stub`
-- LinkedIn scaffold/manual mode: `linkedin_pull_stub_manual_mode`
 - Worker loop tick: `email_triage_job_tick`, `digest_job_tick`, `study_job_tick`
 
 If `worker_job_failed` appears:
@@ -108,16 +106,10 @@ to process valid payloads.
 Categories:
 
 - Gmail: `missing_id`, `invalid_payload`
-- LinkedIn: `missing_id`, `invalid_payload`
 
 Where to inspect:
 
 - Worker log event `email_triage_job_tick` includes `normalization_failures`.
-- LinkedIn ingest endpoint response includes:
-  - `failed_event_count`
-  - `normalization_failures`
-
 ## 6) Notes for Incident Triage
 
 - For Gmail issues, the `check-gmail-auth.py` output is the fastest discriminator between env/config errors and upstream API errors.
-- For LinkedIn, `linkedin_pull_stub_manual_mode` is expected in current V1 and does not indicate broken auth.

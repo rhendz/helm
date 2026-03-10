@@ -79,14 +79,3 @@ Suggested issues:
 2. Error classification and retry policy.
 3. Admin reprocess endpoints.
 4. Operator runbook for incident/debug loop.
-
-## Initiative 8: LinkedIn Feasibility (Optional V1.x)
-
-Goal: decide integration path or defer explicitly.
-
-Suggested issues:
-
-1. Evaluate ingest options + legal/operational constraints.
-2. Implement manual ingest fallback path.
-3. Define go/no-go decision with explicit criteria.
-
