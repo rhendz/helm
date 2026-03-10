@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from app.config import Settings
 from app.schemas.session import ReviewResult
@@ -14,17 +15,26 @@ class LLMClient:
         self._model = settings.openai_model
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
-        response = self._client.responses.create(
-            model=self._model,
-            input=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        text = getattr(response, "output_text", "").strip()
-        if text:
-            return text
-        return str(response)
+        error: Exception | None = None
+        for attempt in range(2):
+            try:
+                response = self._client.responses.create(
+                    model=self._model,
+                    input=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                text = getattr(response, "output_text", "").strip()
+                if text:
+                    return text
+                return str(response)
+            except Exception as exc:
+                error = exc
+                if attempt == 0:
+                    time.sleep(0.5)
+        assert error is not None
+        raise error
 
     def teach_concept(self, payload: str) -> str:
         return self.complete(
@@ -77,10 +87,16 @@ class LLMClient:
             )
 
     def run_checkin_summary(self, payload: str) -> str:
-        return self.complete(
-            load_prompt("system.md") + "\n\n" + load_prompt("checkin.md"),
-            payload,
-        )
+        try:
+            return self.complete(
+                load_prompt("system.md") + "\n\n" + load_prompt("checkin.md"),
+                payload,
+            )
+        except Exception:
+            return (
+                "Keep the next week simple: focus on the highest-priority course first, "
+                "reduce unrealistic cadence, and revisit the topic you explicitly marked shaky."
+            )
 
 
 def _extract_json(raw: str) -> str:

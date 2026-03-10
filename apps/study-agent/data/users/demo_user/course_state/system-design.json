@@ -1,4 +1,5 @@
 {
+  "schema_version": 3,
   "course_id": "system-design",
   "title": "System Design",
   "goal": "Prepare for senior software engineering system design interviews.",
@@ -11,8 +12,10 @@
   },
   "adherence": {
     "scheduled": 6,
-    "completed": 4,
+    "completed_full": 3,
+    "completed_lite": 1,
     "missed": 2,
+    "abandoned": 0,
     "miss_streak": 1,
     "recent_miss_reasons": [
       "Late work block"
@@ -25,11 +28,32 @@
       "state": "shaky",
       "mastery": 0.42,
       "confidence": "low",
+      "cooldown_until": null,
       "last_seen": "2026-03-07",
       "next_review": "2026-03-09",
       "weak_signals": [
         "Cache invalidation tradeoffs",
         "When write-through helps"
+      ],
+      "recent_history": [
+        {
+          "date": "2026-03-07",
+          "mode": "full",
+          "score": 0.41,
+          "weak_signals": [
+            "Cache invalidation tradeoffs"
+          ],
+          "outcome": "completed_full"
+        },
+        {
+          "date": "2026-03-04",
+          "mode": "lite",
+          "score": 0.35,
+          "weak_signals": [
+            "When write-through helps"
+          ],
+          "outcome": "completed_lite"
+        }
       ]
     },
     {
@@ -38,11 +62,13 @@
       "state": "learning",
       "mastery": 0.5,
       "confidence": "medium",
+      "cooldown_until": null,
       "last_seen": "2026-03-05",
       "next_review": "2026-03-12",
       "weak_signals": [
         "Health check behavior"
-      ]
+      ],
+      "recent_history": []
     },
     {
       "id": "sql-vs-nosql",
@@ -50,9 +76,11 @@
       "state": "learning",
       "mastery": 0.55,
       "confidence": "medium",
+      "cooldown_until": null,
       "last_seen": "2026-03-03",
       "next_review": "2026-03-13",
-      "weak_signals": []
+      "weak_signals": [],
+      "recent_history": []
     },
     {
       "id": "queues-and-async-processing",
@@ -60,9 +88,11 @@
       "state": "unseen",
       "mastery": 0.15,
       "confidence": "low",
+      "cooldown_until": null,
       "last_seen": null,
       "next_review": null,
-      "weak_signals": []
+      "weak_signals": [],
+      "recent_history": []
     },
     {
       "id": "consistency-basics",
@@ -70,10 +100,22 @@
       "state": "learning",
       "mastery": 0.4,
       "confidence": "low",
+      "cooldown_until": null,
       "last_seen": "2026-03-01",
       "next_review": "2026-03-10",
       "weak_signals": [
         "Eventual consistency examples"
+      ],
+      "recent_history": [
+        {
+          "date": "2026-03-01",
+          "mode": "full",
+          "score": 0.38,
+          "weak_signals": [
+            "Eventual consistency examples"
+          ],
+          "outcome": "completed_full"
+        }
       ]
     }
   ],
