@@ -18,6 +18,7 @@ from helm_telegram_bot.commands import (
     tasks,
     thread,
     threads,
+    threads_label,
 )
 from helm_telegram_bot.config import get_settings
 
@@ -46,6 +47,7 @@ def main() -> None:
     application.add_handler(CommandHandler("tasks", tasks.handle))
     application.add_handler(CommandHandler("thread", thread.handle))
     application.add_handler(CommandHandler("threads", threads.handle))
+    application.add_handler(CommandHandler("threads_label", threads_label.handle))
 
     logger.info("telegram_bot_started")
     application.run_polling()
