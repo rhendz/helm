@@ -14,6 +14,7 @@ from helm_telegram_bot.commands import (
     snooze,
     start,
     study,
+    tasks,
     thread,
 )
 from helm_telegram_bot.config import get_settings
@@ -39,6 +40,7 @@ def main() -> None:
     application.add_handler(CommandHandler("resolve", resolve.handle))
     application.add_handler(CommandHandler("review", review.handle))
     application.add_handler(CommandHandler("reviews", reviews.handle))
+    application.add_handler(CommandHandler("tasks", tasks.handle))
     application.add_handler(CommandHandler("thread", thread.handle))
 
     logger.info("telegram_bot_started")

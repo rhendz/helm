@@ -38,6 +38,16 @@ class ThreadDetailView:
     action_reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ScheduledTaskView:
+    id: int
+    email_thread_id: int
+    task_type: str
+    due_at: datetime
+    status: str
+    reason: str | None
+
+
 class TelegramCommandService:
     def list_open_actions(self, *, limit: int = 5) -> list[object]:
         return list_open_actions(limit=limit, runtime=build_helm_runtime())
@@ -64,6 +74,25 @@ class TelegramCommandService:
             if len(results) >= limit:
                 break
         return results
+
+    def list_scheduled_tasks(
+        self,
+        *,
+        limit: int = 5,
+        status: str = "pending",
+    ) -> list[ScheduledTaskView]:
+        items = build_helm_runtime().list_scheduled_tasks(status=status, limit=limit)
+        return [
+            ScheduledTaskView(
+                id=item["id"],
+                email_thread_id=item["email_thread_id"],
+                task_type=item["task_type"],
+                due_at=item["due_at"],
+                status=item["status"],
+                reason=item.get("reason"),
+            )
+            for item in items
+        ]
 
     def get_thread_detail(self, thread_id: int) -> ThreadDetailView | None:
         detail = build_helm_runtime().get_email_thread_detail(thread_id=thread_id)
