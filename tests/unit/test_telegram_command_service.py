@@ -431,9 +431,23 @@ def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
                     "business_state": "waiting_on_user",
                     "visible_labels": ["Action"],
                     "current_summary": "Reply to recruiter",
+                    "latest_confidence_band": "high",
                     "action_reason": "reply_needed",
-                }
-            }
+                },
+                "proposals": [{"proposal_type": "reply", "status": "proposed"}],
+                "drafts": [{"approval_status": "pending_user", "preview": "Draft reply preview"}],
+                "messages": [
+                    {
+                        "from_address": "founder@example.com",
+                        "subject": "Checking in",
+                        "snippet": "Wanted to follow up.",
+                    }
+                ],
+            },
+            "list_scheduled_tasks_for_thread": lambda self, *, thread_id: [
+                {"status": "pending"},
+                {"status": "completed"},
+            ],
         },
     )()
     monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
@@ -444,6 +458,11 @@ def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
     assert result is not None
     assert result.id == 5
     assert result.visible_labels == ["Action"]
+    assert result.latest_confidence_band == "high"
+    assert result.latest_proposal_type == "reply"
+    assert result.latest_draft_approval_status == "pending_user"
+    assert result.latest_message_from == "founder@example.com"
+    assert result.pending_task_count == 1
 
 
 def test_list_review_threads_filters_results(monkeypatch) -> None:  # noqa: ANN001
