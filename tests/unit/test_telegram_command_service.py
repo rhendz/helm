@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from email_agent.operator import ActionView, DraftTransitionResult, DraftView
 from helm_telegram_bot.services import command_service
 
@@ -123,3 +125,26 @@ def test_snooze_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
 
     assert result.ok is False
     assert result.message == "Draft 3 is approved; cannot snooze."
+
+
+def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(
+        command_service,
+        "create_thread_reminder",
+        lambda **kwargs: type(
+            "Result",
+            (),
+            {"status": "accepted", "task_id": 12, "reason": None},
+        )(),
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.create_thread_task(
+        thread_id=7,
+        due_at=datetime(2026, 1, 3, 9, 0, tzinfo=UTC),
+        task_type="reminder",
+    )
+
+    assert result.ok is True
+    assert result.message == "Created reminder task 12 for thread 7."
