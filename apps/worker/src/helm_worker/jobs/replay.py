@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from email_agent.triage import process_inbound_email_message
 from email_agent.types import EmailMessage
 from helm_observability.agent_runs import record_agent_run
@@ -10,12 +12,19 @@ from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger("helm_worker.jobs.replay")
 MAX_REPLAY_ATTEMPTS = 3
+STALE_PROCESSING_TIMEOUT = timedelta(minutes=15)
 
 
 def run() -> None:
     try:
         with SessionLocal() as session:
             repository = SQLAlchemyReplayQueueRepository(session)
+            reclaimed = repository.reclaim_stale_processing(
+                stale_before=_utcnow() - STALE_PROCESSING_TIMEOUT,
+                limit=10,
+            )
+            if reclaimed:
+                logger.info("replay_queue_reclaimed_stale_processing", count=len(reclaimed))
             pending = repository.list_pending(limit=10)
             pending_ids = [item.id for item in pending]
     except SQLAlchemyError:
@@ -103,3 +112,7 @@ def _replay_email_message(*, source_id: str | None) -> None:
         ),
         runtime=build_email_agent_runtime(),
     )
+
+
+def _utcnow() -> datetime:
+    return datetime.utcnow()

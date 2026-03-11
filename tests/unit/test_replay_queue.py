@@ -107,6 +107,109 @@ def test_replay_worker_dead_letters_after_repeated_failures(monkeypatch) -> None
     assert replay_row.last_error is not None
 
 
+def test_reclaim_stale_processing_resets_items_to_pending() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        replay_repo = SQLAlchemyReplayQueueRepository(session)
+        replay_item, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=444,
+            source_type="worker",
+            source_id="scheduler",
+        )
+        replay_repo.mark_processing(replay_item.id)
+        row = replay_repo.get_by_id(replay_item.id)
+        assert row is not None
+        row.updated_at = datetime(2026, 3, 10, 0, 0, tzinfo=UTC)
+        session.add(row)
+        session.commit()
+
+        reclaimed = replay_repo.reclaim_stale_processing(
+            stale_before=datetime(2026, 3, 10, 12, 0, tzinfo=UTC),
+            limit=10,
+        )
+
+    assert [item.id for item in reclaimed] == [replay_item.id]
+
+    with Session(engine) as session:
+        replay_row = session.execute(
+            select(ReplayQueueORM).where(ReplayQueueORM.id == replay_item.id)
+        ).scalar_one()
+
+    assert replay_row.status == "pending"
+    assert replay_row.attempts == 1
+
+
+def test_replay_worker_reclaims_stale_processing_before_retry(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(replay_job, "SessionLocal", session_local)
+    monkeypatch.setattr(agent_run_observability, "SessionLocal", session_local)
+    monkeypatch.setattr(
+        replay_job,
+        "_utcnow",
+        lambda: datetime(2026, 3, 10, 12, 0, tzinfo=UTC),
+    )
+
+    with Session(engine) as session:
+        message_repo = SQLAlchemyEmailMessageRepository(session)
+        message_repo.upsert_from_normalized(
+            type(
+                "Message",
+                (),
+                {
+                    "provider_message_id": "msg-replay-stale",
+                    "provider_thread_id": "thr-replay-stale",
+                    "from_address": "sender@example.com",
+                    "subject": "Replay stale",
+                    "body_text": "Retry me",
+                    "received_at": datetime(2026, 3, 10, 10, 0, tzinfo=UTC),
+                    "normalized_at": datetime(2026, 3, 10, 10, 1, tzinfo=UTC),
+                    "source": "gmail",
+                },
+            )(),
+            direction="inbound",
+        )
+        replay_repo = SQLAlchemyReplayQueueRepository(session)
+        replay_item, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=555,
+            source_type="email_message",
+            source_id="msg-replay-stale",
+        )
+        replay_repo.mark_processing(replay_item.id)
+        row = replay_repo.get_by_id(replay_item.id)
+        assert row is not None
+        row.updated_at = datetime(2026, 3, 10, 10, 30, tzinfo=UTC)
+        session.add(row)
+        session.commit()
+        replay_item_id = replay_item.id
+
+    monkeypatch.setattr(replay_job, "build_email_agent_runtime", lambda: object())
+    seen: dict[str, str] = {}
+
+    def fake_process_inbound_email_message(message, *, runtime):  # noqa: ANN001
+        seen["provider_message_id"] = message.provider_message_id
+
+    monkeypatch.setattr(
+        replay_job,
+        "process_inbound_email_message",
+        fake_process_inbound_email_message,
+    )
+
+    replay_job.run()
+
+    with Session(engine) as session:
+        replay_row = session.execute(
+            select(ReplayQueueORM).where(ReplayQueueORM.id == replay_item_id)
+        ).scalar_one()
+
+    assert seen == {"provider_message_id": "msg-replay-stale"}
+    assert replay_row.status == "completed"
+    assert replay_row.attempts == 2
+
+
 def test_replay_worker_replays_failed_email_triage_run(monkeypatch) -> None:  # noqa: ANN001
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
