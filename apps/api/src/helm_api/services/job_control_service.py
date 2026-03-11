@@ -3,14 +3,17 @@ from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepositor
 from sqlalchemy.exc import SQLAlchemyError
 
 
-def list_job_controls() -> list[dict[str, object]]:
+def list_job_controls(*, paused: bool | None = None) -> list[dict[str, object]]:
     try:
         with SessionLocal() as session:
             repository = SQLAlchemyJobControlRepository(session)
-            return [
+            items = [
                 {"job_name": row.job_name, "paused": bool(row.paused)}
                 for row in repository.list_all()
             ]
+            if paused is None:
+                return items
+            return [item for item in items if bool(item["paused"]) is paused]
     except SQLAlchemyError:
         return []
 
