@@ -798,8 +798,39 @@ async def test_job_command_formats_single_item(monkeypatch: pytest.MonkeyPatch) 
         "Job replay\n"
         "Status: paused\n"
         "List: /jobs\n"
+        "Action: /resume_job replay\n"
         "Run: /run_replay [limit]\n"
         "Note: bounded manual trigger"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_job_command_formats_active_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_job_control(self, job_name: str) -> JobControlView | None:
+            assert job_name == "email_triage"
+            return JobControlView(
+                job_name="email_triage",
+                paused=False,
+                run_command="/run_job email_triage",
+                note=None,
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job, "_service", _Service())
+    update = _Update()
+
+    await job.handle(update, _Context(args=["email_triage"]))
+
+    assert update.message.replies == [
+        "Job email_triage\n"
+        "Status: active\n"
+        "List: /jobs\n"
+        "Action: /pause_job email_triage\n"
+        "Run: /run_job email_triage"
     ]
 
 
