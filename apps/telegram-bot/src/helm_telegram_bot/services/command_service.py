@@ -19,6 +19,7 @@ from email_agent.thread_state import transition_for_needs_review, transition_for
 from helm_observability.logging import get_logger
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_worker.jobs import replay as replay_job
+from helm_worker.jobs.control import is_job_paused
 
 logger = get_logger("helm_telegram_bot.services.command_service")
 
@@ -624,6 +625,11 @@ class TelegramCommandService:
             return ThreadTaskTransitionResult(
                 ok=False,
                 message="Replay limit must be a positive integer.",
+            )
+        if is_job_paused("replay"):
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message="Replay job is paused; resume it before running replay manually.",
             )
         processed_count = replay_job.run(limit=limit)
         return ThreadTaskTransitionResult(
