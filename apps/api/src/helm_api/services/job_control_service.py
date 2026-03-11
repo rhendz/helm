@@ -2,32 +2,54 @@ from helm_storage.db import SessionLocal
 from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepository
 from sqlalchemy.exc import SQLAlchemyError
 
+KNOWN_JOB_NAMES = (
+    "digest",
+    "email_deep_seed",
+    "email_followup_scan",
+    "email_reconciliation_sweep",
+    "email_send_recovery",
+    "email_triage",
+    "replay",
+    "scheduled_thread_tasks",
+)
+
+
+def _build_job_control(*, job_name: str, paused: bool) -> dict[str, object]:
+    return {"job_name": job_name, "paused": paused}
+
 
 def list_job_controls(*, paused: bool | None = None) -> list[dict[str, object]]:
+    persisted: dict[str, bool] = {}
     try:
         with SessionLocal() as session:
             repository = SQLAlchemyJobControlRepository(session)
-            items = [
-                {"job_name": row.job_name, "paused": bool(row.paused)}
-                for row in repository.list_all()
-            ]
-            if paused is None:
-                return items
-            return [item for item in items if bool(item["paused"]) is paused]
+            persisted = {
+                row.job_name: bool(row.paused) for row in repository.list_all()
+            }
     except SQLAlchemyError:
-        return []
+        persisted = {}
+
+    items = [
+        _build_job_control(job_name=job_name, paused=persisted.get(job_name, False))
+        for job_name in KNOWN_JOB_NAMES
+    ]
+    if paused is None:
+        return items
+    return [item for item in items if bool(item["paused"]) is paused]
 
 
 def get_job_control(*, job_name: str) -> dict[str, object] | None:
+    if job_name not in KNOWN_JOB_NAMES:
+        return None
     try:
         with SessionLocal() as session:
             repository = SQLAlchemyJobControlRepository(session)
             row = repository.get_by_job_name(job_name)
             if row is None:
-                return None
-            return {"job_name": row.job_name, "paused": bool(row.paused)}
+                return _build_job_control(job_name=job_name, paused=False)
+            return _build_job_control(job_name=row.job_name, paused=bool(row.paused))
     except SQLAlchemyError:
-        return None
+        return _build_job_control(job_name=job_name, paused=False)
 
 
 def set_job_pause(*, job_name: str, paused: bool) -> dict[str, object]:
