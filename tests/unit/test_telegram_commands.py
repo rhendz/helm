@@ -835,6 +835,36 @@ async def test_job_command_formats_active_item(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
+async def test_job_command_formats_non_runnable_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_job_control(self, job_name: str) -> JobControlView | None:
+            assert job_name == "some_job"
+            return JobControlView(
+                job_name="some_job",
+                paused=False,
+                run_command=None,
+                note=None,
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job, "_service", _Service())
+    update = _Update()
+
+    await job.handle(update, _Context(args=["some_job"]))
+
+    assert update.message.replies == [
+        "Job some_job\n"
+        "Status: active\n"
+        "List: /jobs\n"
+        "Action: /pause_job some_job\n"
+        "Run: unavailable"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_job_command_surfaces_unknown_job(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def get_job_control(self, job_name: str) -> JobControlView | None:
