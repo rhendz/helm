@@ -277,8 +277,63 @@ def test_pull_changed_messages_bootstraps_to_poll_when_cursor_missing(
     report = pull_changed_messages_report(last_history_cursor=None)
 
     assert report.mode == "bootstrap"
+    assert report.recovery_reason == "missing_history_cursor"
     assert report.next_history_cursor == "cursor-bootstrap"
     assert [message.provider_message_id for message in report.messages] == ["msg-bootstrap"]
+
+
+def test_pull_changed_messages_falls_back_when_history_cursor_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name, value in {
+        "GMAIL_CLIENT_ID": "id",
+        "GMAIL_CLIENT_SECRET": "secret",
+        "GMAIL_REFRESH_TOKEN": "refresh",
+        "GMAIL_USER_EMAIL": "me@example.com",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+    class FakeResponse:
+        status = 404
+
+    class FakeHistoryError(Exception):
+        def __init__(self) -> None:
+            super().__init__("startHistoryId is invalid")
+            self.resp = FakeResponse()
+
+    monkeypatch.setattr(gmail, "_build_gmail_service", lambda: object())
+    monkeypatch.setattr(
+        gmail,
+        "_list_changed_message_ids",
+        lambda service, *, start_history_cursor: (_ for _ in ()).throw(FakeHistoryError()),
+    )
+    monkeypatch.setattr(
+        gmail,
+        "pull_new_messages_report",
+        lambda manual_payload=None: gmail.PullMessagesReport(
+            messages=[
+                normalize_message(
+                    {
+                        "id": "msg-recovery",
+                        "threadId": "thr-recovery",
+                        "from": "recovery@example.com",
+                        "subject": "Recovery",
+                        "body_text": "Polled after mismatch",
+                    }
+                )
+            ],
+            failure_counts={},
+            next_history_cursor="cursor-recovered",
+            mode="poll",
+        ),
+    )
+
+    report = pull_changed_messages_report(last_history_cursor="cursor-old")
+
+    assert report.mode == "recovery_poll"
+    assert report.recovery_reason == "history_cursor_invalid"
+    assert report.next_history_cursor == "cursor-recovered"
+    assert [message.provider_message_id for message in report.messages] == ["msg-recovery"]
 
 
 def test_email_triage_graph_scaffold_result_shape() -> None:
