@@ -391,12 +391,6 @@ class JobControlListResponse(BaseModel):
     items: list[JobControlResponse]
 
 
-class JobRunResponse(BaseModel):
-    status: str
-    job_name: str
-    reason: str | None = None
-
-
 class ReplayJobRunRequest(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
 

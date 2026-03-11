@@ -5,14 +5,12 @@ from fastapi import APIRouter, HTTPException
 from helm_api.schemas import (
     JobControlListResponse,
     JobControlResponse,
-    JobRunResponse,
     ReplayJobRunRequest,
     ReplayJobRunResponse,
 )
 from helm_api.services.job_control_service import (
     get_job_control,
     list_job_controls,
-    run_job,
     run_replay_job,
     set_job_pause,
 )
@@ -41,11 +39,6 @@ def get_job_control_detail(job_name: str) -> JobControlResponse:
 @router.post("/replay/run", response_model=ReplayJobRunResponse)
 def run_replay(payload: ReplayJobRunRequest) -> ReplayJobRunResponse:
     return ReplayJobRunResponse(**run_replay_job(limit=payload.limit))
-
-
-@router.post("/{job_name}/run", response_model=JobRunResponse)
-def run_job_route(job_name: str) -> JobRunResponse:
-    return JobRunResponse(**run_job(job_name=job_name))
 
 
 @router.post("/{job_name}/pause", response_model=JobControlResponse)

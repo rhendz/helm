@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from email_agent import replay_queue as replay_queue_runner
 from helm_api.services import replay_service
 from helm_observability import agent_runs as agent_run_observability
 from helm_storage.db import Base
@@ -149,7 +150,7 @@ def test_replay_worker_reclaims_stale_processing_before_retry(monkeypatch) -> No
     monkeypatch.setattr(replay_job, "SessionLocal", session_local)
     monkeypatch.setattr(agent_run_observability, "SessionLocal", session_local)
     monkeypatch.setattr(
-        replay_job,
+        replay_queue_runner,
         "_utcnow",
         lambda: datetime(2026, 3, 10, 12, 0, tzinfo=UTC),
     )
@@ -194,7 +195,7 @@ def test_replay_worker_reclaims_stale_processing_before_retry(monkeypatch) -> No
         seen["provider_message_id"] = message.provider_message_id
 
     monkeypatch.setattr(
-        replay_job,
+        replay_queue_runner,
         "process_inbound_email_message",
         fake_process_inbound_email_message,
     )
@@ -257,7 +258,7 @@ def test_replay_worker_replays_failed_email_triage_run(monkeypatch) -> None:  # 
         seen["provider_message_id"] = message.provider_message_id
 
     monkeypatch.setattr(
-        replay_job,
+        replay_queue_runner,
         "process_inbound_email_message",
         fake_process_inbound_email_message,
     )
