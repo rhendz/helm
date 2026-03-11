@@ -11,12 +11,15 @@ from helm_storage.repositories.classification_artifacts import (
 )
 from helm_storage.repositories.contracts import (
     EmailDraftContentPatch,
+    EmailSendAttemptPatch,
     NewActionProposal,
     NewClassificationArtifact,
     NewDigestItem,
     NewDraftReasoningArtifact,
     NewEmailDraft,
+    NewEmailSendAttempt,
     NewEmailThread,
+    NewOutboundEmailMessage,
     NewScheduledThreadTask,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
@@ -28,6 +31,7 @@ from helm_storage.repositories.draft_transition_audits import (
 )
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
+from helm_storage.repositories.email_send_attempts import SQLAlchemyEmailSendAttemptRepository
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
 from sqlalchemy.orm import Session
@@ -41,6 +45,7 @@ from email_agent.runtime import (
     ProposalRecord,
     RunRecord,
     ScheduledTaskRecord,
+    SendAttemptRecord,
     ThreadRecord,
 )
 
@@ -296,6 +301,7 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 "draft_body": record.draft_body,
                 "draft_subject": record.draft_subject,
                 "draft_reasoning_artifact_ref": record.draft_reasoning_artifact_ref,
+                "final_sent_message_id": record.final_sent_message_id,
             }
 
     def list_draft_reasoning_artifacts_for_draft(self, *, draft_id: int) -> list[dict]:
@@ -324,11 +330,47 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 for row in records
             ]
 
+    def list_send_attempts_for_draft(self, *, draft_id: int) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyEmailSendAttemptRepository(session).list_for_draft(
+                draft_id=draft_id,
+            )
+            return [
+                {
+                    "id": row.id,
+                    "draft_id": row.draft_id,
+                    "email_thread_id": row.email_thread_id,
+                    "attempt_number": row.attempt_number,
+                    "status": row.status,
+                    "failure_class": row.failure_class,
+                    "failure_message": row.failure_message,
+                    "provider_error_code": row.provider_error_code,
+                    "provider_message_id": row.provider_message_id,
+                    "started_at": row.started_at,
+                    "completed_at": row.completed_at,
+                }
+                for row in records
+            ]
+
     def set_email_draft_approval_status(self, draft_id: int, *, approval_status: str) -> bool:
         with self.session_factory() as session:
             return SQLAlchemyEmailDraftRepository(session).set_approval_status(
                 draft_id,
                 approval_status=approval_status,
+            )
+
+    def set_email_draft_status(self, draft_id: int, *, status: str) -> bool:
+        with self.session_factory() as session:
+            return SQLAlchemyEmailDraftRepository(session).set_status(
+                draft_id,
+                status=status,
+            )
+
+    def set_email_draft_final_sent_message(self, draft_id: int, *, message_id: int) -> bool:
+        with self.session_factory() as session:
+            return SQLAlchemyEmailDraftRepository(session).set_final_sent_message(
+                draft_id,
+                message_id=message_id,
             )
 
     def create_draft_transition_audit(
@@ -385,6 +427,96 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 )
             )
             return DigestRecord(id=record.id)
+
+    def get_send_attempt_count_for_draft(self, *, draft_id: int) -> int:
+        with self.session_factory() as session:
+            return SQLAlchemyEmailSendAttemptRepository(session).count_for_draft(draft_id=draft_id)
+
+    def has_successful_send_for_draft(self, *, draft_id: int) -> bool:
+        with self.session_factory() as session:
+            return (
+                SQLAlchemyEmailSendAttemptRepository(session).get_success_for_draft(
+                    draft_id=draft_id,
+                )
+                is not None
+            )
+
+    def create_send_attempt(
+        self,
+        *,
+        draft_id: int,
+        email_thread_id: int,
+        attempt_number: int,
+        started_at: datetime,
+    ) -> SendAttemptRecord:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailSendAttemptRepository(session).create(
+                NewEmailSendAttempt(
+                    draft_id=draft_id,
+                    email_thread_id=email_thread_id,
+                    attempt_number=attempt_number,
+                    started_at=started_at,
+                )
+            )
+            return SendAttemptRecord(id=record.id)
+
+    def complete_send_attempt(
+        self,
+        *,
+        attempt_id: int,
+        status: str,
+        completed_at: datetime,
+        failure_class: str | None = None,
+        failure_message: str | None = None,
+        provider_error_code: str | None = None,
+        provider_message_id: str | None = None,
+    ) -> SendAttemptRecord | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailSendAttemptRepository(session).update(
+                attempt_id,
+                EmailSendAttemptPatch(
+                    status=status,
+                    completed_at=completed_at,
+                    failure_class=failure_class,
+                    failure_message=failure_message,
+                    provider_error_code=provider_error_code,
+                    provider_message_id=provider_message_id,
+                ),
+            )
+            return SendAttemptRecord(id=record.id) if record is not None else None
+
+    def create_outbound_email_message(
+        self,
+        *,
+        provider_message_id: str,
+        provider_thread_id: str,
+        email_thread_id: int,
+        source_draft_id: int,
+        from_address: str,
+        to_addresses: tuple[str, ...],
+        subject: str,
+        body_text: str,
+        received_at: datetime,
+        normalized_at: datetime,
+        source: str,
+    ) -> MessageRecord:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailMessageRepository(session).create_outbound(
+                NewOutboundEmailMessage(
+                    provider_message_id=provider_message_id,
+                    provider_thread_id=provider_thread_id,
+                    email_thread_id=email_thread_id,
+                    source_draft_id=source_draft_id,
+                    from_address=from_address,
+                    to_addresses=to_addresses,
+                    subject=subject,
+                    body_text=body_text,
+                    received_at=received_at,
+                    normalized_at=normalized_at,
+                    source=source,
+                )
+            )
+            return MessageRecord(id=record.id)
 
     def list_due_tasks(
         self,

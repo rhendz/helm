@@ -5,11 +5,13 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from email.message import EmailMessage as MIMEEmailMessage
 from typing import Any
 
 from helm_observability.logging import get_logger
 
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 _GMAIL_REQUIRED_ENV_VARS = (
     "GMAIL_CLIENT_ID",
     "GMAIL_CLIENT_SECRET",
@@ -39,6 +41,31 @@ class NormalizedGmailMessage:
     received_at: datetime
     normalized_at: datetime
     source: str = "gmail"
+
+
+@dataclass(slots=True, frozen=True)
+class GmailSendResult:
+    provider_message_id: str
+    provider_thread_id: str
+    from_address: str
+    to_address: str
+    subject: str
+    body_text: str
+    sent_at: datetime
+    source: str = "gmail"
+
+
+class GmailSendError(Exception):
+    def __init__(
+        self,
+        failure_class: str,
+        message: str,
+        *,
+        provider_error_code: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.failure_class = failure_class
+        self.provider_error_code = provider_error_code
 
 
 def _parse_received_at(value: Any, *, fallback: datetime) -> datetime:
@@ -165,7 +192,7 @@ def _require_env(name: str) -> str:
     raise ValueError(f"Missing required environment variable: {name}")
 
 
-def _build_refreshed_credentials() -> Any:
+def _build_refreshed_credentials(*, scopes: list[str] | None = None) -> Any:
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
 
@@ -175,16 +202,16 @@ def _build_refreshed_credentials() -> Any:
         token_uri="https://oauth2.googleapis.com/token",
         client_id=_require_env("GMAIL_CLIENT_ID"),
         client_secret=_require_env("GMAIL_CLIENT_SECRET"),
-        scopes=[GMAIL_SCOPE],
+        scopes=scopes or [GMAIL_SCOPE],
     )
     credentials.refresh(Request())
     return credentials
 
 
-def _build_gmail_service() -> Any:
+def _build_gmail_service(*, scopes: list[str] | None = None) -> Any:
     from googleapiclient.discovery import build
 
-    credentials = _build_refreshed_credentials()
+    credentials = _build_refreshed_credentials(scopes=scopes)
     return build("gmail", "v1", credentials=credentials, cache_discovery=False)
 
 
@@ -293,3 +320,95 @@ def pull_new_messages_report(
         failure_counts=failure_counts,
     )
     return PullMessagesReport(messages=normalized_messages, failure_counts=failure_counts)
+
+
+def send_reply(
+    *,
+    provider_thread_id: str,
+    to_address: str,
+    subject: str,
+    body_text: str,
+) -> GmailSendResult:
+    to_address = to_address.strip()
+    if not to_address:
+        raise GmailSendError("invalid_recipient", "Reply recipient is required.")
+    if not body_text.strip():
+        raise GmailSendError("invalid_payload", "Reply body is required.")
+
+    try:
+        service = _build_gmail_service(scopes=[GMAIL_SEND_SCOPE])
+    except ImportError as exc:
+        raise GmailSendError("auth_error", "Gmail send dependencies are unavailable.") from exc
+    except ValueError as exc:
+        raise GmailSendError("auth_error", str(exc)) from exc
+    except Exception as exc:
+        raise GmailSendError("auth_error", f"Gmail send authentication failed: {exc}") from exc
+
+    sender = _require_env("GMAIL_USER_EMAIL")
+    message = MIMEEmailMessage()
+    message["To"] = to_address
+    message["From"] = sender
+    message["Subject"] = subject
+    message.set_content(body_text)
+
+    raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
+    payload: dict[str, object] = {"raw": raw_message}
+    if provider_thread_id:
+        payload["threadId"] = provider_thread_id
+
+    try:
+        response = (
+            service.users()
+            .messages()
+            .send(userId="me", body=payload)
+            .execute()
+        )
+    except TimeoutError as exc:
+        raise GmailSendError("timeout", "Gmail send timed out.") from exc
+    except ConnectionError as exc:
+        raise GmailSendError("connection_error", "Gmail send connection failed.") from exc
+    except Exception as exc:
+        _raise_send_error(exc)
+
+    provider_message_id = str(response.get("id", "")).strip()
+    if not provider_message_id:
+        raise GmailSendError(
+            "unknown_delivery_state",
+            "Gmail send did not return a provider message id.",
+        )
+    provider_thread_id = (
+        str(response.get("threadId", provider_thread_id)).strip() or provider_thread_id
+    )
+    return GmailSendResult(
+        provider_message_id=provider_message_id,
+        provider_thread_id=provider_thread_id,
+        from_address=sender,
+        to_address=to_address,
+        subject=subject,
+        body_text=body_text,
+        sent_at=datetime.now(tz=UTC),
+    )
+
+
+def _raise_send_error(exc: Exception) -> None:
+    status = _http_status(exc)
+    message = str(exc)
+    message_lower = message.lower()
+    if status == 429:
+        raise GmailSendError("rate_limited", message, provider_error_code="429") from exc
+    if status is not None and 500 <= status <= 599:
+        raise GmailSendError("provider_5xx", message, provider_error_code=str(status)) from exc
+    if status in {401, 403}:
+        raise GmailSendError("auth_error", message, provider_error_code=str(status)) from exc
+    if status is not None and 400 <= status <= 499:
+        failure_class = "invalid_payload"
+        if "recipient" in message_lower or "invalid to" in message_lower:
+            failure_class = "invalid_recipient"
+        raise GmailSendError(failure_class, message, provider_error_code=str(status)) from exc
+    raise GmailSendError("unknown_delivery_state", message) from exc
+
+
+def _http_status(exc: Exception) -> int | None:
+    response = getattr(exc, "resp", None)
+    status = getattr(response, "status", None)
+    return status if isinstance(status, int) else None

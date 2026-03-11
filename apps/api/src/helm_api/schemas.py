@@ -80,6 +80,20 @@ class DraftReasoningArtifactResponse(BaseModel):
     created_at: datetime
 
 
+class EmailSendAttemptResponse(BaseModel):
+    id: int
+    draft_id: int
+    email_thread_id: int
+    attempt_number: int
+    status: str
+    failure_class: str | None = None
+    failure_message: str | None = None
+    provider_error_code: str | None = None
+    provider_message_id: str | None = None
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
 class EmailDraftDetailResponse(BaseModel):
     id: int
     email_thread_id: int
@@ -89,8 +103,10 @@ class EmailDraftDetailResponse(BaseModel):
     draft_body: str
     draft_subject: str | None = None
     draft_reasoning_artifact_ref: str | None = None
+    final_sent_message_id: int | None = None
     transition_audits: list[DraftTransitionAuditResponse] = Field(default_factory=list)
     reasoning_artifacts: list[DraftReasoningArtifactResponse] = Field(default_factory=list)
+    send_attempts: list[EmailSendAttemptResponse] = Field(default_factory=list)
 
 
 class EmailMessageResponse(BaseModel):
@@ -142,6 +158,16 @@ class EmailThreadReprocessResponse(BaseModel):
     reprocessed: bool
     reason: str | None = None
     workflow_status: str | None = None
+
+
+class SendDraftResponse(BaseModel):
+    status: str
+    draft_id: int
+    attempt_id: int | None
+    sent: bool
+    reason: str | None = None
+    warning: str | None = None
+    final_sent_message_id: int | None = None
 
 
 class EmailThreadOverrideRequest(BaseModel):

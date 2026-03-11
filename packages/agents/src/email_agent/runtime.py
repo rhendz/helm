@@ -63,6 +63,11 @@ class DraftReasoningArtifactRecord:
     artifact_ref: str
 
 
+@dataclass(slots=True, frozen=True)
+class SendAttemptRecord:
+    id: int
+
+
 class EmailAgentRuntime(Protocol):
     def start_run(
         self,
@@ -176,12 +181,18 @@ class EmailAgentRuntime(Protocol):
 
     def list_draft_transition_audits_for_draft(self, *, draft_id: int) -> list[dict]: ...
 
+    def list_send_attempts_for_draft(self, *, draft_id: int) -> list[dict]: ...
+
     def set_email_draft_approval_status(
         self,
         draft_id: int,
         *,
         approval_status: str,
     ) -> bool: ...
+
+    def set_email_draft_status(self, draft_id: int, *, status: str) -> bool: ...
+
+    def set_email_draft_final_sent_message(self, draft_id: int, *, message_id: int) -> bool: ...
 
     def create_draft_transition_audit(
         self,
@@ -210,6 +221,47 @@ class EmailAgentRuntime(Protocol):
         summary: str,
         priority: int,
     ) -> DigestRecord: ...
+
+    def get_send_attempt_count_for_draft(self, *, draft_id: int) -> int: ...
+
+    def has_successful_send_for_draft(self, *, draft_id: int) -> bool: ...
+
+    def create_send_attempt(
+        self,
+        *,
+        draft_id: int,
+        email_thread_id: int,
+        attempt_number: int,
+        started_at: datetime,
+    ) -> SendAttemptRecord: ...
+
+    def complete_send_attempt(
+        self,
+        *,
+        attempt_id: int,
+        status: str,
+        completed_at: datetime,
+        failure_class: str | None = None,
+        failure_message: str | None = None,
+        provider_error_code: str | None = None,
+        provider_message_id: str | None = None,
+    ) -> SendAttemptRecord | None: ...
+
+    def create_outbound_email_message(
+        self,
+        *,
+        provider_message_id: str,
+        provider_thread_id: str,
+        email_thread_id: int,
+        source_draft_id: int,
+        from_address: str,
+        to_addresses: tuple[str, ...],
+        subject: str,
+        body_text: str,
+        received_at: datetime,
+        normalized_at: datetime,
+        source: str,
+    ) -> MessageRecord: ...
 
     def list_due_tasks(
         self,

@@ -285,6 +285,31 @@ class DraftReasoningArtifactORM(Base):
     )
 
 
+class EmailSendAttemptORM(Base):
+    __tablename__ = "email_send_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    internal_uuid: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), unique=True
+    )
+    draft_id: Mapped[int] = mapped_column(ForeignKey("email_drafts.id", ondelete="CASCADE"))
+    email_thread_id: Mapped[int] = mapped_column(ForeignKey("email_threads.id", ondelete="CASCADE"))
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    failure_class: Mapped[str | None] = mapped_column(String(64))
+    failure_message: Mapped[str | None] = mapped_column(Text())
+    provider_error_code: Mapped[str | None] = mapped_column(String(64))
+    provider_message_id: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class ScheduledThreadTaskORM(Base):
     __tablename__ = "scheduled_thread_tasks"
 
