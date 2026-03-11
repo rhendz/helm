@@ -51,6 +51,7 @@ from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadReposit
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
 from sqlalchemy.orm import Session
 
+
 class HelmEmailAgentRuntime(EmailAgentRuntime):
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         self.session_factory = session_factory

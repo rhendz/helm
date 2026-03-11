@@ -93,7 +93,7 @@ What remains is â€œno more safe implementation without making decisions first.â€
 - Status: mostly decided
 - Why it is not fully safe yet:
   - follow-up timing and send retry semantics are now defined for v1
-  - remaining work is implementing the contract, not inventing it
+  - implementation should stay aligned to the locked contract as quality improves
 - What implementation this blocks:
   - `HELM-52`
   - any richer scheduling semantics beyond the simple default

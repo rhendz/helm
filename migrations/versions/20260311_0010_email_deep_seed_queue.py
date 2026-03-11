@@ -1,7 +1,7 @@
 """email deep seed queue
 
-Revision ID: 20260311_0009
-Revises: 20260311_0008
+Revision ID: 20260311_0010
+Revises: 20260311_0009
 Create Date: 2026-03-11 13:00:00.000000
 """
 
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "20260311_0009"
-down_revision: str | None = "20260311_0008"
+revision: str = "20260311_0010"
+down_revision: str | None = "20260311_0009"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
