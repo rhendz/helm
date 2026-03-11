@@ -12,6 +12,7 @@ from email_agent.query import (
     list_email_drafts,
     list_email_proposals,
     list_email_threads,
+    list_send_attempts_for_draft,
 )
 from email_agent.reminders import (
     complete_scheduled_task,
@@ -22,6 +23,7 @@ from email_agent.reminders import (
 )
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.seed import plan_seed_threads, summarize_seed_plan
+from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_human_override
 from email_agent.triage import build_email_triage_graph, process_inbound_email_message
 from email_agent.types import EmailMessage
@@ -201,6 +203,14 @@ def list_draft_transition_audits(*, draft_id: int) -> list[dict]:
 
 def list_draft_reasoning_artifacts(*, draft_id: int) -> list[dict]:
     return list_draft_reasoning_artifacts_for_draft(draft_id=draft_id, runtime=_runtime())
+
+
+def list_send_attempts(*, draft_id: int) -> list[dict]:
+    return list_send_attempts_for_draft(draft_id=draft_id, runtime=_runtime())
+
+
+def send_draft(*, draft_id: int) -> dict:
+    return asdict(send_approved_draft(draft_id=draft_id, runtime=_runtime()))
 
 
 def create_thread_task(

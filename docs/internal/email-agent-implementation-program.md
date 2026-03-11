@@ -53,7 +53,7 @@ Major gaps against the Email Agent System Definition:
 - no classification artifact or draft reasoning artifact persistence exists.
 - no metadata-first seed pipeline or selective deep-seed queue exists.
 - no stale follow-up scan exists.
-- no approval-before-send execution path exists.
+- manual approval-before-send execution exists, but worker-owned retry/recovery remains incomplete.
 - API and Telegram surfaces are still generic artifact views, not email-domain views.
 
 Implementation stance:
@@ -256,7 +256,7 @@ These should remain explicitly out of scope for the current implementation push 
 
 ### Wave 5
 - Telegram review/approval surfaces bound to email-domain objects
-- send execution path and failure-safe retry scaffolding
+- worker-owned send retry/recovery follow-through
 - richer artifact trace endpoints and runbook updates
 
 ## Architectural Pressure Notes

@@ -40,6 +40,8 @@ def test_routes_exist() -> None:
     assert client.get("/v1/email/drafts/999999").status_code == 404
     assert client.get("/v1/email/drafts/999999/transition-audits").status_code == 200
     assert client.get("/v1/email/drafts/999999/reasoning-artifacts").status_code == 200
+    assert client.get("/v1/email/drafts/999999/send-attempts").status_code == 200
+    assert client.post("/v1/email/drafts/999999/send").status_code == 200
     seed_plan_response = client.post(
         "/v1/email/seed/plan",
         json={

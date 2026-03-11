@@ -13,6 +13,7 @@ from helm_storage.models import (
     DraftReplyORM,
     EmailAgentConfigORM,
     EmailDraftORM,
+    EmailSendAttemptORM,
     EmailThreadORM,
     ScheduledThreadTaskORM,
 )
@@ -122,6 +123,45 @@ class NewDraftReasoningArtifact:
     reasoning_payload: dict[str, object]
     action_proposal_id: int | None = None
     refinement_metadata: dict[str, object] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewEmailSendAttempt:
+    draft_id: int
+    email_thread_id: int
+    attempt_number: int
+    started_at: datetime
+    status: str = "pending"
+    failure_class: str | None = None
+    failure_message: str | None = None
+    provider_error_code: str | None = None
+    provider_message_id: str | None = None
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EmailSendAttemptPatch:
+    status: str
+    completed_at: datetime
+    failure_class: str | None = None
+    failure_message: str | None = None
+    provider_error_code: str | None = None
+    provider_message_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewOutboundEmailMessage:
+    provider_message_id: str
+    provider_thread_id: str
+    email_thread_id: int
+    source_draft_id: int
+    from_address: str
+    to_addresses: tuple[str, ...]
+    subject: str
+    body_text: str
+    received_at: datetime
+    normalized_at: datetime
+    source: str = "gmail"
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +309,10 @@ class EmailDraftRepository(Protocol):
 
     def set_reasoning_artifact_ref(self, draft_id: int, *, artifact_ref: str) -> bool: ...
 
+    def set_status(self, draft_id: int, *, status: str) -> bool: ...
+
+    def set_final_sent_message(self, draft_id: int, *, message_id: int) -> bool: ...
+
 
 @runtime_checkable
 class ClassificationArtifactRepository(Protocol):
@@ -284,6 +328,25 @@ class DraftReasoningArtifactRepository(Protocol):
     def create(self, item: NewDraftReasoningArtifact) -> DraftReasoningArtifactORM: ...
 
     def list_for_draft(self, *, email_draft_id: int) -> list[DraftReasoningArtifactORM]: ...
+
+
+@runtime_checkable
+class EmailSendAttemptRepository(Protocol):
+    def create(self, item: NewEmailSendAttempt) -> EmailSendAttemptORM: ...
+
+    def get_by_id(self, attempt_id: int) -> EmailSendAttemptORM | None: ...
+
+    def list_for_draft(self, *, draft_id: int) -> list[EmailSendAttemptORM]: ...
+
+    def count_for_draft(self, *, draft_id: int) -> int: ...
+
+    def get_success_for_draft(self, *, draft_id: int) -> EmailSendAttemptORM | None: ...
+
+    def update(
+        self,
+        attempt_id: int,
+        patch: EmailSendAttemptPatch,
+    ) -> EmailSendAttemptORM | None: ...
 
 
 @runtime_checkable

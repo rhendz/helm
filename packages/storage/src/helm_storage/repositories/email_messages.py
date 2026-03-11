@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from helm_storage.models import EmailMessageORM
+from helm_storage.repositories.contracts import NewOutboundEmailMessage
 
 
 class SQLAlchemyEmailMessageRepository:
@@ -72,6 +73,27 @@ class SQLAlchemyEmailMessageRepository:
             record.received_at = message.received_at
             record.normalized_at = message.normalized_at
             record.source = message.source
+        self._session.add(record)
+        self._session.commit()
+        self._session.refresh(record)
+        return record
+
+    def create_outbound(self, item: NewOutboundEmailMessage) -> EmailMessageORM:
+        record = EmailMessageORM(
+            provider_message_id=item.provider_message_id,
+            provider_thread_id=item.provider_thread_id,
+            email_thread_id=item.email_thread_id,
+            source_draft_id=item.source_draft_id,
+            direction="outbound",
+            from_address=item.from_address,
+            to_addresses=",".join(item.to_addresses),
+            subject=item.subject,
+            snippet=item.body_text[:200] or None,
+            body_text=item.body_text,
+            received_at=item.received_at,
+            normalized_at=item.normalized_at,
+            source=item.source,
+        )
         self._session.add(record)
         self._session.commit()
         self._session.refresh(record)

@@ -13,6 +13,7 @@ from helm_api.schemas import (
     EmailIngestResponse,
     EmailProposalResponse,
     EmailSeedPlanResponse,
+    EmailSendAttemptResponse,
     EmailThreadDetailResponse,
     EmailThreadOverrideRequest,
     EmailThreadOverrideResponse,
@@ -20,6 +21,7 @@ from helm_api.schemas import (
     EmailThreadReprocessResponse,
     EmailThreadResponse,
     ScheduledTaskResponse,
+    SendDraftResponse,
 )
 from helm_api.services.email_service import (
     complete_global_task,
@@ -33,6 +35,7 @@ from helm_api.services.email_service import (
     list_drafts,
     list_message_classification_artifacts,
     list_proposals,
+    list_send_attempts,
     list_tasks,
     list_thread_classification_artifacts,
     list_thread_tasks,
@@ -40,6 +43,7 @@ from helm_api.services.email_service import (
     override_thread,
     plan_seed_email_messages,
     reprocess_thread,
+    send_draft,
 )
 
 router = APIRouter(prefix="/v1/email", tags=["email"])
@@ -139,6 +143,23 @@ def get_email_draft_reasoning_artifacts(
         DraftReasoningArtifactResponse(**item)
         for item in list_draft_reasoning_artifacts(draft_id=draft_id)
     ]
+
+
+@router.get(
+    "/drafts/{draft_id}/send-attempts",
+    response_model=list[EmailSendAttemptResponse],
+)
+def get_email_draft_send_attempts(
+    draft_id: int,
+) -> list[EmailSendAttemptResponse]:
+    return [EmailSendAttemptResponse(**item) for item in list_send_attempts(draft_id=draft_id)]
+
+
+@router.post("/drafts/{draft_id}/send", response_model=SendDraftResponse)
+def send_email_draft(
+    draft_id: int,
+) -> SendDraftResponse:
+    return SendDraftResponse(**send_draft(draft_id=draft_id))
 
 
 @router.get("/tasks", response_model=list[ScheduledTaskResponse])

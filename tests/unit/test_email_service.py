@@ -12,7 +12,8 @@ from email_agent.reminders import (
 )
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.types import EmailMessage
-from helm_api.services.email_service import override_thread
+from helm_api.services.email_service import list_send_attempts, override_thread, send_draft
+from helm_connectors.gmail import GmailSendError, GmailSendResult
 from helm_storage.db import Base
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.contracts import NewActionProposal, NewEmailDraft, NewEmailThread
@@ -270,6 +271,170 @@ def test_email_thread_detail_and_reprocess() -> None:
     )
     assert completed.status == "accepted"
     assert completed.completed is True
+
+
+def test_email_send_draft_requires_approval(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+    monkeypatch.setattr("helm_api.services.email_service._runtime", lambda: runtime)
+
+    with Session(engine) as session:
+        thread = SQLAlchemyEmailThreadRepository(session).create(
+            NewEmailThread(provider_thread_id="thr-send-approval")
+        )
+        draft = SQLAlchemyEmailDraftRepository(session).create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                draft_body="Please approve me",
+                approval_status="pending_user",
+            )
+        )
+        draft_id = draft.id
+
+    result = send_draft(draft_id=draft_id)
+    assert result["status"] == "rejected"
+    assert result["reason"] == "approval_required"
+
+
+def test_email_send_draft_records_failure_and_preserves_approval(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+    monkeypatch.setattr("helm_api.services.email_service._runtime", lambda: runtime)
+
+    with Session(engine) as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+        message_repo = SQLAlchemyEmailMessageRepository(session)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-send-fail"))
+        draft = draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                draft_body="Approved response",
+                draft_subject="Re: Opportunity",
+                approval_status="approved",
+            )
+        )
+        draft_id = draft.id
+        message_repo.upsert_from_normalized(
+            EmailMessage(
+                provider_message_id="msg-inbound-1",
+                provider_thread_id="thr-send-fail",
+                from_address="recruiter@example.com",
+                subject="Opportunity",
+                body_text="Can you reply?",
+                received_at=datetime(2026, 3, 11, 8, 0, tzinfo=UTC),
+                normalized_at=datetime(2026, 3, 11, 8, 0, tzinfo=UTC),
+            ),
+            email_thread_id=thread.id,
+        )
+
+    monkeypatch.setattr(
+        "email_agent.send.send_reply",
+        lambda **_: (_ for _ in ()).throw(
+            GmailSendError("unknown_delivery_state", "Provider timed out after accept")
+        ),
+    )
+
+    result = send_draft(draft_id=draft_id)
+    assert result["status"] == "failed"
+    assert result["reason"] == "unknown_delivery_state"
+    assert result["warning"] is not None
+
+    detail = email_query.get_email_draft_detail(draft_id=draft_id, runtime=runtime)
+    assert detail is not None
+    assert detail["approval_status"] == "approved"
+    assert detail["status"] == "send_failed"
+    assert detail["final_sent_message_id"] is None
+    assert len(detail["send_attempts"]) == 1
+    assert detail["send_attempts"][0]["failure_class"] == "unknown_delivery_state"
+
+
+def test_email_send_draft_persists_outbound_message_and_blocks_duplicates(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+    monkeypatch.setattr("helm_api.services.email_service._runtime", lambda: runtime)
+
+    with Session(engine) as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+        message_repo = SQLAlchemyEmailMessageRepository(session)
+
+        thread = thread_repo.create(
+            NewEmailThread(
+                provider_thread_id="thr-send-success",
+                business_state="waiting_on_user",
+                visible_labels=("Action",),
+                current_summary="Need to respond",
+                latest_confidence_band="High",
+                resurfacing_source="new_message",
+                action_reason="reply_needed",
+            )
+        )
+        draft = draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                draft_body="Thanks, I am available.",
+                draft_subject="Re: Intro call",
+                approval_status="approved",
+                status="send_failed",
+            )
+        )
+        draft_id = draft.id
+        message_repo.upsert_from_normalized(
+            EmailMessage(
+                provider_message_id="msg-inbound-2",
+                provider_thread_id="thr-send-success",
+                from_address="recruiter@example.com",
+                subject="Intro call",
+                body_text="Can you send times?",
+                received_at=datetime(2026, 3, 11, 8, 0, tzinfo=UTC),
+                normalized_at=datetime(2026, 3, 11, 8, 0, tzinfo=UTC),
+            ),
+            email_thread_id=thread.id,
+        )
+
+    monkeypatch.setattr(
+        "email_agent.send.send_reply",
+        lambda **_: GmailSendResult(
+            provider_message_id="gmail-out-1",
+            provider_thread_id="thr-send-success",
+            from_address="me@example.com",
+            to_address="recruiter@example.com",
+            subject="Re: Intro call",
+            body_text="Thanks, I am available.",
+            sent_at=datetime(2026, 3, 11, 8, 5, tzinfo=UTC),
+        ),
+    )
+
+    result = send_draft(draft_id=draft_id)
+    assert result["status"] == "accepted"
+    assert result["sent"] is True
+    assert result["final_sent_message_id"] is not None
+
+    detail = email_query.get_email_draft_detail(draft_id=draft_id, runtime=runtime)
+    assert detail is not None
+    assert detail["final_sent_message_id"] == result["final_sent_message_id"]
+    assert detail["status"] == "generated"
+    assert detail["send_attempts"][0]["status"] == "succeeded"
+    attempts = list_send_attempts(draft_id=draft_id)
+    assert len(attempts) == 1
+    assert attempts[0]["provider_message_id"] == "gmail-out-1"
+
+    duplicate = send_draft(draft_id=draft_id)
+    assert duplicate["status"] == "rejected"
+    assert duplicate["reason"] == "duplicate_send"
+
+    detail = email_query.get_email_draft_detail(draft_id=draft_id, runtime=runtime)
+    assert detail is not None
+    assert len(detail["send_attempts"]) == 2
+    assert detail["send_attempts"][0]["failure_class"] == "duplicate_send"
 
 
 def test_email_draft_detail_includes_transition_audits() -> None:

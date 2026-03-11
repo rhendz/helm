@@ -17,6 +17,8 @@ from helm_storage.repositories.contracts import (
     EmailAgentConfigRepository,
     EmailDraftContentPatch,
     EmailDraftRepository,
+    EmailSendAttemptPatch,
+    EmailSendAttemptRepository,
     EmailThreadRepository,
     NewActionItem,
     NewActionProposal,
@@ -25,7 +27,9 @@ from helm_storage.repositories.contracts import (
     NewDraftReasoningArtifact,
     NewDraftReply,
     NewEmailDraft,
+    NewEmailSendAttempt,
     NewEmailThread,
+    NewOutboundEmailMessage,
     NewScheduledThreadTask,
     ScheduledThreadTaskRepository,
 )
@@ -37,6 +41,7 @@ from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyReposito
 from helm_storage.repositories.email_agent_config import SQLAlchemyEmailAgentConfigRepository
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
+from helm_storage.repositories.email_send_attempts import SQLAlchemyEmailSendAttemptRepository
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
 from helm_storage.repositories.scheduled_thread_tasks import (
     SQLAlchemyScheduledThreadTaskRepository,
@@ -317,6 +322,90 @@ def test_draft_reasoning_artifact_repository_preserves_history() -> None:
         refreshed = draft_repo.get_by_id(draft.id)
         assert refreshed is not None
         assert refreshed.draft_reasoning_artifact_ref == second.internal_uuid
+
+
+def test_email_send_attempt_repository_and_outbound_message_persistence() -> None:
+    with _session() as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+        attempt_repo = SQLAlchemyEmailSendAttemptRepository(session)
+        message_repo = SQLAlchemyEmailMessageRepository(session)
+
+        assert isinstance(attempt_repo, EmailSendAttemptRepository)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-send"))
+        draft = draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                draft_body="Approved reply",
+                approval_status="approved",
+                status="send_failed",
+            )
+        )
+
+        first = attempt_repo.create(
+            NewEmailSendAttempt(
+                draft_id=draft.id,
+                email_thread_id=thread.id,
+                attempt_number=1,
+                started_at=datetime(2026, 3, 11, 9, 0, tzinfo=UTC),
+            )
+        )
+        updated = attempt_repo.update(
+            first.id,
+            EmailSendAttemptPatch(
+                status="failed",
+                completed_at=datetime(2026, 3, 11, 9, 1, tzinfo=UTC),
+                failure_class="timeout",
+                failure_message="Timed out",
+            ),
+        )
+        assert updated is not None
+        assert updated.failure_class == "timeout"
+        assert attempt_repo.count_for_draft(draft_id=draft.id) == 1
+        assert attempt_repo.get_success_for_draft(draft_id=draft.id) is None
+
+        second = attempt_repo.create(
+            NewEmailSendAttempt(
+                draft_id=draft.id,
+                email_thread_id=thread.id,
+                attempt_number=2,
+                started_at=datetime(2026, 3, 11, 9, 2, tzinfo=UTC),
+            )
+        )
+        attempt_repo.update(
+            second.id,
+            EmailSendAttemptPatch(
+                status="succeeded",
+                completed_at=datetime(2026, 3, 11, 9, 3, tzinfo=UTC),
+                provider_message_id="provider-out-1",
+            ),
+        )
+        success = attempt_repo.get_success_for_draft(draft_id=draft.id)
+        assert success is not None
+        assert success.id == second.id
+
+        outbound = message_repo.create_outbound(
+            NewOutboundEmailMessage(
+                provider_message_id="provider-out-1",
+                provider_thread_id="thr-send",
+                email_thread_id=thread.id,
+                source_draft_id=draft.id,
+                from_address="me@example.com",
+                to_addresses=("them@example.com",),
+                subject="Re: Hello",
+                body_text="Approved reply",
+                received_at=datetime(2026, 3, 11, 9, 3, tzinfo=UTC),
+                normalized_at=datetime(2026, 3, 11, 9, 3, tzinfo=UTC),
+            )
+        )
+        assert draft_repo.set_final_sent_message(draft.id, message_id=outbound.id) is True
+        assert draft_repo.set_status(draft.id, status="generated") is True
+
+        refreshed_draft = draft_repo.get_by_id(draft.id)
+        assert refreshed_draft is not None
+        assert refreshed_draft.final_sent_message_id == outbound.id
+        assert refreshed_draft.status == "generated"
 
 
 def test_classification_artifact_repository_preserves_lineage() -> None:

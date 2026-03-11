@@ -102,3 +102,21 @@ class SQLAlchemyEmailDraftRepository:
         self._session.add(record)
         self._session.commit()
         return True
+
+    def set_status(self, draft_id: int, *, status: str) -> bool:
+        record = self.get_by_id(draft_id)
+        if record is None:
+            return False
+        record.status = status
+        self._session.add(record)
+        self._session.commit()
+        return True
+
+    def set_final_sent_message(self, draft_id: int, *, message_id: int) -> bool:
+        record = self.get_by_id(draft_id)
+        if record is None:
+            return False
+        record.final_sent_message_id = message_id
+        self._session.add(record)
+        self._session.commit()
+        return True
