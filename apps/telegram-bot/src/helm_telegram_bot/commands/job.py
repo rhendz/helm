@@ -31,6 +31,8 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ]
     if item.run_command:
         lines.append(f"Run: {item.run_command}")
+    else:
+        lines.append("Run: unavailable")
     if item.note:
         lines.append(f"Note: {item.note}")
     await update.message.reply_text("\n".join(lines))
