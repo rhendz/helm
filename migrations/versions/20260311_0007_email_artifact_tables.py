@@ -75,12 +75,6 @@ def upgrade() -> None:
         sa.Column("reasoning_payload", sa.JSON(), nullable=False),
         sa.Column("refinement_metadata", sa.JSON(), nullable=False),
         _timestamp_column("created_at"),
-        sa.ForeignKeyConstraint(
-            ["action_proposal_id"],
-            ["action_proposals.id"],
-            ondelete="SET NULL",
-        ),
-        sa.ForeignKeyConstraint(["email_draft_id"], ["email_drafts.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["email_thread_id"], ["email_threads.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("internal_uuid"),
