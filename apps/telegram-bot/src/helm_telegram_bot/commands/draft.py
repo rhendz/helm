@@ -31,6 +31,13 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             for item in draft.transition_audits[:3]
         ]
+    send_attempt_lines = ["(none)"]
+    if draft.send_attempts:
+        send_attempt_lines = [
+            f"{item['attempt_number']}: {item['status']}"
+            f"{' ' + item['failure_class'] if item.get('failure_class') else ''}"
+            for item in draft.send_attempts[:3]
+        ]
     await update.message.reply_text(
         "\n".join(
             [
@@ -43,6 +50,8 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"Body: {draft.draft_body}",
                 "Recent audits:",
                 *audit_lines,
+                "Recent send attempts:",
+                *send_attempt_lines,
             ]
         )
     )

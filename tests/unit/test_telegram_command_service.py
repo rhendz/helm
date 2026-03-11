@@ -310,6 +310,13 @@ def test_get_draft_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
                     "success": True,
                 }
             ],
+            "list_send_attempts_for_draft": lambda self, *, draft_id: [
+                {
+                    "attempt_number": 1,
+                    "status": "failed",
+                    "failure_class": "timeout",
+                }
+            ],
         },
     )()
     monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
@@ -321,6 +328,7 @@ def test_get_draft_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
     assert draft.id == 5
     assert draft.email_thread_id == 7
     assert draft.transition_audits[0]["action"] == "approve"
+    assert draft.send_attempts[0]["failure_class"] == "timeout"
 
 
 def test_approve_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
@@ -400,6 +408,54 @@ def test_snooze_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
 
     assert result.ok is False
     assert result.message == "Draft 3 is approved; cannot snooze."
+
+
+def test_send_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
+    monkeypatch.setattr(
+        command_service,
+        "send_approved_draft",
+        lambda *, draft_id, runtime: type(
+            "Result",
+            (),
+            {
+                "status": "accepted",
+                "reason": None,
+                "warning": None,
+                "attempt_id": 3,
+            },
+        )(),
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.send_draft(12)
+
+    assert result.ok is True
+    assert result.message == "Sent draft 12."
+
+
+def test_send_draft_requires_approval(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
+    monkeypatch.setattr(
+        command_service,
+        "send_approved_draft",
+        lambda *, draft_id, runtime: type(
+            "Result",
+            (),
+            {
+                "status": "rejected",
+                "reason": "approval_required",
+                "warning": None,
+                "attempt_id": None,
+            },
+        )(),
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.send_draft(9)
+
+    assert result.ok is False
+    assert result.message == "Draft 9 is not approved; approve it before sending."
 
 
 def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
