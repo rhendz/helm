@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from email_agent.seed import plan_seed_threads, summarize_seed_plan
+from email_agent.seed import plan_seed_threads, run_pending_deep_seed_queue, summarize_seed_plan
 from email_agent.types import EmailMessage
 
 
@@ -102,3 +102,67 @@ def test_summarize_seed_plan_counts_threads_per_bucket() -> None:
         "do_not_surface": 0,
     }
     assert summary["bucket_thread_ids"]["deep_seed"] == ["thr-a"]
+
+
+def test_run_pending_deep_seed_queue_processes_payloads_and_marks_completed(monkeypatch) -> None:  # noqa: ANN001
+    class _Runtime:
+        def __init__(self) -> None:
+            self.processed: list[str] = []
+
+        def list_deep_seed_queue(self, *, status: str | None = None, limit: int = 20) -> list[dict]:
+            assert status == "pending"
+            assert limit == 10
+            return [
+                {
+                    "id": 1,
+                    "status": "pending",
+                    "thread_payload": [
+                        {
+                            "provider_message_id": "msg-1",
+                            "provider_thread_id": "thr-a",
+                            "from_address": "recruiter@example.com",
+                            "subject": "Interview follow-up",
+                            "body_text": "Body",
+                            "received_at": "2026-01-02T08:00:00+00:00",
+                            "normalized_at": "2026-01-02T08:01:00+00:00",
+                            "source": "gmail",
+                        }
+                    ],
+                }
+            ]
+
+        def mark_deep_seed_item_processing(self, item_id: int) -> dict | None:
+            return {
+                "id": item_id,
+                "status": "processing",
+                "thread_payload": self.list_deep_seed_queue(status="pending", limit=10)[0][
+                    "thread_payload"
+                ],
+            }
+
+        def mark_deep_seed_item_completed(
+            self,
+            item_id: int,
+            *,
+            email_thread_id: int | None,
+            completed_at,
+        ) -> dict | None:  # noqa: ANN001
+            return {"id": item_id, "status": "completed", "email_thread_id": email_thread_id}
+
+        def mark_deep_seed_item_failed(self, item_id: int, *, error_message: str) -> dict | None:
+            return {"id": item_id, "status": "failed", "last_error": error_message}
+
+    runtime = _Runtime()
+    monkeypatch.setattr("email_agent.seed.build_email_triage_graph", lambda: object())
+    monkeypatch.setattr(
+        "email_agent.seed.run_email_triage_workflow",
+        lambda message, **kwargs: (
+            runtime.processed.append(message.provider_message_id)
+            or type("Result", (), {"email_thread_id": 99})()
+        ),
+    )
+
+    results = run_pending_deep_seed_queue(runtime=runtime)
+
+    assert runtime.processed == ["msg-1"]
+    assert results == [{"id": 1, "status": "completed", "email_thread_id": 99}]

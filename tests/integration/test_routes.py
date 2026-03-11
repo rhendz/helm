@@ -58,6 +58,24 @@ def test_routes_exist() -> None:
     )
     assert seed_plan_response.status_code == 200
     assert seed_plan_response.json()["bucket_counts"]["deep_seed"] == 1
+    seed_enqueue_response = client.post(
+        "/v1/email/seed/enqueue",
+        json={
+            "source_type": "email_manual",
+            "messages": [
+                {
+                    "id": "seed-2",
+                    "threadId": "seed-thread-2",
+                    "from": "recruiter@example.com",
+                    "subject": "Interview request",
+                }
+            ],
+        },
+    )
+    assert seed_enqueue_response.status_code == 200
+    assert seed_enqueue_response.json()["status"] in {"accepted", "unavailable"}
+    assert client.get("/v1/email/seed/queue").status_code == 200
+    assert client.get("/v1/email/seed/queue?status=pending").status_code == 200
     assert client.get("/v1/email/tasks").status_code == 200
     assert client.get("/v1/email/tasks?status=pending").status_code == 200
     assert client.get("/v1/email/threads/999999").status_code == 404

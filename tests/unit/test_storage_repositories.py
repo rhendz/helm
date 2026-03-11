@@ -15,6 +15,7 @@ from helm_storage.repositories.contracts import (
     DraftReplyRepository,
     EmailAgentConfigPatch,
     EmailAgentConfigRepository,
+    EmailDeepSeedQueueRepository,
     EmailDraftContentPatch,
     EmailDraftRepository,
     EmailSendAttemptPatch,
@@ -26,6 +27,7 @@ from helm_storage.repositories.contracts import (
     NewDigestItem,
     NewDraftReasoningArtifact,
     NewDraftReply,
+    NewEmailDeepSeedQueueItem,
     NewEmailDraft,
     NewEmailSendAttempt,
     NewEmailThread,
@@ -39,6 +41,7 @@ from helm_storage.repositories.draft_reasoning_artifacts import (
 )
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
 from helm_storage.repositories.email_agent_config import SQLAlchemyEmailAgentConfigRepository
+from helm_storage.repositories.email_deep_seed_queue import SQLAlchemyEmailDeepSeedQueueRepository
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.email_send_attempts import SQLAlchemyEmailSendAttemptRepository
@@ -406,6 +409,73 @@ def test_email_send_attempt_repository_and_outbound_message_persistence() -> Non
         assert refreshed_draft is not None
         assert refreshed_draft.final_sent_message_id == outbound.id
         assert refreshed_draft.status == "generated"
+
+
+def test_email_deep_seed_queue_repository_dedupes_active_threads() -> None:
+    with _session() as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        queue_repo = SQLAlchemyEmailDeepSeedQueueRepository(session)
+
+        assert isinstance(queue_repo, EmailDeepSeedQueueRepository)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-seed-queue"))
+        first, created = queue_repo.enqueue(
+            NewEmailDeepSeedQueueItem(
+                source_type="email_manual",
+                provider_thread_id="thr-seed-queue",
+                seed_reason="sender_signal",
+                message_count=1,
+                latest_received_at=datetime(2026, 3, 11, 9, 0, tzinfo=UTC),
+                sample_subject="Interview request",
+                from_addresses=("recruiter@example.com",),
+                thread_payload=[{"provider_message_id": "msg-1"}],
+            )
+        )
+        duplicate, duplicate_created = queue_repo.enqueue(
+            NewEmailDeepSeedQueueItem(
+                source_type="email_manual",
+                provider_thread_id="thr-seed-queue",
+                seed_reason="sender_signal",
+                message_count=1,
+                latest_received_at=datetime(2026, 3, 11, 9, 0, tzinfo=UTC),
+                sample_subject="Interview request",
+                from_addresses=("recruiter@example.com",),
+                thread_payload=[{"provider_message_id": "msg-1"}],
+            )
+        )
+
+        assert created is True
+        assert duplicate_created is False
+        assert duplicate.id == first.id
+
+        processing = queue_repo.mark_processing(first.id)
+        assert processing is not None
+        assert processing.status == "processing"
+        assert processing.attempts == 1
+
+        completed = queue_repo.mark_completed(
+            first.id,
+            email_thread_id=thread.id,
+            completed_at=datetime(2026, 3, 11, 9, 1, tzinfo=UTC),
+        )
+        assert completed is not None
+        assert completed.status == "completed"
+        assert completed.email_thread_id == thread.id
+
+        second, second_created = queue_repo.enqueue(
+            NewEmailDeepSeedQueueItem(
+                source_type="email_manual",
+                provider_thread_id="thr-seed-queue",
+                seed_reason="sender_signal",
+                message_count=1,
+                latest_received_at=datetime(2026, 3, 11, 9, 2, tzinfo=UTC),
+                sample_subject="Interview request",
+                from_addresses=("recruiter@example.com",),
+                thread_payload=[{"provider_message_id": "msg-2"}],
+            )
+        )
+        assert second_created is True
+        assert second.id != first.id
 
 
 def test_classification_artifact_repository_preserves_lineage() -> None:

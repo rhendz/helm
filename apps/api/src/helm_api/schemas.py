@@ -238,6 +238,30 @@ class EmailSeedPlanResponse(BaseModel):
     decisions: list[SeedThreadDecisionResponse] = Field(default_factory=list)
 
 
+class EmailDeepSeedQueueResponse(BaseModel):
+    id: int
+    source_type: str
+    provider_thread_id: str
+    status: str
+    seed_reason: str
+    message_count: int
+    latest_received_at: datetime
+    sample_subject: str
+    from_addresses: list[str] = Field(default_factory=list)
+    attempts: int
+    last_error: str | None = None
+    email_thread_id: int | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class EmailSeedEnqueueResponse(EmailSeedPlanResponse):
+    enqueued_count: int = 0
+    skipped_count: int = 0
+    queued_thread_ids: list[str] = Field(default_factory=list)
+
+
 class ScheduledTaskResponse(BaseModel):
     id: int
     email_thread_id: int

@@ -362,5 +362,4 @@ These still need explicit resolution before the next implementation pass can saf
 
 4. Resume implementation in this order:
 - `HELM-52` send scaffold
-- remaining `HELM-51` deep-seed queue work
 - next quality slices on classification and drafting

@@ -7,11 +7,13 @@ from helm_api.schemas import (
     CreateScheduledTaskResponse,
     DraftReasoningArtifactResponse,
     DraftTransitionAuditResponse,
+    EmailDeepSeedQueueResponse,
     EmailDraftDetailResponse,
     EmailDraftResponse,
     EmailIngestRequest,
     EmailIngestResponse,
     EmailProposalResponse,
+    EmailSeedEnqueueResponse,
     EmailSeedPlanResponse,
     EmailSendAttemptResponse,
     EmailThreadDetailResponse,
@@ -27,9 +29,11 @@ from helm_api.services.email_service import (
     complete_global_task,
     complete_task,
     create_thread_task,
+    enqueue_seed_email_messages,
     get_draft_detail,
     get_thread_detail,
     ingest_manual_email_messages,
+    list_deep_seed_queue,
     list_draft_reasoning_artifacts,
     list_draft_transition_audits,
     list_drafts,
@@ -73,6 +77,30 @@ def plan_email_seed(payload: EmailIngestRequest) -> EmailSeedPlanResponse:
             ],
         )
     )
+
+
+@router.post("/seed/enqueue", response_model=EmailSeedEnqueueResponse)
+def enqueue_email_seed(payload: EmailIngestRequest) -> EmailSeedEnqueueResponse:
+    return EmailSeedEnqueueResponse(
+        **enqueue_seed_email_messages(
+            source_type=payload.source_type,
+            messages=[
+                message.model_dump(mode="json", by_alias=True)
+                for message in payload.messages
+            ],
+        )
+    )
+
+
+@router.get("/seed/queue", response_model=list[EmailDeepSeedQueueResponse])
+def get_email_deep_seed_queue(
+    limit: int = Query(default=20, ge=1, le=100),
+    status: str | None = Query(default=None, pattern="^(pending|processing|completed|failed)$"),
+) -> list[EmailDeepSeedQueueResponse]:
+    return [
+        EmailDeepSeedQueueResponse(**item)
+        for item in list_deep_seed_queue(status=status, limit=limit)
+    ]
 
 
 @router.get("/threads", response_model=list[EmailThreadResponse])

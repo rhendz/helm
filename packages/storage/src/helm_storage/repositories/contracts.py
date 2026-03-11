@@ -12,6 +12,7 @@ from helm_storage.models import (
     DraftReasoningArtifactORM,
     DraftReplyORM,
     EmailAgentConfigORM,
+    EmailDeepSeedQueueORM,
     EmailDraftORM,
     EmailSendAttemptORM,
     EmailThreadORM,
@@ -162,6 +163,29 @@ class NewOutboundEmailMessage:
     received_at: datetime
     normalized_at: datetime
     source: str = "gmail"
+
+
+@dataclass(frozen=True, slots=True)
+class NewEmailDeepSeedQueueItem:
+    source_type: str
+    provider_thread_id: str
+    seed_reason: str
+    message_count: int
+    latest_received_at: datetime
+    sample_subject: str
+    from_addresses: tuple[str, ...]
+    thread_payload: list[dict[str, object]]
+    status: str = "pending"
+    attempts: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class EmailDeepSeedQueuePatch:
+    status: str
+    attempts: int | None = None
+    last_error: str | None = None
+    email_thread_id: int | None = None
+    completed_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,6 +371,39 @@ class EmailSendAttemptRepository(Protocol):
         attempt_id: int,
         patch: EmailSendAttemptPatch,
     ) -> EmailSendAttemptORM | None: ...
+
+
+@runtime_checkable
+class EmailDeepSeedQueueRepository(Protocol):
+    def enqueue(self, item: NewEmailDeepSeedQueueItem) -> tuple[EmailDeepSeedQueueORM, bool]: ...
+
+    def get_by_id(self, item_id: int) -> EmailDeepSeedQueueORM | None: ...
+
+    def get_active_for_provider_thread(
+        self,
+        *,
+        source_type: str,
+        provider_thread_id: str,
+    ) -> EmailDeepSeedQueueORM | None: ...
+
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[EmailDeepSeedQueueORM]: ...
+
+    def mark_processing(self, item_id: int) -> EmailDeepSeedQueueORM | None: ...
+
+    def mark_completed(
+        self,
+        item_id: int,
+        *,
+        email_thread_id: int | None,
+        completed_at: datetime,
+    ) -> EmailDeepSeedQueueORM | None: ...
+
+    def mark_failed(self, item_id: int, *, error_message: str) -> EmailDeepSeedQueueORM | None: ...
 
 
 @runtime_checkable
