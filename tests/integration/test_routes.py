@@ -160,9 +160,8 @@ def test_routes_exist() -> None:
         item["paused"] is True for item in paused_items_response.json()["items"]
     )
     detail_response = client.get("/v1/job-controls/digest")
-    assert detail_response.status_code in {200, 404}
-    if detail_response.status_code == 200:
-        assert detail_response.json() == {"job_name": "digest", "paused": True}
+    assert detail_response.status_code == 200
+    assert detail_response.json()["job_name"] == "digest"
     resume_response = client.post("/v1/job-controls/digest/resume")
     assert resume_response.status_code == 200
     assert resume_response.json()["paused"] is False
