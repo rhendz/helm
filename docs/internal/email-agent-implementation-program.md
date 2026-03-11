@@ -3,8 +3,12 @@
 Primary sources:
 - `docs/internal/helm-v1.md`
 - `/Users/ankush/Downloads/email-agent-system-definition.md`
+- `docs/internal/email-agent-blocked-slices-and-decisions.md`
 
 This document translates the Email Agent System Definition into an executable implementation program for the current Helm repository. It is intended to be a living manager document: prioritize foundational work, isolate ambiguity, and keep adjacent work moving when one path is blocked.
+
+Current blocker/decision artifact:
+- [email-agent-blocked-slices-and-decisions.md](/Users/ankush/git/helm/docs/internal/email-agent-blocked-slices-and-decisions.md)
 
 ## Architectural Context
 
