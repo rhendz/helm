@@ -556,6 +556,7 @@ def test_requeue_replay_item_rejects_non_terminal_status(monkeypatch) -> None:  
 
 
 def test_run_replay_worker_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "is_job_paused", lambda name: False)
     monkeypatch.setattr(command_service.replay_job, "run", lambda *, limit: 3)
 
     service = command_service.TelegramCommandService()
@@ -572,6 +573,19 @@ def test_run_replay_worker_rejects_invalid_limit() -> None:
 
     assert result.ok is False
     assert result.message == "Replay limit must be a positive integer."
+
+
+def test_run_replay_worker_rejects_paused_job(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "is_job_paused", lambda name: name == "replay")
+
+    service = command_service.TelegramCommandService()
+    result = service.run_replay_worker(limit=5)
+
+    assert result.ok is False
+    assert (
+        result.message
+        == "Replay job is paused; resume it before running replay manually."
+    )
 
 
 def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001

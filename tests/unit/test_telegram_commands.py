@@ -626,6 +626,29 @@ async def test_run_replay_command_calls_service(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
+async def test_run_replay_command_surfaces_paused_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def run_replay_worker(self, *, limit: int) -> ThreadTaskTransitionResult:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message="Replay job is paused; resume it before running replay manually.",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(run_replay, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(run_replay, "_service", _Service())
+    update = _Update()
+
+    await run_replay.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Replay job is paused; resume it before running replay manually."
+    ]
+
+
+@pytest.mark.asyncio
 async def test_tasks_command_rejects_invalid_status(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _allow(_update: _Update, _context: _Context) -> bool:
         return False
