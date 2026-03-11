@@ -18,6 +18,7 @@ from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
 from helm_observability.logging import get_logger
 from helm_runtime.email_agent import build_email_agent_runtime
+from helm_worker.jobs import replay as replay_job
 
 logger = get_logger("helm_telegram_bot.services.command_service")
 
@@ -616,6 +617,21 @@ class TelegramCommandService:
         return ThreadTaskTransitionResult(
             ok=True,
             message=f"Requeued replay item {replay_id}.",
+        )
+
+    def run_replay_worker(self, *, limit: int) -> ThreadTaskTransitionResult:
+        if limit <= 0:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message="Replay limit must be a positive integer.",
+            )
+        processed_count = replay_job.run(limit=limit)
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=(
+                f"Triggered replay worker for up to {limit} items; "
+                f"processed {processed_count}."
+            ),
         )
 
 

@@ -555,6 +555,25 @@ def test_requeue_replay_item_rejects_non_terminal_status(monkeypatch) -> None:  
     )
 
 
+def test_run_replay_worker_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service.replay_job, "run", lambda *, limit: 3)
+
+    service = command_service.TelegramCommandService()
+    result = service.run_replay_worker(limit=5)
+
+    assert result.ok is True
+    assert result.message == "Triggered replay worker for up to 5 items; processed 3."
+
+
+def test_run_replay_worker_rejects_invalid_limit() -> None:
+    service = command_service.TelegramCommandService()
+
+    result = service.run_replay_worker(limit=0)
+
+    assert result.ok is False
+    assert result.message == "Replay limit must be a positive integer."
+
+
 def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
     monkeypatch.setattr(

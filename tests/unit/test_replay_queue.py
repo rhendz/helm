@@ -62,7 +62,7 @@ def test_replay_worker_marks_failed_and_records_agent_run(monkeypatch) -> None: 
         )
         replay_item_id = replay_item.id
 
-    replay_job.run()
+    processed_count = replay_job.run()
 
     with Session(engine) as session:
         replay_row = session.execute(
@@ -75,6 +75,7 @@ def test_replay_worker_marks_failed_and_records_agent_run(monkeypatch) -> None: 
     assert replay_row.last_error is not None
     assert len(run_rows) == 1
     assert run_rows[0].status == AgentRunStatus.FAILED.value
+    assert processed_count == 1
 
 
 def test_replay_worker_dead_letters_after_repeated_failures(monkeypatch) -> None:  # noqa: ANN001
@@ -198,7 +199,7 @@ def test_replay_worker_reclaims_stale_processing_before_retry(monkeypatch) -> No
         fake_process_inbound_email_message,
     )
 
-    replay_job.run()
+    processed_count = replay_job.run()
 
     with Session(engine) as session:
         replay_row = session.execute(
@@ -208,6 +209,7 @@ def test_replay_worker_reclaims_stale_processing_before_retry(monkeypatch) -> No
     assert seen == {"provider_message_id": "msg-replay-stale"}
     assert replay_row.status == "completed"
     assert replay_row.attempts == 2
+    assert processed_count == 1
 
 
 def test_replay_worker_replays_failed_email_triage_run(monkeypatch) -> None:  # noqa: ANN001
@@ -260,7 +262,7 @@ def test_replay_worker_replays_failed_email_triage_run(monkeypatch) -> None:  # 
         fake_process_inbound_email_message,
     )
 
-    replay_job.run()
+    processed_count = replay_job.run()
 
     with Session(engine) as session:
         replay_row = session.execute(
@@ -276,6 +278,44 @@ def test_replay_worker_replays_failed_email_triage_run(monkeypatch) -> None:  # 
     assert replay_row.attempts == 1
     assert run_rows[0].status == AgentRunStatus.SUCCEEDED.value
     assert message_row.provider_thread_id == "thr-replay-1"
+    assert processed_count == 1
+
+
+def test_replay_worker_respects_explicit_limit(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(replay_job, "SessionLocal", session_local)
+    monkeypatch.setattr(agent_run_observability, "SessionLocal", session_local)
+
+    with Session(engine) as session:
+        replay_repo = SQLAlchemyReplayQueueRepository(session)
+        first, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=701,
+            source_type="worker",
+            source_id="scheduler-1",
+        )
+        second, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=702,
+            source_type="worker",
+            source_id="scheduler-2",
+        )
+        first_id = first.id
+        second_id = second.id
+
+    processed_count = replay_job.run(limit=1)
+
+    with Session(engine) as session:
+        first_row = session.execute(
+            select(ReplayQueueORM).where(ReplayQueueORM.id == first_id)
+        ).scalar_one()
+        second_row = session.execute(
+            select(ReplayQueueORM).where(ReplayQueueORM.id == second_id)
+        ).scalar_one()
+
+    assert processed_count == 1
+    assert first_row.attempts == 1
+    assert second_row.attempts == 0
 
 
 def test_reprocess_failed_runs_requires_bounded_scope(monkeypatch) -> None:  # noqa: ANN001

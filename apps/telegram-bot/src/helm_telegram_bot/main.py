@@ -21,6 +21,7 @@ from helm_telegram_bot.commands import (
     resolved_threads,
     review,
     reviews,
+    run_replay,
     send,
     set_email_timezone,
     set_followup_days,
@@ -55,6 +56,7 @@ def main() -> None:
     application.add_handler(CommandHandler("needsreview_threads", needsreview_threads.handle))
     application.add_handler(CommandHandler("proposals", proposals.handle))
     application.add_handler(CommandHandler("replays", replays.handle))
+    application.add_handler(CommandHandler("run_replay", run_replay.handle))
     application.add_handler(CommandHandler("requeue_replay", requeue_replay.handle))
     application.add_handler(CommandHandler("reprocess_thread", reprocess_thread.handle))
     application.add_handler(CommandHandler("approve", approve.handle))
