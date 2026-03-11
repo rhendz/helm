@@ -43,7 +43,6 @@ def upgrade() -> None:
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
         _timestamp_column("created_at"),
         _timestamp_column("updated_at"),
-        sa.ForeignKeyConstraint(["draft_id"], ["email_drafts.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["email_thread_id"], ["email_threads.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("internal_uuid"),
