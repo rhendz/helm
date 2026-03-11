@@ -10,6 +10,7 @@ from email_agent.runtime import (
     DraftRecord,
     EmailAgentConfigRecord,
     EmailAgentRuntime,
+    MessageProcessingRecord,
     MessageRecord,
     ProposalRecord,
     RunRecord,
@@ -94,6 +95,22 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 provider_thread_id,
             )
             return _thread_record(record) if record is not None else None
+
+    def get_message_by_provider_message_id(
+        self,
+        provider_message_id: str,
+    ) -> MessageProcessingRecord | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailMessageRepository(session).get_by_provider_message_id(
+                provider_message_id
+            )
+            if record is None:
+                return None
+            return MessageProcessingRecord(
+                id=record.id,
+                direction=record.direction,
+                processed_at=record.processed_at,
+            )
 
     def upsert_inbound_message(
         self,

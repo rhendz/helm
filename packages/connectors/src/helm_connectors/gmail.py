@@ -27,6 +27,8 @@ NORMALIZATION_ERROR_INVALID_PAYLOAD = "invalid_payload"
 class PullMessagesReport:
     messages: list[NormalizedGmailMessage]
     failure_counts: dict[str, int] = field(default_factory=dict)
+    next_history_cursor: str | None = None
+    mode: str = "poll"
 
 
 @dataclass(slots=True, frozen=True)
@@ -238,71 +240,115 @@ def _build_gmail_raw_payload(service: Any, message_id: str) -> dict[str, Any]:
     }
 
 
-def pull_new_messages(
-    manual_payload: list[dict[str, Any]] | None = None,
-) -> list[NormalizedGmailMessage]:
-    return pull_new_messages_report(manual_payload=manual_payload).messages
-
-
-def pull_new_messages_report(
-    manual_payload: list[dict[str, Any]] | None = None,
+def _normalize_manual_payload(
+    manual_payload: list[dict[str, Any]],
+    *,
+    logger: Any,
+    next_history_cursor: str | None,
+    mode: str,
 ) -> PullMessagesReport:
-    logger = get_logger("helm_connectors.gmail")
     failure_counts: dict[str, int] = {}
 
     def _add_failure(code: str) -> None:
         failure_counts[code] = failure_counts.get(code, 0) + 1
 
-    if manual_payload is not None:
-        logger.info("gmail_pull_manual_payload", count=len(manual_payload))
-        messages: list[NormalizedGmailMessage] = []
-        for item in manual_payload:
-            normalized, failure = normalize_message_checked(item)
-            if normalized is not None:
-                messages.append(normalized)
-                continue
-            if failure is not None:
-                _add_failure(failure)
-        if failure_counts:
-            logger.warning("gmail_pull_manual_payload_failures", failure_counts=failure_counts)
-        return PullMessagesReport(messages=messages, failure_counts=failure_counts)
+    logger.info("gmail_pull_manual_payload", count=len(manual_payload), mode=mode)
+    messages: list[NormalizedGmailMessage] = []
+    for item in manual_payload:
+        normalized, failure = normalize_message_checked(item)
+        if normalized is not None:
+            messages.append(normalized)
+            continue
+        if failure is not None:
+            _add_failure(failure)
+    if failure_counts:
+        logger.warning("gmail_pull_manual_payload_failures", failure_counts=failure_counts)
+    return PullMessagesReport(
+        messages=messages,
+        failure_counts=failure_counts,
+        next_history_cursor=next_history_cursor,
+        mode=mode,
+    )
 
+
+def _build_unconfigured_report(
+    *,
+    logger: Any,
+    mode: str,
+    next_history_cursor: str | None,
+) -> PullMessagesReport:
     missing = [name for name in _GMAIL_REQUIRED_ENV_VARS if not os.getenv(name, "").strip()]
     if missing:
-        logger.info("gmail_pull_unconfigured", missing_env=missing)
-        return PullMessagesReport(messages=[], failure_counts={})
+        logger.info("gmail_pull_unconfigured", missing_env=missing, mode=mode)
+    return PullMessagesReport(
+        messages=[],
+        failure_counts={},
+        next_history_cursor=next_history_cursor,
+        mode=mode,
+    )
+
+
+def _build_service_or_empty_report(
+    *,
+    logger: Any,
+    mode: str,
+    next_history_cursor: str | None,
+) -> tuple[Any | None, PullMessagesReport | None]:
+    missing = [name for name in _GMAIL_REQUIRED_ENV_VARS if not os.getenv(name, "").strip()]
+    if missing:
+        return None, _build_unconfigured_report(
+            logger=logger,
+            mode=mode,
+            next_history_cursor=next_history_cursor,
+        )
 
     try:
-        service = _build_gmail_service()
+        return _build_gmail_service(), None
     except ImportError:
-        logger.warning("gmail_pull_missing_google_dependencies")
-        return PullMessagesReport(messages=[], failure_counts={})
-    except Exception as exc:
-        logger.warning("gmail_pull_auth_failed", error=str(exc))
-        return PullMessagesReport(messages=[], failure_counts={})
-
-    try:
-        response = (
-            service.users()
-            .messages()
-            .list(userId="me", maxResults=25, includeSpamTrash=False)
-            .execute()
+        logger.warning("gmail_pull_missing_google_dependencies", mode=mode)
+        return None, PullMessagesReport(
+            messages=[],
+            failure_counts={},
+            next_history_cursor=next_history_cursor,
+            mode=mode,
         )
     except Exception as exc:
-        logger.warning("gmail_pull_list_failed", error=str(exc))
-        return PullMessagesReport(messages=[], failure_counts={})
+        logger.warning("gmail_pull_auth_failed", error=str(exc), mode=mode)
+        return None, PullMessagesReport(
+            messages=[],
+            failure_counts={},
+            next_history_cursor=next_history_cursor,
+            mode=mode,
+        )
 
-    message_refs = response.get("messages")
-    if not isinstance(message_refs, list):
-        return PullMessagesReport(messages=[], failure_counts={})
 
+def _get_current_history_cursor(service: Any) -> str | None:
+    try:
+        response = service.users().getProfile(userId="me").execute()
+    except Exception:
+        return None
+    history_id = response.get("historyId")
+    if history_id is None:
+        return None
+    history_value = str(history_id).strip()
+    return history_value or None
+
+
+def _normalize_message_ids(
+    service: Any,
+    *,
+    message_ids: list[str],
+    logger: Any,
+    next_history_cursor: str | None,
+    mode: str,
+) -> PullMessagesReport:
+    failure_counts: dict[str, int] = {}
     normalized_messages: list[NormalizedGmailMessage] = []
-    for item in message_refs:
-        if not isinstance(item, Mapping):
-            continue
-        message_id = str(item.get("id", "")).strip()
-        if not message_id:
-            continue
+
+    def _add_failure(code: str) -> None:
+        failure_counts[code] = failure_counts.get(code, 0) + 1
+
+    for message_id in message_ids:
         try:
             raw_payload = _build_gmail_raw_payload(service, message_id)
             normalized, failure = normalize_message_checked(raw_payload)
@@ -318,8 +364,203 @@ def pull_new_messages_report(
         "gmail_pull_completed",
         count=len(normalized_messages),
         failure_counts=failure_counts,
+        mode=mode,
+        next_history_cursor=next_history_cursor,
     )
-    return PullMessagesReport(messages=normalized_messages, failure_counts=failure_counts)
+    return PullMessagesReport(
+        messages=normalized_messages,
+        failure_counts=failure_counts,
+        next_history_cursor=next_history_cursor,
+        mode=mode,
+    )
+
+
+def _list_recent_message_ids(service: Any) -> list[str]:
+    response = (
+        service.users()
+        .messages()
+        .list(userId="me", maxResults=25, includeSpamTrash=False)
+        .execute()
+    )
+    message_refs = response.get("messages")
+    if not isinstance(message_refs, list):
+        return []
+
+    message_ids: list[str] = []
+    for item in message_refs:
+        if not isinstance(item, Mapping):
+            continue
+        message_id = str(item.get("id", "")).strip()
+        if message_id:
+            message_ids.append(message_id)
+    return message_ids
+
+
+def _list_changed_message_ids(
+    service: Any,
+    *,
+    start_history_cursor: str,
+) -> tuple[list[str], str | None]:
+    seen: set[str] = set()
+    message_ids: list[str] = []
+    next_history_cursor = start_history_cursor
+    page_token: str | None = None
+
+    while True:
+        request = service.users().history().list(
+            userId="me",
+            startHistoryId=start_history_cursor,
+            historyTypes=["messageAdded"],
+            maxResults=100,
+            pageToken=page_token,
+        )
+        response = request.execute()
+        history_id = response.get("historyId")
+        if history_id is not None:
+            next_history_cursor = str(history_id).strip() or next_history_cursor
+
+        history_entries = response.get("history")
+        if isinstance(history_entries, list):
+            for entry in history_entries:
+                if not isinstance(entry, Mapping):
+                    continue
+                messages_added = entry.get("messagesAdded")
+                if not isinstance(messages_added, list):
+                    continue
+                for item in messages_added:
+                    if not isinstance(item, Mapping):
+                        continue
+                    message = item.get("message")
+                    if not isinstance(message, Mapping):
+                        continue
+                    message_id = str(message.get("id", "")).strip()
+                    if not message_id or message_id in seen:
+                        continue
+                    seen.add(message_id)
+                    message_ids.append(message_id)
+
+        page_token_value = response.get("nextPageToken")
+        if page_token_value is None:
+            page_token = None
+        else:
+            page_token = str(page_token_value).strip() or None
+        if page_token is None:
+            break
+
+    return message_ids, next_history_cursor
+
+
+def pull_new_messages(
+    manual_payload: list[dict[str, Any]] | None = None,
+) -> list[NormalizedGmailMessage]:
+    return pull_new_messages_report(manual_payload=manual_payload).messages
+
+
+def pull_new_messages_report(
+    manual_payload: list[dict[str, Any]] | None = None,
+) -> PullMessagesReport:
+    logger = get_logger("helm_connectors.gmail")
+
+    if manual_payload is not None:
+        return _normalize_manual_payload(
+            manual_payload,
+            logger=logger,
+            next_history_cursor=None,
+            mode="manual",
+        )
+
+    service, empty_report = _build_service_or_empty_report(
+        logger=logger,
+        mode="poll",
+        next_history_cursor=None,
+    )
+    if empty_report is not None or service is None:
+        return empty_report or PullMessagesReport(messages=[], failure_counts={}, mode="poll")
+
+    try:
+        message_ids = _list_recent_message_ids(service)
+    except Exception as exc:
+        logger.warning("gmail_pull_list_failed", error=str(exc))
+        return PullMessagesReport(messages=[], failure_counts={}, mode="poll")
+
+    return _normalize_message_ids(
+        service,
+        message_ids=message_ids,
+        logger=logger,
+        next_history_cursor=_get_current_history_cursor(service),
+        mode="poll",
+    )
+
+
+def pull_changed_messages_report(
+    *,
+    last_history_cursor: str | None,
+    manual_payload: list[dict[str, Any]] | None = None,
+) -> PullMessagesReport:
+    logger = get_logger("helm_connectors.gmail")
+
+    if manual_payload is not None:
+        return _normalize_manual_payload(
+            manual_payload,
+            logger=logger,
+            next_history_cursor=last_history_cursor,
+            mode="manual",
+        )
+
+    service, empty_report = _build_service_or_empty_report(
+        logger=logger,
+        mode="history",
+        next_history_cursor=last_history_cursor,
+    )
+    if empty_report is not None or service is None:
+        return empty_report or PullMessagesReport(
+            messages=[],
+            failure_counts={},
+            next_history_cursor=last_history_cursor,
+            mode="history",
+        )
+
+    if not last_history_cursor:
+        logger.info("gmail_history_bootstrap_poll")
+        poll_report = pull_new_messages_report()
+        return PullMessagesReport(
+            messages=poll_report.messages,
+            failure_counts=poll_report.failure_counts,
+            next_history_cursor=poll_report.next_history_cursor,
+            mode="bootstrap",
+        )
+
+    try:
+        message_ids, next_history_cursor = _list_changed_message_ids(
+            service,
+            start_history_cursor=last_history_cursor,
+        )
+    except Exception as exc:
+        logger.warning(
+            "gmail_history_pull_failed",
+            error=str(exc),
+            last_history_cursor=last_history_cursor,
+        )
+        poll_report = pull_new_messages_report()
+        return PullMessagesReport(
+            messages=poll_report.messages,
+            failure_counts=poll_report.failure_counts,
+            next_history_cursor=poll_report.next_history_cursor,
+            mode="recovery_poll",
+        )
+
+    if next_history_cursor == last_history_cursor:
+        current_history_cursor = _get_current_history_cursor(service)
+        if current_history_cursor is not None:
+            next_history_cursor = current_history_cursor
+
+    return _normalize_message_ids(
+        service,
+        message_ids=message_ids,
+        logger=logger,
+        next_history_cursor=next_history_cursor,
+        mode="history",
+    )
 
 
 def send_reply(

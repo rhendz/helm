@@ -1,40 +1,34 @@
-from email_agent.triage import process_inbound_email_message
-from email_agent.types import EmailMessage
-from helm_connectors.gmail import pull_new_messages_report
+from helm_connectors.gmail import pull_changed_messages_report
 from helm_observability.logging import get_logger
 from helm_runtime.email_agent import build_email_agent_runtime
+from helm_worker.jobs.email_message_ingest import process_inbound_messages
 
 logger = get_logger("helm_worker.jobs.email_triage")
 
 
 def run() -> None:
     runtime = build_email_agent_runtime()
-    report = pull_new_messages_report()
+    config = runtime.get_email_agent_config()
+    report = pull_changed_messages_report(last_history_cursor=config.last_history_cursor)
     logger.info(
         "email_triage_job_tick",
         count=len(report.messages),
         normalization_failures=report.failure_counts,
+        mode=report.mode,
+        last_history_cursor=config.last_history_cursor,
+        next_history_cursor=report.next_history_cursor,
     )
-    messages = report.messages
-    for message in messages:
-        result = process_inbound_email_message(
-            EmailMessage(
-                provider_message_id=message.provider_message_id,
-                provider_thread_id=message.provider_thread_id,
-                from_address=message.from_address,
-                subject=message.subject,
-                body_text=message.body_text,
-                received_at=message.received_at,
-                normalized_at=message.normalized_at,
-                source=message.source,
-            ),
-            runtime=runtime,
-        )
-        logger.info(
-            "email_triage_scaffold_result",
-            message_id=result.message_id,
-            trigger_family=result.trigger_family,
-            classification=result.classification,
-            priority_score=result.priority_score,
-            workflow_status=result.workflow_status,
-        )
+
+    ingest_report = process_inbound_messages(runtime=runtime, messages=report.messages)
+    if (
+        report.next_history_cursor is not None
+        and report.next_history_cursor != config.last_history_cursor
+    ):
+        runtime.update_email_agent_config(last_history_cursor=report.next_history_cursor)
+
+    logger.info(
+        "email_triage_job_completed",
+        processed_count=ingest_report.processed_count,
+        skipped_count=ingest_report.skipped_count,
+        next_history_cursor=report.next_history_cursor,
+    )
