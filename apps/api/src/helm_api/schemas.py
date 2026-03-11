@@ -347,6 +347,24 @@ class ReplayEnqueueResponse(BaseModel):
     reason: str | None = None
 
 
+class ReplayQueueItemResponse(BaseModel):
+    id: int
+    agent_run_id: int | None = None
+    source_type: str
+    source_id: str | None = None
+    status: str
+    attempts: int
+    last_error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReplayRequeueResponse(BaseModel):
+    status: str
+    replay_id: int
+    reason: str | None = None
+
+
 class ReplayReprocessRequest(BaseModel):
     source_type: str | None = None
     source_id: str | None = None
