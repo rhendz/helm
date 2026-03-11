@@ -14,6 +14,7 @@ from email_agent.operator import (
 )
 from email_agent.reminders import complete_scheduled_task, create_thread_reminder
 from email_agent.reprocess import reprocess_email_thread
+from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
 from helm_observability.logging import get_logger
 from helm_runtime.email_agent import build_email_agent_runtime
@@ -100,6 +101,7 @@ class DraftDetailView:
     draft_subject: str | None
     draft_body: str
     transition_audits: list[dict]
+    send_attempts: list[dict]
 
 
 class TelegramCommandService:
@@ -255,6 +257,7 @@ class TelegramCommandService:
         if draft is None:
             return None
         audits = runtime.list_draft_transition_audits_for_draft(draft_id=draft_id)
+        send_attempts = runtime.list_send_attempts_for_draft(draft_id=draft_id)
         return DraftDetailView(
             id=draft["id"],
             email_thread_id=draft["email_thread_id"],
@@ -264,6 +267,7 @@ class TelegramCommandService:
             draft_subject=draft.get("draft_subject"),
             draft_body=draft["draft_body"],
             transition_audits=audits,
+            send_attempts=send_attempts,
         )
 
     def list_review_threads(self, *, limit: int = 5) -> list[ThreadDetailView]:
@@ -383,6 +387,47 @@ class TelegramCommandService:
         if not result.ok:
             logger.warning("draft_transition_failed", action="snooze", draft_id=draft_id)
         return result
+
+    def send_draft(self, draft_id: int) -> DraftTransitionResult:
+        result = send_approved_draft(draft_id=draft_id, runtime=build_email_agent_runtime())
+        if result.status == "accepted":
+            return DraftTransitionResult(
+                ok=True,
+                message=f"Sent draft {draft_id}.",
+            )
+
+        logger.warning(
+            "draft_send_failed",
+            draft_id=draft_id,
+            status=result.status,
+            reason=result.reason,
+        )
+
+        if result.status == "not_found":
+            return DraftTransitionResult(ok=False, message=f"Draft {draft_id} not found.")
+        if result.status == "unavailable":
+            return DraftTransitionResult(ok=False, message="Send unavailable.")
+        if result.reason == "approval_required":
+            return DraftTransitionResult(
+                ok=False,
+                message=f"Draft {draft_id} is not approved; approve it before sending.",
+            )
+        if result.reason == "duplicate_send":
+            return DraftTransitionResult(
+                ok=False,
+                message=f"Draft {draft_id} already has a confirmed successful send.",
+            )
+
+        warning = f" {result.warning}" if result.warning else ""
+        attempt_suffix = f" (attempt {result.attempt_id})" if result.attempt_id is not None else ""
+        return DraftTransitionResult(
+            ok=False,
+            message=(
+                f"Draft {draft_id} send failed{attempt_suffix}: "
+                f"{result.reason or 'unknown'}."
+                f"{warning}"
+            ),
+        )
 
     def create_thread_task(
         self,

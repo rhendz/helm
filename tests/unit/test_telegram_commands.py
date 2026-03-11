@@ -18,6 +18,7 @@ from helm_telegram_bot.commands import (
     resolved_threads,
     review,
     reviews,
+    send,
     set_email_timezone,
     set_followup_days,
     snooze,
@@ -736,6 +737,13 @@ async def test_draft_command_formats_detail(monkeypatch: pytest.MonkeyPatch) -> 
                             "success": True,
                         }
                     ],
+                    "send_attempts": [
+                        {
+                            "attempt_number": 1,
+                            "status": "failed",
+                            "failure_class": "timeout",
+                        }
+                    ],
                 },
             )()
 
@@ -760,9 +768,48 @@ async def test_draft_command_formats_detail(monkeypatch: pytest.MonkeyPatch) -> 
                 "Body: Thanks for reaching out.",
                 "Recent audits:",
                 "approve: pending_user -> approved (ok)",
+                "Recent send attempts:",
+                "1: failed timeout",
             ]
         )
     ]
+
+
+@pytest.mark.asyncio
+async def test_send_usage_message_when_id_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(send, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await send.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /send <draft_id>"]
+
+
+@pytest.mark.asyncio
+async def test_send_parses_id_and_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen_id: int | None = None
+
+        def send_draft(self, draft_id: int) -> DraftTransitionResult:
+            self.seen_id = draft_id
+            return DraftTransitionResult(ok=True, message="Sent draft 7.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(send, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(send, "_service", service)
+    update = _Update()
+
+    await send.handle(update, _Context(args=["7"]))
+
+    assert service.seen_id == 7
+    assert update.message.replies == ["Sent draft 7."]
 
 
 @pytest.mark.asyncio
