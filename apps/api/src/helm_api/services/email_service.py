@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import asdict
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from email_agent.query import (
     get_email_draft_detail,
@@ -209,6 +210,58 @@ def list_send_attempts(*, draft_id: int) -> list[dict]:
     return list_send_attempts_for_draft(draft_id=draft_id, runtime=_runtime())
 
 
+def get_email_config() -> dict:
+    config = _runtime().get_email_agent_config()
+    return {
+        "approval_required_before_send": config.approval_required_before_send,
+        "default_follow_up_business_days": config.default_follow_up_business_days,
+        "timezone_name": config.timezone_name,
+        "last_history_cursor": config.last_history_cursor,
+    }
+
+
+def update_email_config(
+    *,
+    approval_required_before_send: bool | None = None,
+    default_follow_up_business_days: int | None = None,
+    timezone_name: str | None = None,
+) -> dict:
+    if timezone_name is not None and not _is_valid_timezone(timezone_name):
+        return {
+            "status": "rejected",
+            "reason": "invalid_timezone",
+            "config": None,
+        }
+    if default_follow_up_business_days is not None and default_follow_up_business_days < 0:
+        return {
+            "status": "rejected",
+            "reason": "invalid_follow_up_days",
+            "config": None,
+        }
+    try:
+        config = _runtime().update_email_agent_config(
+            approval_required_before_send=approval_required_before_send,
+            default_follow_up_business_days=default_follow_up_business_days,
+            timezone_name=timezone_name,
+        )
+    except SQLAlchemyError:
+        return {
+            "status": "unavailable",
+            "reason": "storage_unavailable",
+            "config": None,
+        }
+    return {
+        "status": "accepted",
+        "reason": None,
+        "config": {
+            "approval_required_before_send": config.approval_required_before_send,
+            "default_follow_up_business_days": config.default_follow_up_business_days,
+            "timezone_name": config.timezone_name,
+            "last_history_cursor": config.last_history_cursor,
+        },
+    }
+
+
 def send_draft(*, draft_id: int) -> dict:
     return asdict(send_approved_draft(draft_id=draft_id, runtime=_runtime()))
 
@@ -301,6 +354,14 @@ def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str
         "failed_message_count": sum(report.failure_counts.values()),
         "normalization_failures": report.failure_counts,
     }
+
+
+def _is_valid_timezone(value: str) -> bool:
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError:
+        return False
+    return True
 
 
 def plan_seed_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:

@@ -170,6 +170,25 @@ class SendDraftResponse(BaseModel):
     final_sent_message_id: int | None = None
 
 
+class EmailConfigResponse(BaseModel):
+    approval_required_before_send: bool
+    default_follow_up_business_days: int
+    timezone_name: str
+    last_history_cursor: str | None = None
+
+
+class UpdateEmailConfigRequest(BaseModel):
+    approval_required_before_send: bool | None = None
+    default_follow_up_business_days: int | None = Field(default=None, ge=0)
+    timezone_name: str | None = None
+
+
+class UpdateEmailConfigResponse(BaseModel):
+    status: str
+    reason: str | None = None
+    config: EmailConfigResponse | None = None
+
+
 class EmailThreadOverrideRequest(BaseModel):
     business_state: str = Field(
         pattern="^(uninitialized|waiting_on_user|waiting_on_other_party|needs_review|resolved)$"

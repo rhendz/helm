@@ -310,6 +310,15 @@ class EmailAgentRuntime(Protocol):
 
     def get_email_agent_config(self) -> EmailAgentConfigRecord: ...
 
+    def update_email_agent_config(
+        self,
+        *,
+        approval_required_before_send: bool | None = None,
+        default_follow_up_business_days: int | None = None,
+        timezone_name: str | None = None,
+        last_history_cursor: str | None = None,
+    ) -> EmailAgentConfigRecord: ...
+
     def list_due_tasks(
         self,
         *,
