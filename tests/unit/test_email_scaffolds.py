@@ -379,6 +379,9 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert len(action_proposals) == 1
     assert len(email_drafts) == 1
     assert email_drafts[0].draft_reasoning_artifact_ref is not None
+    assert "Draft reply stub" not in email_drafts[0].draft_body
+    assert "TODO: personalize response" not in email_drafts[0].draft_body
+    assert "I'm interested in learning more about this opportunity." in email_drafts[0].draft_body
     assert len(draft_reasoning_artifacts) == 2
     assert all(
         artifact.email_draft_id == email_drafts[0].id
@@ -397,6 +400,10 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
         for artifact in draft_reasoning_artifacts
     }
     assert event_types == {"generation", "refinement"}
+    generators = {
+        artifact.model_metadata["generator"] for artifact in draft_reasoning_artifacts
+    }
+    assert generators == {"deterministic_grounded_reply"}
     assert len(classification_artifacts) == 2
     assert classification_artifacts[0].email_thread_id == first_result.email_thread_id
     assert classification_artifacts[0].email_message_id == email_messages[0].id
@@ -558,7 +565,7 @@ def test_email_triage_refines_existing_draft_in_place_and_resets_approval_on_cha
 
     assert len(drafts) == 1
     assert drafts[0].approval_status == "pending_user"
-    assert "Role intro updated" in drafts[0].draft_body
+    assert "If you send over a few times that work on your side" in drafts[0].draft_body
     assert drafts[0].draft_subject == "Role intro updated"
     assert len(reasoning_artifacts) == 2
 
