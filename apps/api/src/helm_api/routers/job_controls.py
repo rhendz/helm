@@ -2,10 +2,16 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 
-from helm_api.schemas import JobControlListResponse, JobControlResponse
+from helm_api.schemas import (
+    JobControlListResponse,
+    JobControlResponse,
+    ReplayJobRunRequest,
+    ReplayJobRunResponse,
+)
 from helm_api.services.job_control_service import (
     get_job_control,
     list_job_controls,
+    run_replay_job,
     set_job_pause,
 )
 
@@ -28,6 +34,11 @@ def get_job_control_detail(job_name: str) -> JobControlResponse:
     if item is None:
         raise HTTPException(status_code=404, detail="Job control not found.")
     return JobControlResponse(**item)
+
+
+@router.post("/replay/run", response_model=ReplayJobRunResponse)
+def run_replay(payload: ReplayJobRunRequest) -> ReplayJobRunResponse:
+    return ReplayJobRunResponse(**run_replay_job(limit=payload.limit))
 
 
 @router.post("/{job_name}/pause", response_model=JobControlResponse)

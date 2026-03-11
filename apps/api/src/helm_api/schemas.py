@@ -391,6 +391,18 @@ class JobControlListResponse(BaseModel):
     items: list[JobControlResponse]
 
 
+class ReplayJobRunRequest(BaseModel):
+    limit: int = Field(default=10, ge=1, le=100)
+
+
+class ReplayJobRunResponse(BaseModel):
+    status: str
+    job_name: str
+    limit: int
+    processed_count: int
+    reason: str | None = None
+
+
 class DraftRequeueRequest(BaseModel):
     stale_after_hours: int = Field(default=72, ge=1, le=720)
     limit: int = Field(default=20, ge=1, le=100)

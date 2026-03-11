@@ -1,3 +1,4 @@
+from email_agent.replay_queue import run_replay_queue
 from helm_storage.db import SessionLocal
 from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepository
 from sqlalchemy.exc import SQLAlchemyError
@@ -60,3 +61,22 @@ def set_job_pause(*, job_name: str, paused: bool) -> dict[str, object]:
             return {"job_name": row.job_name, "paused": bool(row.paused)}
     except SQLAlchemyError:
         return {"job_name": job_name, "paused": paused}
+def run_replay_job(*, limit: int) -> dict[str, object]:
+    replay_control = get_job_control(job_name="replay")
+    if replay_control is not None and bool(replay_control["paused"]):
+        return {
+            "status": "rejected",
+            "job_name": "replay",
+            "limit": limit,
+            "processed_count": 0,
+            "reason": "job_paused",
+        }
+
+    processed_count = run_replay_queue(limit=limit)
+    return {
+        "status": "accepted",
+        "job_name": "replay",
+        "limit": limit,
+        "processed_count": processed_count,
+        "reason": None,
+    }

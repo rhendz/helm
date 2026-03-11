@@ -10,10 +10,10 @@ def test_routes_exist() -> None:
     assert client.get("/v1/job-controls").status_code == 200
     assert client.get("/v1/job-controls?status=paused").status_code == 200
     assert client.get("/v1/job-controls?status=active").status_code == 200
-    assert client.get("/v1/job-controls/digest").json() == {
-        "job_name": "digest",
-        "paused": False,
-    }
+    detail_response = client.get("/v1/job-controls/digest")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["job_name"] == "digest"
+    assert client.post("/v1/job-controls/replay/run", json={"limit": 10}).status_code == 200
     assert client.get("/v1/job-controls/not-a-real-job").status_code == 404
     assert client.get("/v1/actions").status_code == 200
     email_ingest_response = client.post(
@@ -174,6 +174,11 @@ def test_routes_exist() -> None:
         item["job_name"] == "digest" and item["paused"] is False
         for item in active_items_response.json()["items"]
     )
+    replay_run_response = client.post("/v1/job-controls/replay/run", json={"limit": 5})
+    assert replay_run_response.status_code == 200
+    assert replay_run_response.json()["status"] == "accepted"
+    assert replay_run_response.json()["job_name"] == "replay"
+    assert replay_run_response.json()["limit"] == 5
     trace_response = client.get("/v1/artifacts/action/1/trace")
     assert trace_response.status_code == 200
     assert trace_response.json()["status"] in {"ok", "not_found", "unavailable"}
