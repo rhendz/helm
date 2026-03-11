@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -64,6 +66,31 @@ class SQLAlchemyReplayQueueRepository:
             statement = statement.where(ReplayQueueORM.status == status)
         statement = statement.limit(limit)
         return list(self._session.execute(statement).scalars().all())
+
+    def reclaim_stale_processing(
+        self,
+        *,
+        stale_before: datetime,
+        limit: int,
+    ) -> list[ReplayQueueORM]:
+        statement = (
+            select(ReplayQueueORM)
+            .where(
+                ReplayQueueORM.status == "processing",
+                ReplayQueueORM.updated_at < stale_before,
+            )
+            .order_by(ReplayQueueORM.updated_at.asc(), ReplayQueueORM.id.asc())
+            .limit(limit)
+        )
+        items = list(self._session.execute(statement).scalars().all())
+        for item in items:
+            item.status = "pending"
+            self._session.add(item)
+        if items:
+            self._session.commit()
+            for item in items:
+                self._session.refresh(item)
+        return items
 
     def mark_processing(self, item_id: int) -> ReplayQueueORM | None:
         item = self.get_by_id(item_id)
