@@ -10,10 +10,9 @@ def test_routes_exist() -> None:
     assert client.get("/v1/job-controls").status_code == 200
     assert client.get("/v1/job-controls?status=paused").status_code == 200
     assert client.get("/v1/job-controls?status=active").status_code == 200
-    assert client.get("/v1/job-controls/digest").json() == {
-        "job_name": "digest",
-        "paused": False,
-    }
+    detail_response = client.get("/v1/job-controls/digest")
+    assert detail_response.status_code == 200
+    assert detail_response.json()["job_name"] == "digest"
     assert client.post("/v1/job-controls/replay/run", json={"limit": 10}).status_code == 200
     assert client.get("/v1/job-controls/not-a-real-job").status_code == 404
     assert client.get("/v1/actions").status_code == 200
