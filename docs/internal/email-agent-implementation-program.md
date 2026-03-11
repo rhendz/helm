@@ -51,7 +51,7 @@ Major gaps against the Email Agent System Definition:
 - no `ScheduledThreadTask` object exists for reminders/follow-ups.
 - visible labels, resurfacing source, action reason, and confidence bands are not durably represented on thread state.
 - no classification artifact or draft reasoning artifact persistence exists.
-- no metadata-first seed pipeline or selective deep-seed queue exists.
+- metadata-first seed planning and deep-seed queue scaffolding exist, but deeper seed quality remains limited.
 - no stale follow-up scan exists.
 - manual approval-before-send execution exists, but worker-owned retry/recovery remains incomplete.
 - API and Telegram surfaces are still generic artifact views, not email-domain views.
@@ -250,7 +250,7 @@ These should remain explicitly out of scope for the current implementation push 
 - reminder task execution path
 
 ### Wave 4
-- manual seed/rebuild endpoint and queueing
+- manual seed/rebuild endpoint and queue visibility
 - metadata-first seed pass and deep-seed queue scaffold
 - targeted reprocess endpoint and dry-run reporting
 

@@ -22,7 +22,7 @@ from email_agent.reminders import (
     list_thread_scheduled_tasks,
 )
 from email_agent.reprocess import reprocess_email_thread
-from email_agent.seed import plan_seed_threads, summarize_seed_plan
+from email_agent.seed import enqueue_deep_seed_threads, plan_seed_threads, summarize_seed_plan
 from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_human_override
 from email_agent.triage import build_email_triage_graph, process_inbound_email_message
@@ -326,6 +326,44 @@ def plan_seed_email_messages(*, source_type: str, messages: list[Mapping[str, ob
     return result
 
 
+def enqueue_seed_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:
+    report = pull_new_messages_report(manual_payload=[dict(item) for item in messages])
+    normalized_messages = [
+        EmailMessage(
+            provider_message_id=message.provider_message_id,
+            provider_thread_id=message.provider_thread_id,
+            from_address=message.from_address,
+            subject=message.subject,
+            body_text=message.body_text,
+            received_at=message.received_at,
+            normalized_at=message.normalized_at,
+            source=message.source,
+        )
+        for message in report.messages
+    ]
+    result = enqueue_deep_seed_threads(
+        source_type=source_type,
+        messages=normalized_messages,
+        runtime=_runtime(),
+    )
+    result["source_type"] = source_type
+    result["message_count"] = len(normalized_messages)
+    result["failed_message_count"] = sum(report.failure_counts.values())
+    result["normalization_failures"] = report.failure_counts
+    return result
+
+
+def list_deep_seed_queue(*, status: str | None = None, limit: int = 20) -> list[dict]:
+    try:
+        queue = _runtime().list_deep_seed_queue(status=status, limit=limit)
+    except SQLAlchemyError:
+        return []
+    return [
+        {key: value for key, value in item.items() if key != "thread_payload"}
+        for item in queue
+    ]
+
+
 __all__ = [
     "get_thread_detail",
     "create_thread_task",
@@ -333,6 +371,8 @@ __all__ = [
     "complete_task",
     "get_draft_detail",
     "ingest_manual_email_messages",
+    "enqueue_seed_email_messages",
+    "list_deep_seed_queue",
     "list_draft_transition_audits",
     "list_drafts",
     "list_proposals",

@@ -16,6 +16,7 @@ from helm_storage.repositories.contracts import (
     NewClassificationArtifact,
     NewDigestItem,
     NewDraftReasoningArtifact,
+    NewEmailDeepSeedQueueItem,
     NewEmailDraft,
     NewEmailSendAttempt,
     NewEmailThread,
@@ -29,6 +30,7 @@ from helm_storage.repositories.draft_reasoning_artifacts import (
 from helm_storage.repositories.draft_transition_audits import (
     SQLAlchemyDraftTransitionAuditRepository,
 )
+from helm_storage.repositories.email_deep_seed_queue import SQLAlchemyEmailDeepSeedQueueRepository
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.email_send_attempts import SQLAlchemyEmailSendAttemptRepository
@@ -38,6 +40,7 @@ from sqlalchemy.orm import Session
 
 from email_agent.runtime import (
     ClassificationArtifactRecord,
+    DeepSeedQueueRecord,
     DigestRecord,
     DraftRecord,
     EmailAgentRuntime,
@@ -485,6 +488,74 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
             )
             return SendAttemptRecord(id=record.id) if record is not None else None
 
+    def enqueue_deep_seed_thread(
+        self,
+        *,
+        source_type: str,
+        provider_thread_id: str,
+        seed_reason: str,
+        message_count: int,
+        latest_received_at: datetime,
+        sample_subject: str,
+        from_addresses: tuple[str, ...],
+        thread_payload: list[dict[str, object]],
+    ) -> tuple[DeepSeedQueueRecord, bool]:
+        with self.session_factory() as session:
+            record, created = SQLAlchemyEmailDeepSeedQueueRepository(session).enqueue(
+                NewEmailDeepSeedQueueItem(
+                    source_type=source_type,
+                    provider_thread_id=provider_thread_id,
+                    seed_reason=seed_reason,
+                    message_count=message_count,
+                    latest_received_at=latest_received_at,
+                    sample_subject=sample_subject,
+                    from_addresses=from_addresses,
+                    thread_payload=thread_payload,
+                )
+            )
+            return DeepSeedQueueRecord(id=record.id), created
+
+    def list_deep_seed_queue(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyEmailDeepSeedQueueRepository(session).list_recent(
+                status=status,
+                limit=limit,
+            )
+            return [_deep_seed_queue_payload(record) for record in records]
+
+    def mark_deep_seed_item_processing(self, item_id: int) -> dict | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailDeepSeedQueueRepository(session).mark_processing(item_id)
+            return _deep_seed_queue_payload(record) if record is not None else None
+
+    def mark_deep_seed_item_completed(
+        self,
+        item_id: int,
+        *,
+        email_thread_id: int | None,
+        completed_at: datetime,
+    ) -> dict | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailDeepSeedQueueRepository(session).mark_completed(
+                item_id,
+                email_thread_id=email_thread_id,
+                completed_at=completed_at,
+            )
+            return _deep_seed_queue_payload(record) if record is not None else None
+
+    def mark_deep_seed_item_failed(self, item_id: int, *, error_message: str) -> dict | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailDeepSeedQueueRepository(session).mark_failed(
+                item_id,
+                error_message=error_message,
+            )
+            return _deep_seed_queue_payload(record) if record is not None else None
+
     def create_outbound_email_message(
         self,
         *,
@@ -863,6 +934,29 @@ def _draft_reasoning_artifact_payload(record: object) -> dict:
         "reasoning_payload": record.reasoning_payload,
         "refinement_metadata": record.refinement_metadata,
         "created_at": record.created_at,
+    }
+
+
+def _deep_seed_queue_payload(record: object | None) -> dict | None:
+    if record is None:
+        return None
+    return {
+        "id": record.id,
+        "source_type": record.source_type,
+        "provider_thread_id": record.provider_thread_id,
+        "status": record.status,
+        "seed_reason": record.seed_reason,
+        "message_count": record.message_count,
+        "latest_received_at": record.latest_received_at,
+        "sample_subject": record.sample_subject,
+        "from_addresses": record.from_addresses,
+        "thread_payload": record.thread_payload,
+        "attempts": record.attempts,
+        "last_error": record.last_error,
+        "email_thread_id": record.email_thread_id,
+        "completed_at": record.completed_at,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
     }
 
 

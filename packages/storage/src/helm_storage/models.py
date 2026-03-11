@@ -310,6 +310,38 @@ class EmailSendAttemptORM(Base):
     )
 
 
+class EmailDeepSeedQueueORM(Base):
+    __tablename__ = "email_deep_seed_queue"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    internal_uuid: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), unique=True
+    )
+    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
+    seed_reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    latest_received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sample_subject: Mapped[str] = mapped_column(String(512), nullable=False)
+    from_addresses: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    thread_payload: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(Text())
+    email_thread_id: Mapped[int | None] = mapped_column(
+        ForeignKey("email_threads.id", ondelete="SET NULL")
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class ScheduledThreadTaskORM(Base):
     __tablename__ = "scheduled_thread_tasks"
 

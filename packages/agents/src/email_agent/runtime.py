@@ -68,6 +68,11 @@ class SendAttemptRecord:
     id: int
 
 
+@dataclass(slots=True, frozen=True)
+class DeepSeedQueueRecord:
+    id: int
+
+
 class EmailAgentRuntime(Protocol):
     def start_run(
         self,
@@ -246,6 +251,38 @@ class EmailAgentRuntime(Protocol):
         provider_error_code: str | None = None,
         provider_message_id: str | None = None,
     ) -> SendAttemptRecord | None: ...
+
+    def enqueue_deep_seed_thread(
+        self,
+        *,
+        source_type: str,
+        provider_thread_id: str,
+        seed_reason: str,
+        message_count: int,
+        latest_received_at: datetime,
+        sample_subject: str,
+        from_addresses: tuple[str, ...],
+        thread_payload: list[dict[str, object]],
+    ) -> tuple[DeepSeedQueueRecord, bool]: ...
+
+    def list_deep_seed_queue(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]: ...
+
+    def mark_deep_seed_item_processing(self, item_id: int) -> dict | None: ...
+
+    def mark_deep_seed_item_completed(
+        self,
+        item_id: int,
+        *,
+        email_thread_id: int | None,
+        completed_at: datetime,
+    ) -> dict | None: ...
+
+    def mark_deep_seed_item_failed(self, item_id: int, *, error_message: str) -> dict | None: ...
 
     def create_outbound_email_message(
         self,

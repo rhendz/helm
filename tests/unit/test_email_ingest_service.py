@@ -91,3 +91,62 @@ def test_plan_seed_email_messages_returns_bucketed_thread_report(monkeypatch) ->
     assert result["bucket_counts"]["deep_seed"] == 1
     assert result["bucket_thread_ids"]["deep_seed"] == ["thread-1"]
     assert result["failed_message_count"] == 1
+
+
+def test_enqueue_seed_email_messages_persists_only_deep_seed_threads(monkeypatch) -> None:  # noqa: ANN001
+    class _Message:
+        def __init__(self, *, message_id: str, thread_id: str, sender: str, subject: str) -> None:
+            self.provider_message_id = message_id
+            self.provider_thread_id = thread_id
+            self.from_address = sender
+            self.subject = subject
+            self.body_text = "Body"
+            self.received_at = datetime(2026, 1, 2, 8, 0, tzinfo=UTC)
+            self.normalized_at = datetime(2026, 1, 2, 8, 1, tzinfo=UTC)
+            self.source = "gmail"
+
+    class _Runtime:
+        def __init__(self) -> None:
+            self.enqueued: list[str] = []
+
+        def enqueue_deep_seed_thread(self, **kwargs):  # noqa: ANN003
+            self.enqueued.append(kwargs["provider_thread_id"])
+            return type("Record", (), {"id": len(self.enqueued)})(), True
+
+    runtime = _Runtime()
+    monkeypatch.setattr(
+        email_service,
+        "pull_new_messages_report",
+        lambda manual_payload: type(
+            "Report",
+            (),
+            {
+                "messages": [
+                    _Message(
+                        message_id="msg-1",
+                        thread_id="thread-1",
+                        sender="recruiter@example.com",
+                        subject="Interview follow-up",
+                    ),
+                    _Message(
+                        message_id="msg-2",
+                        thread_id="thread-2",
+                        sender="friend@example.com",
+                        subject="Dinner plans",
+                    ),
+                ],
+                "failure_counts": {},
+            },
+        )(),
+    )
+    monkeypatch.setattr(email_service, "_runtime", lambda: runtime)
+
+    result = email_service.enqueue_seed_email_messages(
+        source_type="email_manual",
+        messages=[{"id": "msg-1"}, {"id": "msg-2"}],
+    )
+
+    assert result["status"] == "accepted"
+    assert result["enqueued_count"] == 1
+    assert result["skipped_count"] == 0
+    assert result["queued_thread_ids"] == ["thread-1"]
