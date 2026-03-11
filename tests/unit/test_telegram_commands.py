@@ -532,6 +532,9 @@ async def test_replays_command_formats_items(monkeypatch: pytest.MonkeyPatch) ->
             return [
                 ReplayQueueView(
                     id=31,
+                    agent_run_id=44,
+                    agent_name="email_triage",
+                    agent_run_error_message="history id 123 was stale",
                     source_type="email_message",
                     source_id="msg-31",
                     status="dead_lettered",
@@ -551,7 +554,9 @@ async def test_replays_command_formats_items(monkeypatch: pytest.MonkeyPatch) ->
 
     assert update.message.replies == [
         "Replay items (dead_lettered):\n"
-        "31: dead_lettered attempts=3 email_message/msg-31 error=cursor invalid"
+        "31: dead_lettered attempts=3 email_message/msg-31 "
+        "run=email_triage#44 last_error=cursor invalid "
+        "origin_error=history id 123 was stale"
     ]
 
 

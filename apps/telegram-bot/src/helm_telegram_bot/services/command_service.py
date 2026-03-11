@@ -107,6 +107,9 @@ class DraftDetailView:
 @dataclass(frozen=True, slots=True)
 class ReplayQueueView:
     id: int
+    agent_run_id: int | None
+    agent_name: str | None
+    agent_run_error_message: str | None
     source_type: str
     source_id: str | None
     status: str
@@ -125,6 +128,9 @@ class TelegramCommandService:
         return [
             ReplayQueueView(
                 id=item["id"],
+                agent_run_id=item.get("agent_run_id"),
+                agent_name=item.get("agent_name"),
+                agent_run_error_message=item.get("agent_run_error_message"),
                 source_type=item["source_type"],
                 source_id=item.get("source_id"),
                 status=item["status"],
