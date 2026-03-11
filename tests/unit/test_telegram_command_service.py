@@ -105,6 +105,30 @@ def test_list_job_controls_includes_known_jobs(monkeypatch) -> None:  # noqa: AN
     assert by_name["scheduled_thread_tasks"].run_command == "/run_job scheduled_thread_tasks"
 
 
+def test_get_job_control_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(
+        command_service,
+        "list_job_control_rows",
+        lambda: [{"job_name": "replay", "paused": True}],
+    )
+
+    service = command_service.TelegramCommandService()
+    item = service.get_job_control("replay")
+
+    assert item is not None
+    assert item.job_name == "replay"
+    assert item.paused is True
+    assert item.run_command == "/run_replay [limit]"
+
+
+def test_get_job_control_returns_none_for_unknown_job(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "list_job_control_rows", lambda: [])
+
+    service = command_service.TelegramCommandService()
+
+    assert service.get_job_control("not_a_job") is None
+
+
 def test_list_uninitialized_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
     runtime = type(
         "Runtime",

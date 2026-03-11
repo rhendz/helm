@@ -160,6 +160,12 @@ class TelegramCommandService:
             )
         return sorted(items, key=lambda item: (not item.paused, item.job_name))
 
+    def get_job_control(self, job_name: str) -> JobControlView | None:
+        return next(
+            (item for item in self.list_job_controls() if item.job_name == job_name),
+            None,
+        )
+
     def get_replay_job_status(self) -> ThreadTaskTransitionResult:
         replay = next(
             (item for item in self.list_job_controls() if item.job_name == "replay"),

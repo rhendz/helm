@@ -11,6 +11,7 @@ from helm_telegram_bot.commands import (
     drafts,
     email_config,
     followup,
+    job,
     job_controls,
     needsreview_threads,
     pause_job,
@@ -60,6 +61,7 @@ def main() -> None:
     application.add_handler(CommandHandler("draft", draft.handle))
     application.add_handler(CommandHandler("drafts", drafts.handle))
     application.add_handler(CommandHandler("email_config", email_config.handle))
+    application.add_handler(CommandHandler("job", job.handle))
     application.add_handler(CommandHandler("job_controls", job_controls.handle))
     application.add_handler(CommandHandler("jobs", job_controls.handle))
     application.add_handler(CommandHandler("needsreview_threads", needsreview_threads.handle))

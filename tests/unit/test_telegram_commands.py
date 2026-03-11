@@ -10,6 +10,7 @@ from helm_telegram_bot.commands import (
     drafts,
     email_config,
     followup,
+    job,
     job_controls,
     needsreview_threads,
     pause_job,
@@ -740,6 +741,64 @@ async def test_pause_job_command_calls_service(monkeypatch: pytest.MonkeyPatch) 
     await pause_job.handle(update, _Context(args=["email_triage"]))
 
     assert update.message.replies == ["email_triage job paused."]
+
+
+@pytest.mark.asyncio
+async def test_job_command_rejects_invalid_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await job.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /job <job_name>"]
+
+
+@pytest.mark.asyncio
+async def test_job_command_formats_single_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_job_control(self, job_name: str) -> JobControlView | None:
+            assert job_name == "replay"
+            return JobControlView(
+                job_name="replay",
+                paused=True,
+                run_command="/run_replay [limit]",
+                note="bounded manual trigger",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job, "_service", _Service())
+    update = _Update()
+
+    await job.handle(update, _Context(args=["replay"]))
+
+    assert update.message.replies == [
+        "Job replay\nStatus: paused\nRun: /run_replay [limit]\nNote: bounded manual trigger"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_job_command_surfaces_unknown_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_job_control(self, job_name: str) -> JobControlView | None:
+            assert job_name == "not_a_job"
+            return None
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job, "_service", _Service())
+    update = _Update()
+
+    await job.handle(update, _Context(args=["not_a_job"]))
+
+    assert update.message.replies == ["Unknown job: not_a_job."]
 
 
 @pytest.mark.asyncio
