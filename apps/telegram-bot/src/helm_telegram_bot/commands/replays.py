@@ -35,11 +35,16 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = [title]
     for item in items:
         source_id = item.source_id or "(none)"
-        error = f" error={item.last_error}" if item.last_error else ""
+        run_context = ""
+        if item.agent_run_id is not None:
+            agent_name = item.agent_name or "unknown_agent"
+            run_context = f" run={agent_name}#{item.agent_run_id}"
+        error = f" last_error={item.last_error}" if item.last_error else ""
+        origin_error = ""
+        if item.agent_run_error_message and item.agent_run_error_message != item.last_error:
+            origin_error = f" origin_error={item.agent_run_error_message}"
         lines.append(
-            
-                f"{item.id}: {item.status} attempts={item.attempts} "
-                f"{item.source_type}/{source_id}{error}"
-            
+            f"{item.id}: {item.status} attempts={item.attempts} "
+            f"{item.source_type}/{source_id}{run_context}{error}{origin_error}"
         )
     await update.message.reply_text("\n".join(lines))

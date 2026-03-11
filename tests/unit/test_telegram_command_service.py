@@ -58,6 +58,9 @@ def test_list_replay_queue_applies_status_filter(monkeypatch) -> None:  # noqa: 
             "list_replay_queue": lambda self, *, status, limit: [
                 {
                     "id": 41,
+                    "agent_run_id": 12,
+                    "agent_name": "email_triage",
+                    "agent_run_error_message": "history cursor invalid",
                     "source_type": "email_message",
                     "source_id": "msg-41",
                     "status": status or "dead_lettered",
@@ -75,6 +78,7 @@ def test_list_replay_queue_applies_status_filter(monkeypatch) -> None:  # noqa: 
     assert len(items) == 1
     assert items[0].id == 41
     assert items[0].status == "dead_lettered"
+    assert items[0].agent_name == "email_triage"
 
 
 def test_list_uninitialized_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
@@ -493,6 +497,9 @@ def test_requeue_replay_item_happy_path(monkeypatch) -> None:  # noqa: ANN001
             "list_replay_queue": lambda self, *, status=None, limit=20: [
                 {
                     "id": 22,
+                    "agent_run_id": 91,
+                    "agent_name": "email_triage",
+                    "agent_run_error_message": "cursor invalid",
                     "source_type": "email_message",
                     "source_id": "msg-22",
                     "status": "dead_lettered",
@@ -524,6 +531,9 @@ def test_requeue_replay_item_rejects_non_terminal_status(monkeypatch) -> None:  
             "list_replay_queue": lambda self, *, status=None, limit=20: [
                 {
                     "id": 23,
+                    "agent_run_id": 92,
+                    "agent_name": "email_triage",
+                    "agent_run_error_message": "cursor invalid",
                     "source_type": "email_message",
                     "source_id": "msg-23",
                     "status": "pending",

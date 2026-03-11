@@ -588,7 +588,18 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 status=status,
                 limit=limit,
             )
-            return [_replay_queue_payload(record) for record in records]
+            agent_run_repository = SQLAlchemyAgentRunRepository(session)
+            return [
+                _replay_queue_payload(
+                    record,
+                    agent_run=(
+                        agent_run_repository.get_by_id(record.agent_run_id)
+                        if record.agent_run_id is not None
+                        else None
+                    ),
+                )
+                for record in records
+            ]
 
     def requeue_replay_item(self, item_id: int) -> ReplayQueueRecord | None:
         with self.session_factory() as session:
@@ -1057,10 +1068,15 @@ def _deep_seed_queue_payload(record: object | None) -> dict | None:
     }
 
 
-def _replay_queue_payload(record: object) -> dict:
+def _replay_queue_payload(record: object, *, agent_run: object | None) -> dict:
     return {
         "id": record.id,
         "agent_run_id": record.agent_run_id,
+        "agent_name": agent_run.agent_name if agent_run is not None else None,
+        "agent_run_status": agent_run.status if agent_run is not None else None,
+        "agent_run_error_message": agent_run.error_message if agent_run is not None else None,
+        "agent_run_started_at": agent_run.started_at if agent_run is not None else None,
+        "agent_run_completed_at": agent_run.completed_at if agent_run is not None else None,
         "source_type": record.source_type,
         "source_id": record.source_id,
         "status": record.status,
