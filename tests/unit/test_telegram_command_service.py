@@ -93,8 +93,12 @@ def test_list_job_controls_includes_known_jobs(monkeypatch) -> None:  # noqa: AN
 
     by_name = {item.job_name: item for item in items}
     assert by_name["replay"].paused is True
+    assert by_name["replay"].run_command == "/run_replay [limit]"
+    assert by_name["replay"].note == "bounded manual trigger"
     assert by_name["email_triage"].paused is False
+    assert by_name["email_triage"].run_command == "/run_job email_triage"
     assert by_name["scheduled_thread_tasks"].paused is False
+    assert by_name["scheduled_thread_tasks"].run_command == "/run_job scheduled_thread_tasks"
 
 
 def test_list_uninitialized_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
