@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 
 from helm_api.schemas import JobControlListResponse, JobControlResponse
@@ -11,9 +13,12 @@ router = APIRouter(prefix="/v1/job-controls", tags=["job-controls"])
 
 
 @router.get("", response_model=JobControlListResponse)
-def get_job_controls() -> JobControlListResponse:
+def get_job_controls(
+    status: Literal["paused", "active"] | None = None,
+) -> JobControlListResponse:
+    paused = None if status is None else status == "paused"
     return JobControlListResponse(
-        items=[JobControlResponse(**item) for item in list_job_controls()]
+        items=[JobControlResponse(**item) for item in list_job_controls(paused=paused)]
     )
 
 

@@ -8,6 +8,8 @@ def test_routes_exist() -> None:
     assert client.get("/v1/status/agent-runs/failures").status_code == 200
     assert client.get("/v1/status/draft-transitions/failures").status_code == 200
     assert client.get("/v1/job-controls").status_code == 200
+    assert client.get("/v1/job-controls?status=paused").status_code == 200
+    assert client.get("/v1/job-controls?status=active").status_code == 200
     assert client.get("/v1/job-controls/not-a-real-job").status_code == 404
     assert client.get("/v1/actions").status_code == 200
     email_ingest_response = client.post(
@@ -148,6 +150,12 @@ def test_routes_exist() -> None:
     pause_response = client.post("/v1/job-controls/digest/pause")
     assert pause_response.status_code == 200
     assert pause_response.json()["paused"] is True
+    paused_items_response = client.get("/v1/job-controls?status=paused")
+    assert paused_items_response.status_code == 200
+    assert any(
+        item["job_name"] == "digest" and item["paused"] is True
+        for item in paused_items_response.json()["items"]
+    )
     detail_response = client.get("/v1/job-controls/digest")
     assert detail_response.status_code in {200, 404}
     if detail_response.status_code == 200:
@@ -155,6 +163,12 @@ def test_routes_exist() -> None:
     resume_response = client.post("/v1/job-controls/digest/resume")
     assert resume_response.status_code == 200
     assert resume_response.json()["paused"] is False
+    active_items_response = client.get("/v1/job-controls?status=active")
+    assert active_items_response.status_code == 200
+    assert any(
+        item["job_name"] == "digest" and item["paused"] is False
+        for item in active_items_response.json()["items"]
+    )
     trace_response = client.get("/v1/artifacts/action/1/trace")
     assert trace_response.status_code == 200
     assert trace_response.json()["status"] in {"ok", "not_found", "unavailable"}
