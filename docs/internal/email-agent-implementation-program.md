@@ -52,7 +52,7 @@ Major gaps against the Email Agent System Definition:
 - visible labels, resurfacing source, action reason, and confidence bands are not durably represented on thread state.
 - no classification artifact or draft reasoning artifact persistence exists.
 - metadata-first seed planning and deep-seed queue scaffolding exist, but deeper seed quality remains limited.
-- no stale follow-up scan exists.
+- stale follow-up scan exists with weekday-only business-day scheduling.
 - manual approval-before-send execution and worker-owned retry/recovery exist.
 - API and Telegram surfaces are still generic artifact views, not email-domain views.
 
@@ -304,7 +304,7 @@ Priority order:
 - stale follow-up scan
 - reminder-due processing
 - metadata-first seed pass queueing
-- scheduled inbox sweep scaffold
+- scheduled inbox sweep hardening
 
 ### API + Telegram
 - structured email thread endpoints
