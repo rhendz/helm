@@ -567,15 +567,18 @@ def test_email_agent_config_repository_creates_singleton_config() -> None:
         initial = repo.get_or_create()
         assert initial.approval_required_before_send is True
         assert initial.default_follow_up_business_days == 3
+        assert initial.timezone_name == "UTC"
 
         updated = repo.update(
             EmailAgentConfigPatch(
                 approval_required_before_send=False,
                 default_follow_up_business_days=5,
+                timezone_name="America/Los_Angeles",
                 last_history_cursor="cursor-1",
             )
         )
         assert updated.id == initial.id
         assert updated.approval_required_before_send is False
         assert updated.default_follow_up_business_days == 5
+        assert updated.timezone_name == "America/Los_Angeles"
         assert updated.last_history_cursor == "cursor-1"

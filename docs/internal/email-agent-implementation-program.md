@@ -207,7 +207,7 @@ These areas should not be implemented beyond scaffolding until a companion docum
 - Safe now: define explicit artifact schema contracts and keep storage implementation swappable.
 
 6. Business-day calculation contract
-- Unclear: exact calendar semantics for the 3-business-day follow-up rule, including holidays and timezone ownership.
+- Unclear: exact calendar semantics for the 3-business-day follow-up rule beyond weekday-only logic, including future holiday support.
 - Why it matters: affects follow-up due logic and tests.
 - Safe now: wire a business-day service interface with a default weekday-only implementation pending refinement.
 

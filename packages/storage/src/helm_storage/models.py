@@ -373,6 +373,7 @@ class EmailAgentConfigORM(Base):
     default_follow_up_business_days: Mapped[int] = mapped_column(
         Integer, default=3, nullable=False
     )
+    timezone_name: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     last_history_cursor: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
