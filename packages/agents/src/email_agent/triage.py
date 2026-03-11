@@ -271,34 +271,45 @@ def _persist_triage_artifacts(
         email_draft_record = runtime.get_latest_email_draft_for_thread(
             email_thread_id=email_thread_id
         )
+        draft_body = _build_draft_stub(message=message, classification=classification)
+        reasoning_artifact = {
+            "schema_version": "email_draft_reasoning_v1",
+            "prompt_context": {
+                "trigger_family": trigger_family,
+                "thread_summary": thread_summary,
+                "from_address": message.from_address,
+                "subject": message.subject,
+            },
+            "model_metadata": {
+                "generator": "draft_stub_scaffold",
+                "prompt_version": "email_draft_scaffold_v1",
+            },
+            "reasoning_payload": {
+                "classification": classification,
+                "draft_reply_required": state.get("draft_reply_required", False),
+                "action_item_required": state.get("action_item_required", False),
+            },
+            "refinement_metadata": {
+                "event_type": "refinement" if email_draft_record is not None else "generation",
+                "strategy": "stub",
+            },
+        }
         if email_draft_record is None:
             email_draft_record = runtime.create_email_draft(
                 email_thread_id=email_thread_id,
                 action_proposal_id=proposal_record.id if proposal_record is not None else None,
-                draft_body=_build_draft_stub(message=message, classification=classification),
+                draft_body=draft_body,
                 draft_subject=message.subject or None,
-                reasoning_artifact={
-                    "schema_version": "email_draft_reasoning_v1",
-                    "prompt_context": {
-                        "trigger_family": trigger_family,
-                        "thread_summary": thread_summary,
-                        "from_address": message.from_address,
-                        "subject": message.subject,
-                    },
-                    "model_metadata": {
-                        "generator": "draft_stub_scaffold",
-                        "prompt_version": "email_draft_scaffold_v1",
-                    },
-                    "reasoning_payload": {
-                        "classification": classification,
-                        "draft_reply_required": state.get("draft_reply_required", False),
-                        "action_item_required": state.get("action_item_required", False),
-                    },
-                    "refinement_metadata": {
-                        "event_type": "generation",
-                        "strategy": "stub",
-                    },
-                },
+                reasoning_artifact=reasoning_artifact,
+            )
+        else:
+            email_draft_record = runtime.update_email_draft(
+                draft_id=email_draft_record.id,
+                email_thread_id=email_thread_id,
+                action_proposal_id=proposal_record.id if proposal_record is not None else None,
+                draft_body=draft_body,
+                draft_subject=message.subject or None,
+                reasoning_artifact=reasoning_artifact,
             )
 
     if state.get("digest_item_required", False):

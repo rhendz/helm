@@ -15,6 +15,7 @@ from helm_storage.repositories.contracts import (
     DraftReplyRepository,
     EmailAgentConfigPatch,
     EmailAgentConfigRepository,
+    EmailDraftContentPatch,
     EmailDraftRepository,
     EmailThreadRepository,
     NewActionItem,
@@ -218,6 +219,39 @@ def test_action_proposal_and_email_draft_repositories_preserve_lineage() -> None
         refreshed = draft_repo.get_by_id(draft.id)
         assert refreshed is not None
         assert refreshed.approval_status == "approved"
+
+
+def test_email_draft_repository_updates_content_in_place() -> None:
+    with _session() as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-draft-update"))
+        draft = draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                draft_body="Original draft",
+                draft_subject="Re: Hello",
+                approval_status="approved",
+            )
+        )
+
+        updated = draft_repo.update_content(
+            draft.id,
+            EmailDraftContentPatch(
+                draft_body="Refined draft",
+                draft_subject="Re: Updated hello",
+                approval_status="pending_user",
+                draft_reasoning_artifact_ref="artifact-2",
+            ),
+        )
+
+        assert updated is not None
+        assert updated.id == draft.id
+        assert updated.draft_body == "Refined draft"
+        assert updated.draft_subject == "Re: Updated hello"
+        assert updated.approval_status == "pending_user"
+        assert updated.draft_reasoning_artifact_ref == "artifact-2"
 
 
 def test_draft_reasoning_artifact_repository_preserves_history() -> None:

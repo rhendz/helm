@@ -159,6 +159,17 @@ class EmailAgentRuntime(Protocol):
         reasoning_artifact: dict[str, object] | None = None,
     ) -> DraftRecord: ...
 
+    def update_email_draft(
+        self,
+        *,
+        draft_id: int,
+        email_thread_id: int,
+        action_proposal_id: int | None,
+        draft_body: str,
+        draft_subject: str | None,
+        reasoning_artifact: dict[str, object] | None = None,
+    ) -> DraftRecord | None: ...
+
     def get_email_draft_by_id(self, draft_id: int) -> dict | None: ...
 
     def list_draft_reasoning_artifacts_for_draft(self, *, draft_id: int) -> list[dict]: ...
