@@ -14,7 +14,9 @@ from helm_telegram_bot.commands import (
     needsreview_threads,
     proposals,
     remind,
+    replays,
     reprocess_thread,
+    requeue_replay,
     resolve,
     resolved_threads,
     review,
@@ -52,6 +54,8 @@ def main() -> None:
     application.add_handler(CommandHandler("email_config", email_config.handle))
     application.add_handler(CommandHandler("needsreview_threads", needsreview_threads.handle))
     application.add_handler(CommandHandler("proposals", proposals.handle))
+    application.add_handler(CommandHandler("replays", replays.handle))
+    application.add_handler(CommandHandler("requeue_replay", requeue_replay.handle))
     application.add_handler(CommandHandler("reprocess_thread", reprocess_thread.handle))
     application.add_handler(CommandHandler("approve", approve.handle))
     application.add_handler(CommandHandler("done_task", done_task.handle))

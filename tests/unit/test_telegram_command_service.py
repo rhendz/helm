@@ -50,6 +50,33 @@ def test_list_action_threads_uses_action_label(monkeypatch) -> None:  # noqa: AN
     assert threads[0].id == 11
 
 
+def test_list_replay_queue_applies_status_filter(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_replay_queue": lambda self, *, status, limit: [
+                {
+                    "id": 41,
+                    "source_type": "email_message",
+                    "source_id": "msg-41",
+                    "status": status or "dead_lettered",
+                    "attempts": 3,
+                    "last_error": "history cursor invalid",
+                }
+            ][:limit]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    items = service.list_replay_queue(limit=2, status="dead_lettered")
+
+    assert len(items) == 1
+    assert items[0].id == 41
+    assert items[0].status == "dead_lettered"
+
+
 def test_list_uninitialized_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
     runtime = type(
         "Runtime",
@@ -456,6 +483,66 @@ def test_send_draft_requires_approval(monkeypatch) -> None:  # noqa: ANN001
 
     assert result.ok is False
     assert result.message == "Draft 9 is not approved; approve it before sending."
+
+
+def test_requeue_replay_item_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_replay_queue": lambda self, *, status=None, limit=20: [
+                {
+                    "id": 22,
+                    "source_type": "email_message",
+                    "source_id": "msg-22",
+                    "status": "dead_lettered",
+                    "attempts": 3,
+                    "last_error": "boom",
+                }
+            ],
+            "requeue_replay_item": lambda self, item_id: type(
+                "ReplayQueueRecord",
+                (),
+                {"id": item_id},
+            )(),
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    result = service.requeue_replay_item(22)
+
+    assert result.ok is True
+    assert result.message == "Requeued replay item 22."
+
+
+def test_requeue_replay_item_rejects_non_terminal_status(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "list_replay_queue": lambda self, *, status=None, limit=20: [
+                {
+                    "id": 23,
+                    "source_type": "email_message",
+                    "source_id": "msg-23",
+                    "status": "pending",
+                    "attempts": 1,
+                    "last_error": None,
+                }
+            ]
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    result = service.requeue_replay_item(23)
+
+    assert result.ok is False
+    assert (
+        result.message
+        == "Replay item 23 is pending; only failed or dead-lettered items can be requeued."
+    )
 
 
 def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
