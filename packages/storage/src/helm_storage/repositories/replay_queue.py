@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from helm_storage.models import ReplayQueueORM
 
 _ACTIVE_REPLAY_STATUSES = ("pending", "processing")
+_TERMINAL_REPLAY_STATUSES = ("completed", "dead_lettered")
 
 
 class SQLAlchemyReplayQueueRepository:
@@ -71,11 +72,17 @@ class SQLAlchemyReplayQueueRepository:
         self._session.add(item)
         self._session.commit()
 
-    def mark_failed(self, item_id: int, *, error_message: str) -> None:
+    def mark_failed(
+        self,
+        item_id: int,
+        *,
+        error_message: str,
+        max_attempts: int = 3,
+    ) -> None:
         item = self.get_by_id(item_id)
         if item is None:
             return
-        item.status = "failed"
+        item.status = "dead_lettered" if item.attempts >= max_attempts else "pending"
         item.last_error = error_message[:4000]
         self._session.add(item)
         self._session.commit()
