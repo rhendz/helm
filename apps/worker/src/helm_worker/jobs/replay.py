@@ -15,24 +15,25 @@ MAX_REPLAY_ATTEMPTS = 3
 STALE_PROCESSING_TIMEOUT = timedelta(minutes=15)
 
 
-def run() -> None:
+def run(*, limit: int = 10) -> int:
     try:
         with SessionLocal() as session:
             repository = SQLAlchemyReplayQueueRepository(session)
             reclaimed = repository.reclaim_stale_processing(
                 stale_before=_utcnow() - STALE_PROCESSING_TIMEOUT,
-                limit=10,
+                limit=limit,
             )
             if reclaimed:
                 logger.info("replay_queue_reclaimed_stale_processing", count=len(reclaimed))
-            pending = repository.list_pending(limit=10)
+            pending = repository.list_pending(limit=limit)
             pending_ids = [item.id for item in pending]
     except SQLAlchemyError:
         logger.warning("replay_queue_query_failed")
-        return
+        return 0
 
     for item_id in pending_ids:
         _process_replay_item(item_id=item_id)
+    return len(pending_ids)
 
 
 def _process_replay_item(*, item_id: int) -> None:

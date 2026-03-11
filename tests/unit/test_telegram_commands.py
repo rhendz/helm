@@ -20,6 +20,7 @@ from helm_telegram_bot.commands import (
     resolved_threads,
     review,
     reviews,
+    run_replay,
     send,
     set_email_timezone,
     set_followup_days,
@@ -582,6 +583,46 @@ async def test_requeue_replay_command_calls_service(monkeypatch: pytest.MonkeyPa
 
     assert service.seen_id == 31
     assert update.message.replies == ["Requeued replay item 31."]
+
+
+@pytest.mark.asyncio
+async def test_run_replay_command_rejects_invalid_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(run_replay, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await run_replay.handle(update, _Context(args=["bad"]))
+
+    assert update.message.replies == ["Usage: /run_replay [limit]"]
+
+
+@pytest.mark.asyncio
+async def test_run_replay_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen_limit: int | None = None
+
+        def run_replay_worker(self, *, limit: int) -> ThreadTaskTransitionResult:
+            self.seen_limit = limit
+            return ThreadTaskTransitionResult(
+                ok=True,
+                message="Triggered replay worker for up to 5 items; processed 2.",
+            )
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(run_replay, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(run_replay, "_service", service)
+    update = _Update()
+
+    await run_replay.handle(update, _Context(args=["5"]))
+
+    assert service.seen_limit == 5
+    assert update.message.replies == ["Triggered replay worker for up to 5 items; processed 2."]
 
 
 @pytest.mark.asyncio
