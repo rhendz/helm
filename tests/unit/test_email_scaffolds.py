@@ -9,7 +9,12 @@ from email_agent.triage import (
 )
 from email_agent.types import EmailMessage
 from helm_connectors import gmail
-from helm_connectors.gmail import normalize_message, pull_new_messages, pull_new_messages_report
+from helm_connectors.gmail import (
+    normalize_message,
+    pull_changed_messages_report,
+    pull_new_messages,
+    pull_new_messages_report,
+)
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
 from helm_storage.models import (
@@ -153,6 +158,127 @@ def test_pull_new_messages_polling_normalizes_provider_payload(
     assert messages[0].from_address == "sender@example.com"
     assert messages[0].subject == "Role update"
     assert messages[0].body_text == "Hello from Gmail"
+
+
+def test_pull_changed_messages_history_normalizes_provider_payload_and_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name, value in {
+        "GMAIL_CLIENT_ID": "id",
+        "GMAIL_CLIENT_SECRET": "secret",
+        "GMAIL_REFRESH_TOKEN": "refresh",
+        "GMAIL_USER_EMAIL": "me@example.com",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+    class FakeHistoryRequest:
+        def execute(self) -> dict[str, object]:
+            return {
+                "historyId": "cursor-2",
+                "history": [
+                    {"messagesAdded": [{"message": {"id": "msg-10"}}]},
+                    {"messagesAdded": [{"message": {"id": "msg-10"}}]},
+                ],
+            }
+
+    class FakeGetRequest:
+        def execute(self) -> dict[str, object]:
+            return {
+                "id": "msg-10",
+                "threadId": "thr-10",
+                "internalDate": "1734567890000",
+                "snippet": "fallback body",
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "history@example.com"},
+                        {"name": "Subject", "value": "History subject"},
+                    ],
+                    "parts": [
+                        {
+                            "mimeType": "text/plain",
+                            "body": {"data": "SGlzdG9yeSBib2R5"},
+                        }
+                    ],
+                },
+            }
+
+    class FakeMessagesResource:
+        def get(self, *, id: str, **_: object) -> FakeGetRequest:
+            assert id == "msg-10"
+            return FakeGetRequest()
+
+    class FakeHistoryResource:
+        def list(self, **_: object) -> FakeHistoryRequest:
+            return FakeHistoryRequest()
+
+    class FakeUsersResource:
+        def messages(self) -> FakeMessagesResource:
+            return FakeMessagesResource()
+
+        def history(self) -> FakeHistoryResource:
+            return FakeHistoryResource()
+
+        def getProfile(self, **_: object):
+            return self
+
+        def execute(self) -> dict[str, object]:
+            return {"historyId": "cursor-2"}
+
+    class FakeService:
+        def users(self) -> FakeUsersResource:
+            return FakeUsersResource()
+
+    monkeypatch.setattr(gmail, "_build_gmail_service", lambda: FakeService())
+    report = pull_changed_messages_report(last_history_cursor="cursor-1")
+
+    assert report.mode == "history"
+    assert report.next_history_cursor == "cursor-2"
+    assert len(report.messages) == 1
+    assert report.messages[0].provider_message_id == "msg-10"
+    assert report.messages[0].body_text == "History body"
+
+
+def test_pull_changed_messages_bootstraps_to_poll_when_cursor_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name, value in {
+        "GMAIL_CLIENT_ID": "id",
+        "GMAIL_CLIENT_SECRET": "secret",
+        "GMAIL_REFRESH_TOKEN": "refresh",
+        "GMAIL_USER_EMAIL": "me@example.com",
+    }.items():
+        monkeypatch.setenv(name, value)
+
+    class FakeService:
+        pass
+
+    monkeypatch.setattr(gmail, "_build_gmail_service", lambda: FakeService())
+    monkeypatch.setattr(
+        gmail,
+        "pull_new_messages_report",
+        lambda manual_payload=None: gmail.PullMessagesReport(
+            messages=[
+                normalize_message(
+                    {
+                        "id": "msg-bootstrap",
+                        "threadId": "thr-bootstrap",
+                        "from": "bootstrap@example.com",
+                        "subject": "Bootstrap",
+                        "body_text": "Seed from poll",
+                    }
+                )
+            ],
+            failure_counts={},
+            next_history_cursor="cursor-bootstrap",
+            mode="poll",
+        ),
+    )
+
+    report = pull_changed_messages_report(last_history_cursor=None)
+
+    assert report.mode == "bootstrap"
+    assert report.next_history_cursor == "cursor-bootstrap"
+    assert [message.provider_message_id for message in report.messages] == ["msg-bootstrap"]
 
 
 def test_email_triage_graph_scaffold_result_shape() -> None:

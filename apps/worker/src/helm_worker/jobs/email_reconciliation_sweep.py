@@ -1,0 +1,24 @@
+from helm_connectors.gmail import pull_new_messages_report
+from helm_observability.logging import get_logger
+from helm_runtime.email_agent import build_email_agent_runtime
+from helm_worker.jobs.email_message_ingest import process_inbound_messages
+
+logger = get_logger("helm_worker.jobs.email_reconciliation_sweep")
+
+
+def run() -> None:
+    runtime = build_email_agent_runtime()
+    report = pull_new_messages_report()
+    logger.info(
+        "email_reconciliation_sweep_tick",
+        count=len(report.messages),
+        normalization_failures=report.failure_counts,
+        next_history_cursor=report.next_history_cursor,
+    )
+
+    ingest_report = process_inbound_messages(runtime=runtime, messages=report.messages)
+    logger.info(
+        "email_reconciliation_sweep_completed",
+        processed_count=ingest_report.processed_count,
+        skipped_count=ingest_report.skipped_count,
+    )

@@ -11,6 +11,13 @@ class MessageRecord:
 
 
 @dataclass(slots=True, frozen=True)
+class MessageProcessingRecord:
+    id: int
+    direction: str
+    processed_at: datetime | None
+
+
+@dataclass(slots=True, frozen=True)
 class RunRecord:
     id: int
 
@@ -99,6 +106,11 @@ class EmailAgentRuntime(Protocol):
     def get_thread_by_id(self, thread_id: int) -> ThreadRecord | None: ...
 
     def get_thread_by_provider_thread_id(self, provider_thread_id: str) -> ThreadRecord | None: ...
+
+    def get_message_by_provider_message_id(
+        self,
+        provider_message_id: str,
+    ) -> MessageProcessingRecord | None: ...
 
     def upsert_inbound_message(
         self,
