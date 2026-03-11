@@ -202,6 +202,7 @@ class NewScheduledThreadTask:
 class EmailAgentConfigPatch:
     approval_required_before_send: bool | None = None
     default_follow_up_business_days: int | None = None
+    timezone_name: str | None = None
     last_history_cursor: str | None = None
 
 

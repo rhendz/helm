@@ -115,6 +115,7 @@ These are the decisions that should now be treated as the baseline unless explic
 - Current fields already supported:
   - `approval_required_before_send`
   - `default_follow_up_business_days`
+  - `timezone_name`
   - `last_history_cursor`
 - Implication:
   - `HELM-56` should stop blocking implementation
@@ -189,7 +190,6 @@ These are the decisions that should now be treated as the baseline unless explic
   - it is conservative
   - it unblocks scheduling behavior without inventing enterprise calendar semantics
 - What is still open:
-  - where the timezone is surfaced/configured in the Email Agent boundary
   - whether future holiday support belongs in Email Agent or an external calendar service
 
 ### Decision 7: Send attempts are first-class Email Agent records

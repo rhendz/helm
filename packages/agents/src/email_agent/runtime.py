@@ -77,6 +77,7 @@ class DeepSeedQueueRecord:
 class EmailAgentConfigRecord:
     approval_required_before_send: bool
     default_follow_up_business_days: int
+    timezone_name: str
     last_history_cursor: str | None
 
 

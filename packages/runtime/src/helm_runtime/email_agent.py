@@ -596,6 +596,7 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
             return EmailAgentConfigRecord(
                 approval_required_before_send=record.approval_required_before_send,
                 default_follow_up_business_days=record.default_follow_up_business_days,
+                timezone_name=record.timezone_name,
                 last_history_cursor=record.last_history_cursor,
             )
 

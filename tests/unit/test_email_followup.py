@@ -26,6 +26,18 @@ def test_add_business_days_skips_weekends() -> None:
     assert result == datetime(2026, 3, 11, 9, 0, tzinfo=UTC)
 
 
+def test_add_business_days_uses_configured_timezone() -> None:
+    start_at = datetime(2026, 3, 7, 1, 0, tzinfo=UTC)
+
+    result = add_business_days(
+        start_at,
+        business_days=1,
+        timezone_name="America/Los_Angeles",
+    )
+
+    assert result == datetime(2026, 3, 10, 0, 0, tzinfo=UTC)
+
+
 def test_enqueue_stale_followups_creates_due_followup_task() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -80,7 +92,10 @@ def test_enqueue_stale_followups_uses_configured_business_day_window() -> None:
 
     with Session(engine) as session:
         SQLAlchemyEmailAgentConfigRepository(session).update(
-            EmailAgentConfigPatch(default_follow_up_business_days=5)
+            EmailAgentConfigPatch(
+                default_follow_up_business_days=5,
+                timezone_name="America/Los_Angeles",
+            )
         )
         thread = SQLAlchemyEmailThreadRepository(session).create(
             NewEmailThread(

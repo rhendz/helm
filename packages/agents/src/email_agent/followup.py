@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -67,6 +68,7 @@ def enqueue_stale_followups(
         due_at = add_business_days(
             outbound_received_at,
             business_days=config.default_follow_up_business_days,
+            timezone_name=config.timezone_name,
         )
         if due_at > scan_time:
             results.append(
@@ -116,17 +118,26 @@ def add_business_days(
     start_at: datetime,
     *,
     business_days: int,
+    timezone_name: str = "UTC",
 ) -> datetime:
-    current = _coerce_utc(start_at)
+    timezone = _resolve_timezone(timezone_name)
+    current = _coerce_utc(start_at).astimezone(timezone)
     remaining = max(business_days, 0)
     while remaining > 0:
         current = current + timedelta(days=1)
         if current.weekday() < 5:
             remaining -= 1
-    return current
+    return current.astimezone(UTC)
 
 
 def _coerce_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _resolve_timezone(timezone_name: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")

@@ -29,6 +29,8 @@ class SQLAlchemyEmailAgentConfigRepository:
             record.approval_required_before_send = patch.approval_required_before_send
         if patch.default_follow_up_business_days is not None:
             record.default_follow_up_business_days = patch.default_follow_up_business_days
+        if patch.timezone_name is not None:
+            record.timezone_name = patch.timezone_name
         if patch.last_history_cursor is not None:
             record.last_history_cursor = patch.last_history_cursor
         self._session.add(record)
