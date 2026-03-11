@@ -131,6 +131,8 @@ class ReplayQueueView:
 class JobControlView:
     job_name: str
     paused: bool
+    run_command: str | None
+    note: str | None
 
 
 class TelegramCommandService:
@@ -139,10 +141,24 @@ class TelegramCommandService:
             str(item["job_name"]): bool(item.get("paused"))
             for item in list_job_control_rows()
         }
-        return [
-            JobControlView(job_name=job_name, paused=persisted.get(job_name, False))
-            for job_name in sorted(JOBS)
-        ]
+        items: list[JobControlView] = []
+        for job_name in sorted(JOBS):
+            run_command: str | None = None
+            note: str | None = None
+            if job_name == "replay":
+                run_command = "/run_replay [limit]"
+                note = "bounded manual trigger"
+            elif job_name in MANUALLY_RUNNABLE_JOBS:
+                run_command = f"/run_job {job_name}"
+            items.append(
+                JobControlView(
+                    job_name=job_name,
+                    paused=persisted.get(job_name, False),
+                    run_command=run_command,
+                    note=note,
+                )
+            )
+        return items
 
     def get_replay_job_status(self) -> ThreadTaskTransitionResult:
         replay = next(

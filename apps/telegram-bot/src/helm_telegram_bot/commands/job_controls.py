@@ -19,5 +19,13 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lines = ["Job controls:"]
     for item in items:
         state = "paused" if item.paused else "active"
-        lines.append(f"{item.job_name}: {state}")
+        suffix_parts = []
+        if item.run_command:
+            suffix_parts.append(f"run={item.run_command}")
+        if item.note:
+            suffix_parts.append(item.note)
+        suffix = ""
+        if suffix_parts:
+            suffix = f" ({'; '.join(suffix_parts)})"
+        lines.append(f"{item.job_name}: {state}{suffix}")
     await update.message.reply_text("\n".join(lines))
