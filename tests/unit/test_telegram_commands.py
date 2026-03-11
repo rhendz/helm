@@ -12,6 +12,7 @@ from helm_telegram_bot.commands import (
     followup,
     job_controls,
     needsreview_threads,
+    pause_job,
     pause_replay,
     proposals,
     remind,
@@ -21,6 +22,7 @@ from helm_telegram_bot.commands import (
     requeue_replay,
     resolve,
     resolved_threads,
+    resume_job,
     resume_replay,
     review,
     reviews,
@@ -672,6 +674,37 @@ async def test_pause_replay_command_calls_service(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
+async def test_pause_job_command_rejects_invalid_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(pause_job, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await pause_job.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /pause_job <job_name>"]
+
+
+@pytest.mark.asyncio
+async def test_pause_job_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def pause_job(self, job_name: str) -> ThreadTaskTransitionResult:
+            return ThreadTaskTransitionResult(ok=True, message=f"{job_name} job paused.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(pause_job, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(pause_job, "_service", _Service())
+    update = _Update()
+
+    await pause_job.handle(update, _Context(args=["email_triage"]))
+
+    assert update.message.replies == ["email_triage job paused."]
+
+
+@pytest.mark.asyncio
 async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def list_job_controls(self) -> list[JobControlView]:
@@ -726,6 +759,37 @@ async def test_resume_replay_command_calls_service(monkeypatch: pytest.MonkeyPat
     await resume_replay.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Replay job resumed."]
+
+
+@pytest.mark.asyncio
+async def test_resume_job_command_rejects_invalid_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(resume_job, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await resume_job.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /resume_job <job_name>"]
+
+
+@pytest.mark.asyncio
+async def test_resume_job_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def resume_job(self, job_name: str) -> ThreadTaskTransitionResult:
+            return ThreadTaskTransitionResult(ok=True, message=f"{job_name} job resumed.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(resume_job, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(resume_job, "_service", _Service())
+    update = _Update()
+
+    await resume_job.handle(update, _Context(args=["email_triage"]))
+
+    assert update.message.replies == ["email_triage job resumed."]
 
 
 @pytest.mark.asyncio
