@@ -11,6 +11,7 @@ from helm_storage.repositories.contracts import (
     ActionProposalRepository,
     ClassificationArtifactRepository,
     DigestItemRepository,
+    DraftReasoningArtifactRepository,
     DraftReplyRepository,
     EmailAgentConfigPatch,
     EmailAgentConfigRepository,
@@ -20,6 +21,7 @@ from helm_storage.repositories.contracts import (
     NewActionProposal,
     NewClassificationArtifact,
     NewDigestItem,
+    NewDraftReasoningArtifact,
     NewDraftReply,
     NewEmailDraft,
     NewEmailThread,
@@ -27,6 +29,9 @@ from helm_storage.repositories.contracts import (
     ScheduledThreadTaskRepository,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
+from helm_storage.repositories.draft_reasoning_artifacts import (
+    SQLAlchemyDraftReasoningArtifactRepository,
+)
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
 from helm_storage.repositories.email_agent_config import SQLAlchemyEmailAgentConfigRepository
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
@@ -213,6 +218,71 @@ def test_action_proposal_and_email_draft_repositories_preserve_lineage() -> None
         refreshed = draft_repo.get_by_id(draft.id)
         assert refreshed is not None
         assert refreshed.approval_status == "approved"
+
+
+def test_draft_reasoning_artifact_repository_preserves_history() -> None:
+    with _session() as session:
+        thread_repo = SQLAlchemyEmailThreadRepository(session)
+        proposal_repo = SQLAlchemyActionProposalRepository(session)
+        draft_repo = SQLAlchemyEmailDraftRepository(session)
+        artifact_repo = SQLAlchemyDraftReasoningArtifactRepository(session)
+
+        assert isinstance(artifact_repo, DraftReasoningArtifactRepository)
+
+        thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-201"))
+        proposal = proposal_repo.create(
+            NewActionProposal(
+                email_thread_id=thread.id,
+                proposal_type="reply",
+                rationale="Reply with availability",
+                confidence_band="High",
+            )
+        )
+        draft = draft_repo.create(
+            NewEmailDraft(
+                email_thread_id=thread.id,
+                action_proposal_id=proposal.id,
+                draft_body="Thanks for reaching out.",
+                draft_subject="Re: Opportunity",
+            )
+        )
+
+        first = artifact_repo.create(
+            NewDraftReasoningArtifact(
+                email_draft_id=draft.id,
+                email_thread_id=thread.id,
+                action_proposal_id=proposal.id,
+                schema_version="email_draft_reasoning_v1",
+                prompt_context={"stage": "generate"},
+                model_metadata={"provider": "openai"},
+                reasoning_payload={"tone": "professional"},
+                refinement_metadata={"event_type": "generation"},
+            )
+        )
+        second = artifact_repo.create(
+            NewDraftReasoningArtifact(
+                email_draft_id=draft.id,
+                email_thread_id=thread.id,
+                action_proposal_id=proposal.id,
+                schema_version="email_draft_reasoning_v1",
+                prompt_context={"stage": "refine"},
+                model_metadata={"provider": "openai"},
+                reasoning_payload={"tone": "warmer"},
+                refinement_metadata={"event_type": "refinement"},
+            )
+        )
+
+        assert draft_repo.set_reasoning_artifact_ref(
+            draft.id,
+            artifact_ref=second.internal_uuid,
+        )
+
+        artifacts = artifact_repo.list_for_draft(email_draft_id=draft.id)
+        assert [artifact.id for artifact in artifacts] == [second.id, first.id]
+
+        refreshed = draft_repo.get_by_id(draft.id)
+        assert refreshed is not None
+        assert refreshed.draft_reasoning_artifact_ref == second.internal_uuid
 
 
 def test_classification_artifact_repository_preserves_lineage() -> None:

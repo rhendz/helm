@@ -255,6 +255,36 @@ class EmailDraftORM(Base):
     )
 
 
+class DraftReasoningArtifactORM(Base):
+    __tablename__ = "draft_reasoning_artifacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    internal_uuid: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), unique=True
+    )
+    email_draft_id: Mapped[int] = mapped_column(
+        ForeignKey("email_drafts.id", ondelete="CASCADE")
+    )
+    email_thread_id: Mapped[int] = mapped_column(
+        ForeignKey("email_threads.id", ondelete="CASCADE")
+    )
+    action_proposal_id: Mapped[int | None] = mapped_column(
+        ForeignKey("action_proposals.id", ondelete="SET NULL")
+    )
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    prompt_context: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    model_metadata: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    reasoning_payload: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    refinement_metadata: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ScheduledThreadTaskORM(Base):
     __tablename__ = "scheduled_thread_tasks"
 

@@ -7,6 +7,7 @@ Helm-specific orchestration or storage internals directly.
 from email_agent.query import (
     get_email_draft_detail,
     get_email_thread_detail,
+    list_draft_reasoning_artifacts_for_draft,
     list_draft_transition_audits_for_draft,
     list_email_drafts,
     list_email_proposals,
@@ -41,6 +42,7 @@ __all__ = [
     "create_thread_reminder",
     "get_email_draft_detail",
     "get_email_thread_detail",
+    "list_draft_reasoning_artifacts_for_draft",
     "list_draft_transition_audits_for_draft",
     "list_scheduled_tasks",
     "reprocess_email_thread",

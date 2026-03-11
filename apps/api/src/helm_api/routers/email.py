@@ -5,6 +5,7 @@ from helm_api.schemas import (
     CompleteScheduledTaskResponse,
     CreateScheduledTaskRequest,
     CreateScheduledTaskResponse,
+    DraftReasoningArtifactResponse,
     DraftTransitionAuditResponse,
     EmailDraftDetailResponse,
     EmailDraftResponse,
@@ -27,6 +28,7 @@ from helm_api.services.email_service import (
     get_draft_detail,
     get_thread_detail,
     ingest_manual_email_messages,
+    list_draft_reasoning_artifacts,
     list_draft_transition_audits,
     list_drafts,
     list_message_classification_artifacts,
@@ -123,6 +125,19 @@ def get_email_draft_transition_audits(
     return [
         DraftTransitionAuditResponse(**item)
         for item in list_draft_transition_audits(draft_id=draft_id)
+    ]
+
+
+@router.get(
+    "/drafts/{draft_id}/reasoning-artifacts",
+    response_model=list[DraftReasoningArtifactResponse],
+)
+def get_email_draft_reasoning_artifacts(
+    draft_id: int,
+) -> list[DraftReasoningArtifactResponse]:
+    return [
+        DraftReasoningArtifactResponse(**item)
+        for item in list_draft_reasoning_artifacts(draft_id=draft_id)
     ]
 
 

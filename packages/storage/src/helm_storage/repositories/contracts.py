@@ -9,6 +9,7 @@ from helm_storage.models import (
     ActionProposalORM,
     ClassificationArtifactORM,
     DigestItemORM,
+    DraftReasoningArtifactORM,
     DraftReplyORM,
     EmailAgentConfigORM,
     EmailDraftORM,
@@ -97,6 +98,18 @@ class NewEmailDraft:
     model_name: str | None = None
     prompt_version: str | None = None
     draft_reasoning_artifact_ref: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewDraftReasoningArtifact:
+    email_draft_id: int
+    email_thread_id: int
+    schema_version: str
+    prompt_context: dict[str, object]
+    model_metadata: dict[str, object]
+    reasoning_payload: dict[str, object]
+    action_proposal_id: int | None = None
+    refinement_metadata: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +249,8 @@ class EmailDraftRepository(Protocol):
 
     def set_approval_status(self, draft_id: int, *, approval_status: str) -> bool: ...
 
+    def set_reasoning_artifact_ref(self, draft_id: int, *, artifact_ref: str) -> bool: ...
+
 
 @runtime_checkable
 class ClassificationArtifactRepository(Protocol):
@@ -244,6 +259,13 @@ class ClassificationArtifactRepository(Protocol):
     def list_for_thread(self, *, email_thread_id: int) -> list[ClassificationArtifactORM]: ...
 
     def list_for_message(self, *, email_message_id: int) -> list[ClassificationArtifactORM]: ...
+
+
+@runtime_checkable
+class DraftReasoningArtifactRepository(Protocol):
+    def create(self, item: NewDraftReasoningArtifact) -> DraftReasoningArtifactORM: ...
+
+    def list_for_draft(self, *, email_draft_id: int) -> list[DraftReasoningArtifactORM]: ...
 
 
 @runtime_checkable

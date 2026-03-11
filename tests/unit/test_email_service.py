@@ -281,7 +281,6 @@ def test_email_draft_detail_includes_transition_audits() -> None:
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
         proposal_repo = SQLAlchemyActionProposalRepository(session)
-        draft_repo = SQLAlchemyEmailDraftRepository(session)
 
         thread = thread_repo.create(NewEmailThread(provider_thread_id="thr-draft-detail"))
         proposal = proposal_repo.create(
@@ -292,14 +291,18 @@ def test_email_draft_detail_includes_transition_audits() -> None:
                 confidence_band="High",
             )
         )
-        draft = draft_repo.create(
-            NewEmailDraft(
-                email_thread_id=thread.id,
-                action_proposal_id=proposal.id,
-                draft_body="Thanks for reaching out.",
-                draft_subject="Re: Opportunity",
-                approval_status="pending_user",
-            )
+        draft = runtime.create_email_draft(
+            email_thread_id=thread.id,
+            action_proposal_id=proposal.id,
+            draft_body="Thanks for reaching out.",
+            draft_subject="Re: Opportunity",
+            reasoning_artifact={
+                "schema_version": "email_draft_reasoning_v1",
+                "prompt_context": {"stage": "generate"},
+                "model_metadata": {"provider": "openai"},
+                "reasoning_payload": {"tone": "professional"},
+                "refinement_metadata": {"event_type": "generation"},
+            },
         )
 
     approve_result = approve_draft(draft.id, runtime=runtime)
@@ -307,14 +310,23 @@ def test_email_draft_detail_includes_transition_audits() -> None:
 
     detail = email_query.get_email_draft_detail(draft_id=draft.id, runtime=runtime)
     audits = email_query.list_draft_transition_audits_for_draft(draft_id=draft.id, runtime=runtime)
+    reasoning_artifacts = email_query.list_draft_reasoning_artifacts_for_draft(
+        draft_id=draft.id,
+        runtime=runtime,
+    )
 
     assert detail is not None
     assert detail["id"] == draft.id
     assert detail["approval_status"] == "approved"
+    assert detail["draft_reasoning_artifact_ref"] == reasoning_artifacts[0]["artifact_ref"]
     assert len(detail["transition_audits"]) == 1
     assert detail["transition_audits"][0]["action"] == "approve"
+    assert len(detail["reasoning_artifacts"]) == 1
+    assert detail["reasoning_artifacts"][0]["schema_version"] == "email_draft_reasoning_v1"
     assert len(audits) == 1
     assert audits[0]["to_status"] == "approved"
+    assert len(reasoning_artifacts) == 1
+    assert reasoning_artifacts[0]["email_draft_id"] == draft.id
 
 
 def test_email_service_lists_global_scheduled_tasks() -> None:

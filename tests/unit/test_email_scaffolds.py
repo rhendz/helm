@@ -16,6 +16,7 @@ from helm_storage.models import (
     AgentRunORM,
     ClassificationArtifactORM,
     DigestItemORM,
+    DraftReasoningArtifactORM,
     EmailDraftORM,
     EmailMessageORM,
     EmailThreadORM,
@@ -232,6 +233,9 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
         email_threads = list(session.execute(select(EmailThreadORM)).scalars().all())
         action_proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
         email_drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
+        draft_reasoning_artifacts = list(
+            session.execute(select(DraftReasoningArtifactORM)).scalars().all()
+        )
         classification_artifacts = list(
             session.execute(select(ClassificationArtifactORM)).scalars().all()
         )
@@ -247,6 +251,11 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert email_threads[0].visible_labels == "Action"
     assert len(action_proposals) == 1
     assert len(email_drafts) == 1
+    assert email_drafts[0].draft_reasoning_artifact_ref is not None
+    assert len(draft_reasoning_artifacts) == 1
+    assert draft_reasoning_artifacts[0].email_draft_id == email_drafts[0].id
+    assert draft_reasoning_artifacts[0].action_proposal_id == action_proposals[0].id
+    assert draft_reasoning_artifacts[0].schema_version == "email_draft_reasoning_v1"
     assert len(classification_artifacts) == 2
     assert classification_artifacts[0].email_thread_id == first_result.email_thread_id
     assert classification_artifacts[0].email_message_id == email_messages[0].id

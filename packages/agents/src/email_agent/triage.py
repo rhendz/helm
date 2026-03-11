@@ -237,6 +237,28 @@ def _persist_triage_artifacts(
                 action_proposal_id=proposal_record.id if proposal_record is not None else None,
                 draft_body=_build_draft_stub(message=message, classification=classification),
                 draft_subject=message.subject or None,
+                reasoning_artifact={
+                    "schema_version": "email_draft_reasoning_v1",
+                    "prompt_context": {
+                        "trigger_family": trigger_family,
+                        "thread_summary": thread_summary,
+                        "from_address": message.from_address,
+                        "subject": message.subject,
+                    },
+                    "model_metadata": {
+                        "generator": "draft_stub_scaffold",
+                        "prompt_version": "email_draft_scaffold_v1",
+                    },
+                    "reasoning_payload": {
+                        "classification": classification,
+                        "draft_reply_required": state.get("draft_reply_required", False),
+                        "action_item_required": state.get("action_item_required", False),
+                    },
+                    "refinement_metadata": {
+                        "event_type": "generation",
+                        "strategy": "stub",
+                    },
+                },
             )
 
     if state.get("digest_item_required", False):

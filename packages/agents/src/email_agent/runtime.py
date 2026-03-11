@@ -57,6 +57,12 @@ class ClassificationArtifactRecord:
     id: int
 
 
+@dataclass(slots=True, frozen=True)
+class DraftReasoningArtifactRecord:
+    id: int
+    artifact_ref: str
+
+
 class EmailAgentRuntime(Protocol):
     def start_run(
         self,
@@ -150,9 +156,12 @@ class EmailAgentRuntime(Protocol):
         action_proposal_id: int | None,
         draft_body: str,
         draft_subject: str | None,
+        reasoning_artifact: dict[str, object] | None = None,
     ) -> DraftRecord: ...
 
     def get_email_draft_by_id(self, draft_id: int) -> dict | None: ...
+
+    def list_draft_reasoning_artifacts_for_draft(self, *, draft_id: int) -> list[dict]: ...
 
     def list_draft_transition_audits_for_draft(self, *, draft_id: int) -> list[dict]: ...
 
