@@ -1,10 +1,15 @@
+from email_agent.triage import process_inbound_email_message
+from email_agent.types import EmailMessage
 from helm_observability.agent_runs import record_agent_run
 from helm_observability.logging import get_logger
+from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import SessionLocal
+from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
 from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger("helm_worker.jobs.replay")
+MAX_REPLAY_ATTEMPTS = 3
 
 
 def run() -> None:
@@ -50,7 +55,11 @@ def _process_replay_item(*, item_id: int) -> None:
     except Exception as exc:  # noqa: BLE001
         with SessionLocal() as session:
             repository = SQLAlchemyReplayQueueRepository(session)
-            repository.mark_failed(item_id, error_message=str(exc))
+            repository.mark_failed(
+                item_id,
+                error_message=str(exc),
+                max_attempts=MAX_REPLAY_ATTEMPTS,
+            )
         return
 
     with SessionLocal() as session:
@@ -60,4 +69,37 @@ def _process_replay_item(*, item_id: int) -> None:
 
 def _execute_replay(*, source_type: str, source_id: str | None) -> None:
     logger.info("replay_item_received", source_type=source_type, source_id=source_id)
-    raise NotImplementedError("replay execution scaffold only; handler not implemented yet")
+    if source_type == "email_message":
+        _replay_email_message(source_id=source_id)
+        return
+    raise NotImplementedError(f"Unsupported replay source_type: {source_type}")
+
+
+def _replay_email_message(*, source_id: str | None) -> None:
+    provider_message_id = str(source_id or "").strip()
+    if not provider_message_id:
+        raise ValueError("Replay email_message source_id is required.")
+
+    with SessionLocal() as session:
+        record = SQLAlchemyEmailMessageRepository(session).get_by_provider_message_id(
+            provider_message_id
+        )
+
+    if record is None:
+        raise ValueError(f"Email message {provider_message_id} not found.")
+    if record.direction != "inbound":
+        raise ValueError(f"Email message {provider_message_id} is not inbound.")
+
+    process_inbound_email_message(
+        EmailMessage(
+            provider_message_id=record.provider_message_id,
+            provider_thread_id=record.provider_thread_id,
+            from_address=record.from_address or "",
+            subject=record.subject or "",
+            body_text=record.body_text or "",
+            received_at=record.received_at,
+            normalized_at=record.normalized_at,
+            source=record.source,
+        ),
+        runtime=build_email_agent_runtime(),
+    )
