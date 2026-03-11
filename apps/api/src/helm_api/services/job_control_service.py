@@ -15,6 +15,18 @@ def list_job_controls() -> list[dict[str, object]]:
         return []
 
 
+def get_job_control(*, job_name: str) -> dict[str, object] | None:
+    try:
+        with SessionLocal() as session:
+            repository = SQLAlchemyJobControlRepository(session)
+            row = repository.get_by_job_name(job_name)
+            if row is None:
+                return None
+            return {"job_name": row.job_name, "paused": bool(row.paused)}
+    except SQLAlchemyError:
+        return None
+
+
 def set_job_pause(*, job_name: str, paused: bool) -> dict[str, object]:
     try:
         with SessionLocal() as session:
