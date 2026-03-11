@@ -8,6 +8,7 @@ from helm_telegram_bot.commands import (
     done_task,
     draft,
     drafts,
+    email_config,
     followup,
     needsreview_threads,
     proposals,
@@ -17,6 +18,8 @@ from helm_telegram_bot.commands import (
     resolved_threads,
     review,
     reviews,
+    set_email_timezone,
+    set_followup_days,
     snooze,
     tasks,
     thread,
@@ -806,6 +809,76 @@ async def test_followup_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert service.calls == [(3, "followup")]
     assert update.message.replies == ["Created followup task 9 for thread 3."]
+
+
+@pytest.mark.asyncio
+async def test_email_config_formats_current_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_email_config(self):
+            return type(
+                "Config",
+                (),
+                {
+                    "timezone_name": "America/Los_Angeles",
+                    "default_follow_up_business_days": 5,
+                    "approval_required_before_send": True,
+                },
+            )()
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(email_config, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(email_config, "_service", _Service())
+    update = _Update()
+
+    await email_config.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Email config:\n"
+        "timezone: America/Los_Angeles\n"
+        "followup_business_days: 5\n"
+        "approval_required_before_send: true"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_set_email_timezone_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen: str | None = None
+
+        def update_email_timezone(self, timezone_name: str) -> ThreadTaskTransitionResult:
+            self.seen = timezone_name
+            return ThreadTaskTransitionResult(ok=True, message="Email timezone set to UTC.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(set_email_timezone, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(set_email_timezone, "_service", service)
+    update = _Update()
+
+    await set_email_timezone.handle(update, _Context(args=["UTC"]))
+
+    assert service.seen == "UTC"
+    assert update.message.replies == ["Email timezone set to UTC."]
+
+
+@pytest.mark.asyncio
+async def test_set_followup_days_usage_message_on_invalid_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(set_followup_days, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await set_followup_days.handle(update, _Context(args=["oops"]))
+
+    assert update.message.replies == ["Usage: /set_followup_days <non-negative integer>"]
 
 
 @pytest.mark.asyncio

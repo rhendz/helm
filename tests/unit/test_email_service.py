@@ -11,7 +11,13 @@ from email_agent.reminders import (
 )
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.types import EmailMessage
-from helm_api.services.email_service import list_send_attempts, override_thread, send_draft
+from helm_api.services.email_service import (
+    get_email_config,
+    list_send_attempts,
+    override_thread,
+    send_draft,
+    update_email_config,
+)
 from helm_connectors.gmail import GmailSendError, GmailSendResult
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
@@ -171,6 +177,46 @@ def test_email_service_filters_proposals_and_drafts() -> None:
     assert filtered_proposals[0]["status"] == "proposed"
     assert len(filtered_drafts) == 1
     assert filtered_drafts[0]["approval_status"] == "approved"
+
+
+def test_email_service_gets_and_updates_email_config(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_email_agent_runtime(session_local)
+    monkeypatch.setattr("helm_api.services.email_service._runtime", lambda: runtime)
+
+    initial = get_email_config()
+
+    assert initial["timezone_name"] == "UTC"
+    assert initial["default_follow_up_business_days"] == 3
+    assert initial["approval_required_before_send"] is True
+
+    updated = update_email_config(
+        timezone_name="America/Los_Angeles",
+        default_follow_up_business_days=5,
+        approval_required_before_send=False,
+    )
+
+    assert updated["status"] == "accepted"
+    assert updated["config"] is not None
+    assert updated["config"]["timezone_name"] == "America/Los_Angeles"
+    assert updated["config"]["default_follow_up_business_days"] == 5
+    assert updated["config"]["approval_required_before_send"] is False
+
+
+def test_email_service_rejects_invalid_timezone_update(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_email_agent_runtime(session_local)
+    monkeypatch.setattr("helm_api.services.email_service._runtime", lambda: runtime)
+
+    updated = update_email_config(timezone_name="Mars/Phobos")
+
+    assert updated["status"] == "rejected"
+    assert updated["reason"] == "invalid_timezone"
+    assert updated["config"] is None
 
 
 def test_email_thread_detail_and_reprocess() -> None:

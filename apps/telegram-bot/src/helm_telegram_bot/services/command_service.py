@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from email_agent.operator import (
     DraftTransitionResult,
@@ -36,6 +37,13 @@ class ThreadOverrideTransitionResult:
 class ThreadReprocessResult:
     ok: bool
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class EmailConfigView:
+    approval_required_before_send: bool
+    default_follow_up_business_days: int
+    timezone_name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +272,45 @@ class TelegramCommandService:
             limit=limit,
         )
 
+    def get_email_config(self) -> EmailConfigView:
+        config = build_email_agent_runtime().get_email_agent_config()
+        return EmailConfigView(
+            approval_required_before_send=config.approval_required_before_send,
+            default_follow_up_business_days=config.default_follow_up_business_days,
+            timezone_name=config.timezone_name,
+        )
+
+    def update_email_timezone(self, timezone_name: str) -> ThreadTaskTransitionResult:
+        if not _is_valid_timezone(timezone_name):
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Invalid timezone: {timezone_name}.",
+            )
+        config = build_email_agent_runtime().update_email_agent_config(
+            timezone_name=timezone_name,
+        )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"Email timezone set to {config.timezone_name}.",
+        )
+
+    def update_followup_days(self, business_days: int) -> ThreadTaskTransitionResult:
+        if business_days < 0:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message="Follow-up days must be a non-negative integer.",
+            )
+        config = build_email_agent_runtime().update_email_agent_config(
+            default_follow_up_business_days=business_days,
+        )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=(
+                "Email follow-up business days set to "
+                f"{config.default_follow_up_business_days}."
+            ),
+        )
+
     def list_scheduled_tasks(
         self,
         *,
@@ -462,3 +509,11 @@ class TelegramCommandService:
             ok=True,
             message=f"Reprocess {mode} for thread {thread_id}: {result.workflow_status}.",
         )
+
+
+def _is_valid_timezone(value: str) -> bool:
+    try:
+        ZoneInfo(value)
+    except ZoneInfoNotFoundError:
+        return False
+    return True

@@ -24,6 +24,7 @@ from helm_storage.repositories.classification_artifacts import (
     SQLAlchemyClassificationArtifactRepository,
 )
 from helm_storage.repositories.contracts import (
+    EmailAgentConfigPatch,
     EmailDraftContentPatch,
     EmailSendAttemptPatch,
     NewActionProposal,
@@ -593,6 +594,30 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
     def get_email_agent_config(self) -> EmailAgentConfigRecord:
         with self.session_factory() as session:
             record = SQLAlchemyEmailAgentConfigRepository(session).get_or_create()
+            return EmailAgentConfigRecord(
+                approval_required_before_send=record.approval_required_before_send,
+                default_follow_up_business_days=record.default_follow_up_business_days,
+                timezone_name=record.timezone_name,
+                last_history_cursor=record.last_history_cursor,
+            )
+
+    def update_email_agent_config(
+        self,
+        *,
+        approval_required_before_send: bool | None = None,
+        default_follow_up_business_days: int | None = None,
+        timezone_name: str | None = None,
+        last_history_cursor: str | None = None,
+    ) -> EmailAgentConfigRecord:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailAgentConfigRepository(session).update(
+                EmailAgentConfigPatch(
+                    approval_required_before_send=approval_required_before_send,
+                    default_follow_up_business_days=default_follow_up_business_days,
+                    timezone_name=timezone_name,
+                    last_history_cursor=last_history_cursor,
+                )
+            )
             return EmailAgentConfigRecord(
                 approval_required_before_send=record.approval_required_before_send,
                 default_follow_up_business_days=record.default_follow_up_business_days,

@@ -7,6 +7,7 @@ from helm_api.schemas import (
     CreateScheduledTaskResponse,
     DraftReasoningArtifactResponse,
     DraftTransitionAuditResponse,
+    EmailConfigResponse,
     EmailDeepSeedQueueResponse,
     EmailDraftDetailResponse,
     EmailDraftResponse,
@@ -24,6 +25,8 @@ from helm_api.schemas import (
     EmailThreadResponse,
     ScheduledTaskResponse,
     SendDraftResponse,
+    UpdateEmailConfigRequest,
+    UpdateEmailConfigResponse,
 )
 from helm_api.services.email_service import (
     complete_global_task,
@@ -31,6 +34,7 @@ from helm_api.services.email_service import (
     create_thread_task,
     enqueue_seed_email_messages,
     get_draft_detail,
+    get_email_config,
     get_thread_detail,
     ingest_manual_email_messages,
     list_deep_seed_queue,
@@ -48,6 +52,7 @@ from helm_api.services.email_service import (
     plan_seed_email_messages,
     reprocess_thread,
     send_draft,
+    update_email_config,
 )
 
 router = APIRouter(prefix="/v1/email", tags=["email"])
@@ -137,6 +142,24 @@ def get_email_drafts(
         EmailDraftResponse(**item)
         for item in list_drafts(limit=limit, status=status, approval_status=approval_status)
     ]
+
+
+@router.get("/config", response_model=EmailConfigResponse)
+def get_email_agent_config() -> EmailConfigResponse:
+    return EmailConfigResponse(**get_email_config())
+
+
+@router.patch("/config", response_model=UpdateEmailConfigResponse)
+def patch_email_agent_config(
+    payload: UpdateEmailConfigRequest,
+) -> UpdateEmailConfigResponse:
+    return UpdateEmailConfigResponse(
+        **update_email_config(
+            approval_required_before_send=payload.approval_required_before_send,
+            default_follow_up_business_days=payload.default_follow_up_business_days,
+            timezone_name=payload.timezone_name,
+        )
+    )
 
 
 @router.get("/drafts/{draft_id}", response_model=EmailDraftDetailResponse)

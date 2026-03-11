@@ -585,6 +585,75 @@ def test_list_scheduled_tasks_applies_status_and_limit(monkeypatch) -> None:  # 
     assert results[0].status == "pending"
 
 
+def test_get_email_config_returns_runtime_config(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "get_email_agent_config": lambda self: type(
+                "Config",
+                (),
+                {
+                    "approval_required_before_send": True,
+                    "default_follow_up_business_days": 4,
+                    "timezone_name": "America/Los_Angeles",
+                },
+            )(),
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    config = service.get_email_config()
+
+    assert config.approval_required_before_send is True
+    assert config.default_follow_up_business_days == 4
+    assert config.timezone_name == "America/Los_Angeles"
+
+
+def test_update_email_timezone_validates_and_persists(monkeypatch) -> None:  # noqa: ANN001
+    runtime = type(
+        "Runtime",
+        (),
+        {
+            "update_email_agent_config": lambda self, **kwargs: type(
+                "Config",
+                (),
+                {
+                    "timezone_name": kwargs["timezone_name"],
+                    "default_follow_up_business_days": 3,
+                    "approval_required_before_send": True,
+                },
+            )(),
+        },
+    )()
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
+
+    service = command_service.TelegramCommandService()
+    result = service.update_email_timezone("America/New_York")
+
+    assert result.ok is True
+    assert result.message == "Email timezone set to America/New_York."
+
+
+def test_update_email_timezone_rejects_invalid_value() -> None:
+    service = command_service.TelegramCommandService()
+
+    result = service.update_email_timezone("Mars/Phobos")
+
+    assert result.ok is False
+    assert result.message == "Invalid timezone: Mars/Phobos."
+
+
+def test_update_followup_days_rejects_negative_values() -> None:
+    service = command_service.TelegramCommandService()
+
+    result = service.update_followup_days(-1)
+
+    assert result.ok is False
+    assert result.message == "Follow-up days must be a non-negative integer."
+
+
 def test_complete_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
     monkeypatch.setattr(

@@ -9,6 +9,7 @@ from helm_telegram_bot.commands import (
     done_task,
     draft,
     drafts,
+    email_config,
     followup,
     needsreview_threads,
     proposals,
@@ -18,6 +19,8 @@ from helm_telegram_bot.commands import (
     resolved_threads,
     review,
     reviews,
+    set_email_timezone,
+    set_followup_days,
     snooze,
     start,
     tasks,
@@ -45,6 +48,7 @@ def main() -> None:
     application.add_handler(CommandHandler("actions", actions.handle))
     application.add_handler(CommandHandler("draft", draft.handle))
     application.add_handler(CommandHandler("drafts", drafts.handle))
+    application.add_handler(CommandHandler("email_config", email_config.handle))
     application.add_handler(CommandHandler("needsreview_threads", needsreview_threads.handle))
     application.add_handler(CommandHandler("proposals", proposals.handle))
     application.add_handler(CommandHandler("reprocess_thread", reprocess_thread.handle))
@@ -57,6 +61,8 @@ def main() -> None:
     application.add_handler(CommandHandler("resolve", resolve.handle))
     application.add_handler(CommandHandler("review", review.handle))
     application.add_handler(CommandHandler("reviews", reviews.handle))
+    application.add_handler(CommandHandler("set_email_timezone", set_email_timezone.handle))
+    application.add_handler(CommandHandler("set_followup_days", set_followup_days.handle))
     application.add_handler(CommandHandler("tasks", tasks.handle))
     application.add_handler(CommandHandler("thread", thread.handle))
     application.add_handler(CommandHandler("threads", threads.handle))
