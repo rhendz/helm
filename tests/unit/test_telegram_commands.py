@@ -748,16 +748,16 @@ async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatc
         def list_job_controls(self) -> list[JobControlView]:
             return [
                 JobControlView(
-                    job_name="email_triage",
-                    paused=False,
-                    run_command="/run_job email_triage",
-                    note=None,
-                ),
-                JobControlView(
                     job_name="replay",
                     paused=True,
                     run_command="/run_replay [limit]",
                     note="bounded manual trigger",
+                ),
+                JobControlView(
+                    job_name="email_triage",
+                    paused=False,
+                    run_command="/run_job email_triage",
+                    note=None,
                 ),
             ]
 
@@ -772,8 +772,8 @@ async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatc
 
     assert update.message.replies == [
         "Job controls:\n"
-        "email_triage: active (run=/run_job email_triage)\n"
-        "replay: paused (run=/run_replay [limit]; bounded manual trigger)"
+        "replay: paused (run=/run_replay [limit]; bounded manual trigger)\n"
+        "email_triage: active (run=/run_job email_triage)"
     ]
 
 

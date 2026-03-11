@@ -158,7 +158,7 @@ class TelegramCommandService:
                     note=note,
                 )
             )
-        return items
+        return sorted(items, key=lambda item: (not item.paused, item.job_name))
 
     def get_replay_job_status(self) -> ThreadTaskTransitionResult:
         replay = next(
