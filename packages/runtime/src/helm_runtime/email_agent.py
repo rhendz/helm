@@ -13,6 +13,7 @@ from email_agent.runtime import (
     MessageProcessingRecord,
     MessageRecord,
     ProposalRecord,
+    ReplayQueueRecord,
     RunRecord,
     ScheduledTaskRecord,
     SendAttemptRecord,
@@ -52,6 +53,7 @@ from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepositor
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
 from helm_storage.repositories.email_send_attempts import SQLAlchemyEmailSendAttemptRepository
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
+from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
 from sqlalchemy.orm import Session
 
@@ -575,6 +577,30 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
             )
             return _deep_seed_queue_payload(record) if record is not None else None
 
+    def list_replay_queue(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyReplayQueueRepository(session).list_recent(
+                status=status,
+                limit=limit,
+            )
+            return [_replay_queue_payload(record) for record in records]
+
+    def requeue_replay_item(self, item_id: int) -> ReplayQueueRecord | None:
+        with self.session_factory() as session:
+            repository = SQLAlchemyReplayQueueRepository(session)
+            current = repository.get_by_id(item_id)
+            if current is None or current.status not in {"failed", "dead_lettered"}:
+                return None
+            record = repository.requeue(item_id)
+            if record is None:
+                return None
+            return ReplayQueueRecord(id=record.id)
+
     def create_outbound_email_message(
         self,
         *,
@@ -1026,6 +1052,20 @@ def _deep_seed_queue_payload(record: object | None) -> dict | None:
         "last_error": record.last_error,
         "email_thread_id": record.email_thread_id,
         "completed_at": record.completed_at,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+
+
+def _replay_queue_payload(record: object) -> dict:
+    return {
+        "id": record.id,
+        "agent_run_id": record.agent_run_id,
+        "source_type": record.source_type,
+        "source_id": record.source_id,
+        "status": record.status,
+        "attempts": record.attempts,
+        "last_error": record.last_error,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
     }

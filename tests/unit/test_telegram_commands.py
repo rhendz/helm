@@ -13,7 +13,9 @@ from helm_telegram_bot.commands import (
     needsreview_threads,
     proposals,
     remind,
+    replays,
     reprocess_thread,
+    requeue_replay,
     resolve,
     resolved_threads,
     review,
@@ -34,6 +36,7 @@ from helm_telegram_bot.commands import (
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
     ProposalView,
+    ReplayQueueView,
     ScheduledTaskView,
     ThreadDetailView,
     ThreadOverrideTransitionResult,
@@ -504,6 +507,76 @@ async def test_proposals_command_formats_queue(monkeypatch: pytest.MonkeyPatch) 
     await proposals.handle(update, _Context(args=["reply"]))
 
     assert update.message.replies == ["Proposals (reply):\n8: thread 3 Reply with availability"]
+
+
+@pytest.mark.asyncio
+async def test_replays_command_rejects_invalid_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(replays, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await replays.handle(update, _Context(args=["bad"]))
+
+    assert update.message.replies == [
+        "Usage: /replays [pending|processing|completed|failed|dead_lettered]"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_replays_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_replay_queue(self, status=None) -> list[ReplayQueueView]:
+            assert status == "dead_lettered"
+            return [
+                ReplayQueueView(
+                    id=31,
+                    source_type="email_message",
+                    source_id="msg-31",
+                    status="dead_lettered",
+                    attempts=3,
+                    last_error="cursor invalid",
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(replays, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(replays, "_service", _Service())
+    update = _Update()
+
+    await replays.handle(update, _Context(args=["dead_lettered"]))
+
+    assert update.message.replies == [
+        "Replay items (dead_lettered):\n"
+        "31: dead_lettered attempts=3 email_message/msg-31 error=cursor invalid"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_requeue_replay_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen_id: int | None = None
+
+        def requeue_replay_item(self, replay_id: int) -> ThreadTaskTransitionResult:
+            self.seen_id = replay_id
+            return ThreadTaskTransitionResult(ok=True, message="Requeued replay item 31.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(requeue_replay, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(requeue_replay, "_service", service)
+    update = _Update()
+
+    await requeue_replay.handle(update, _Context(args=["31"]))
+
+    assert service.seen_id == 31
+    assert update.message.replies == ["Requeued replay item 31."]
 
 
 @pytest.mark.asyncio

@@ -88,6 +88,11 @@ class EmailAgentConfigRecord:
     last_history_cursor: str | None
 
 
+@dataclass(slots=True, frozen=True)
+class ReplayQueueRecord:
+    id: int
+
+
 class EmailAgentRuntime(Protocol):
     def start_run(
         self,
@@ -303,6 +308,15 @@ class EmailAgentRuntime(Protocol):
     ) -> dict | None: ...
 
     def mark_deep_seed_item_failed(self, item_id: int, *, error_message: str) -> dict | None: ...
+
+    def list_replay_queue(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]: ...
+
+    def requeue_replay_item(self, item_id: int) -> ReplayQueueRecord | None: ...
 
     def create_outbound_email_message(
         self,

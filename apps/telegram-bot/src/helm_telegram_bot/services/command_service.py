@@ -104,7 +104,36 @@ class DraftDetailView:
     send_attempts: list[dict]
 
 
+@dataclass(frozen=True, slots=True)
+class ReplayQueueView:
+    id: int
+    source_type: str
+    source_id: str | None
+    status: str
+    attempts: int
+    last_error: str | None
+
+
 class TelegramCommandService:
+    def list_replay_queue(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 5,
+    ) -> list[ReplayQueueView]:
+        items = build_email_agent_runtime().list_replay_queue(status=status, limit=limit)
+        return [
+            ReplayQueueView(
+                id=item["id"],
+                source_type=item["source_type"],
+                source_id=item.get("source_id"),
+                status=item["status"],
+                attempts=item["attempts"],
+                last_error=item.get("last_error"),
+            )
+            for item in items
+        ]
+
     def list_action_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
         items = build_email_agent_runtime().list_email_threads(label="Action", limit=limit)
         return [
@@ -553,6 +582,34 @@ class TelegramCommandService:
         return ThreadReprocessResult(
             ok=True,
             message=f"Reprocess {mode} for thread {thread_id}: {result.workflow_status}.",
+        )
+
+    def requeue_replay_item(self, replay_id: int) -> ThreadTaskTransitionResult:
+        runtime = build_email_agent_runtime()
+        replay_items = runtime.list_replay_queue(limit=1_000)
+        replay_item = next((item for item in replay_items if item["id"] == replay_id), None)
+        if replay_item is None:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Replay item {replay_id} not found.",
+            )
+        if replay_item["status"] not in {"failed", "dead_lettered"}:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=(
+                    f"Replay item {replay_id} is {replay_item['status']}; "
+                    "only failed or dead-lettered items can be requeued."
+                ),
+            )
+        result = runtime.requeue_replay_item(replay_id)
+        if result is None:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Replay item {replay_id} could not be requeued.",
+            )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"Requeued replay item {replay_id}.",
         )
 
 
