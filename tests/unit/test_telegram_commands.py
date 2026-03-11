@@ -795,7 +795,11 @@ async def test_job_command_formats_single_item(monkeypatch: pytest.MonkeyPatch) 
     await job.handle(update, _Context(args=["replay"]))
 
     assert update.message.replies == [
-        "Job replay\nStatus: paused\nRun: /run_replay [limit]\nNote: bounded manual trigger"
+        "Job replay\n"
+        "Status: paused\n"
+        "List: /jobs\n"
+        "Run: /run_replay [limit]\n"
+        "Note: bounded manual trigger"
     ]
 
 
