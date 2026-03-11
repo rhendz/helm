@@ -13,11 +13,15 @@ from helm_storage.repositories.contracts import (
     NewActionProposal,
     NewClassificationArtifact,
     NewDigestItem,
+    NewDraftReasoningArtifact,
     NewEmailDraft,
     NewEmailThread,
     NewScheduledThreadTask,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
+from helm_storage.repositories.draft_reasoning_artifacts import (
+    SQLAlchemyDraftReasoningArtifactRepository,
+)
 from helm_storage.repositories.draft_transition_audits import (
     SQLAlchemyDraftTransitionAuditRepository,
 )
@@ -205,9 +209,11 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
         action_proposal_id: int | None,
         draft_body: str,
         draft_subject: str | None,
+        reasoning_artifact: dict[str, object] | None = None,
     ) -> DraftRecord:
         with self.session_factory() as session:
-            record = SQLAlchemyEmailDraftRepository(session).create(
+            draft_repository = SQLAlchemyEmailDraftRepository(session)
+            record = draft_repository.create(
                 NewEmailDraft(
                     email_thread_id=email_thread_id,
                     action_proposal_id=action_proposal_id,
@@ -217,6 +223,25 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                     approval_status="pending_user",
                 )
             )
+            if reasoning_artifact is not None:
+                artifact_record = SQLAlchemyDraftReasoningArtifactRepository(session).create(
+                    NewDraftReasoningArtifact(
+                        email_draft_id=record.id,
+                        email_thread_id=email_thread_id,
+                        action_proposal_id=action_proposal_id,
+                        schema_version=str(reasoning_artifact["schema_version"]),
+                        prompt_context=_json_object(reasoning_artifact.get("prompt_context")),
+                        model_metadata=_json_object(reasoning_artifact.get("model_metadata")),
+                        reasoning_payload=_json_object(reasoning_artifact.get("reasoning_payload")),
+                        refinement_metadata=_json_object(
+                            reasoning_artifact.get("refinement_metadata")
+                        ),
+                    )
+                )
+                draft_repository.set_reasoning_artifact_ref(
+                    record.id,
+                    artifact_ref=artifact_record.internal_uuid,
+                )
             return DraftRecord(id=record.id)
 
     def get_email_draft_by_id(self, draft_id: int) -> dict | None:
@@ -232,7 +257,15 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 "approval_status": record.approval_status,
                 "draft_body": record.draft_body,
                 "draft_subject": record.draft_subject,
+                "draft_reasoning_artifact_ref": record.draft_reasoning_artifact_ref,
             }
+
+    def list_draft_reasoning_artifacts_for_draft(self, *, draft_id: int) -> list[dict]:
+        with self.session_factory() as session:
+            records = SQLAlchemyDraftReasoningArtifactRepository(session).list_for_draft(
+                email_draft_id=draft_id,
+            )
+            return [_draft_reasoning_artifact_payload(record) for record in records]
 
     def list_draft_transition_audits_for_draft(self, *, draft_id: int) -> list[dict]:
         with self.session_factory() as session:
@@ -645,3 +678,25 @@ def _classification_artifact_payload(record: object) -> dict:
         "prompt_version": record.prompt_version,
         "created_at": record.created_at,
     }
+
+
+def _draft_reasoning_artifact_payload(record: object) -> dict:
+    return {
+        "id": record.id,
+        "artifact_ref": record.internal_uuid,
+        "email_draft_id": record.email_draft_id,
+        "email_thread_id": record.email_thread_id,
+        "action_proposal_id": record.action_proposal_id,
+        "schema_version": record.schema_version,
+        "prompt_context": record.prompt_context,
+        "model_metadata": record.model_metadata,
+        "reasoning_payload": record.reasoning_payload,
+        "refinement_metadata": record.refinement_metadata,
+        "created_at": record.created_at,
+    }
+
+
+def _json_object(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return value
+    return {}

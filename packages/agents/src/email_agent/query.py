@@ -76,6 +76,17 @@ def list_classification_artifacts_for_message(
         return []
 
 
+def list_draft_reasoning_artifacts_for_draft(
+    *,
+    draft_id: int,
+    runtime: EmailAgentRuntime,
+) -> list[dict]:
+    try:
+        return runtime.list_draft_reasoning_artifacts_for_draft(draft_id=draft_id)
+    except SQLAlchemyError:
+        return []
+
+
 def get_email_thread_detail(
     *,
     thread_id: int,
@@ -99,6 +110,9 @@ def get_email_draft_detail(
         return {
             **draft,
             "transition_audits": runtime.list_draft_transition_audits_for_draft(draft_id=draft_id),
+            "reasoning_artifacts": runtime.list_draft_reasoning_artifacts_for_draft(
+                draft_id=draft_id
+            ),
         }
     except SQLAlchemyError:
         return None

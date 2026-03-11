@@ -66,6 +66,20 @@ class DraftTransitionAuditResponse(BaseModel):
     created_at: datetime
 
 
+class DraftReasoningArtifactResponse(BaseModel):
+    id: int
+    artifact_ref: str
+    email_draft_id: int
+    email_thread_id: int
+    action_proposal_id: int | None = None
+    schema_version: str
+    prompt_context: dict[str, object] = Field(default_factory=dict)
+    model_metadata: dict[str, object] = Field(default_factory=dict)
+    reasoning_payload: dict[str, object] = Field(default_factory=dict)
+    refinement_metadata: dict[str, object] = Field(default_factory=dict)
+    created_at: datetime
+
+
 class EmailDraftDetailResponse(BaseModel):
     id: int
     email_thread_id: int
@@ -74,7 +88,9 @@ class EmailDraftDetailResponse(BaseModel):
     approval_status: str
     draft_body: str
     draft_subject: str | None = None
+    draft_reasoning_artifact_ref: str | None = None
     transition_audits: list[DraftTransitionAuditResponse] = Field(default_factory=list)
+    reasoning_artifacts: list[DraftReasoningArtifactResponse] = Field(default_factory=list)
 
 
 class EmailMessageResponse(BaseModel):

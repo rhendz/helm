@@ -7,6 +7,7 @@ from email_agent.query import (
     get_email_thread_detail,
     list_classification_artifacts_for_message,
     list_classification_artifacts_for_thread,
+    list_draft_reasoning_artifacts_for_draft,
     list_draft_transition_audits_for_draft,
     list_email_drafts,
     list_email_proposals,
@@ -196,6 +197,10 @@ def list_message_classification_artifacts(*, message_id: int) -> list[dict]:
 
 def list_draft_transition_audits(*, draft_id: int) -> list[dict]:
     return list_draft_transition_audits_for_draft(draft_id=draft_id, runtime=_runtime())
+
+
+def list_draft_reasoning_artifacts(*, draft_id: int) -> list[dict]:
+    return list_draft_reasoning_artifacts_for_draft(draft_id=draft_id, runtime=_runtime())
 
 
 def create_thread_task(

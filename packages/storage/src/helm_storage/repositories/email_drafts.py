@@ -74,3 +74,12 @@ class SQLAlchemyEmailDraftRepository:
         self._session.add(record)
         self._session.commit()
         return True
+
+    def set_reasoning_artifact_ref(self, draft_id: int, *, artifact_ref: str) -> bool:
+        record = self.get_by_id(draft_id)
+        if record is None:
+            return False
+        record.draft_reasoning_artifact_ref = artifact_ref
+        self._session.add(record)
+        self._session.commit()
+        return True
