@@ -62,10 +62,13 @@ def test_email_reconciliation_sweep_skips_already_processed_messages(
 
     email_reconciliation_sweep.run()
 
+    config = runtime.get_email_agent_config()
+
     with Session(engine) as session:
         messages = list(session.execute(select(EmailMessageORM)).scalars().all())
         runs = list(session.execute(select(AgentRunORM)).scalars().all())
 
+    assert config.last_history_cursor == "cursor-9"
     assert len(messages) == 1
     assert messages[0].provider_message_id == "msg-reconcile-1"
     assert messages[0].processed_at is not None

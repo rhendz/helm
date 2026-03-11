@@ -51,3 +51,32 @@ def test_email_triage_worker_processes_changed_messages_and_updates_history_curs
     assert len(messages) == 1
     assert messages[0].provider_message_id == "msg-history-1"
     assert messages[0].processed_at is not None
+
+
+def test_email_triage_worker_recovery_poll_resynchronizes_history_cursor(
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    runtime = email_triage.build_email_agent_runtime(session_local)
+    runtime.update_email_agent_config(last_history_cursor="cursor-stale")
+
+    monkeypatch.setattr(email_triage, "build_email_agent_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        email_triage,
+        "pull_changed_messages_report",
+        lambda *, last_history_cursor: PullMessagesReport(
+            messages=[],
+            failure_counts={},
+            next_history_cursor="cursor-recovered",
+            mode="recovery_poll",
+            recovery_reason="history_cursor_invalid",
+        ),
+    )
+
+    email_triage.run()
+
+    config = runtime.get_email_agent_config()
+    assert config.last_history_cursor == "cursor-recovered"

@@ -15,6 +15,7 @@ def run() -> None:
         count=len(report.messages),
         normalization_failures=report.failure_counts,
         mode=report.mode,
+        recovery_reason=report.recovery_reason,
         last_history_cursor=config.last_history_cursor,
         next_history_cursor=report.next_history_cursor,
     )

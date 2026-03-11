@@ -29,6 +29,7 @@ class PullMessagesReport:
     failure_counts: dict[str, int] = field(default_factory=dict)
     next_history_cursor: str | None = None
     mode: str = "poll"
+    recovery_reason: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -375,6 +376,14 @@ def _normalize_message_ids(
     )
 
 
+def _history_recovery_reason(exc: Exception) -> str:
+    status = _http_status(exc)
+    message = str(exc).lower()
+    if status == 404 or "starthistoryid" in message or "historyid" in message:
+        return "history_cursor_invalid"
+    return "history_pull_failed"
+
+
 def _list_recent_message_ids(service: Any) -> list[str]:
     response = (
         service.users()
@@ -528,6 +537,7 @@ def pull_changed_messages_report(
             failure_counts=poll_report.failure_counts,
             next_history_cursor=poll_report.next_history_cursor,
             mode="bootstrap",
+            recovery_reason="missing_history_cursor",
         )
 
     try:
@@ -536,10 +546,12 @@ def pull_changed_messages_report(
             start_history_cursor=last_history_cursor,
         )
     except Exception as exc:
+        recovery_reason = _history_recovery_reason(exc)
         logger.warning(
             "gmail_history_pull_failed",
             error=str(exc),
             last_history_cursor=last_history_cursor,
+            recovery_reason=recovery_reason,
         )
         poll_report = pull_new_messages_report()
         return PullMessagesReport(
@@ -547,6 +559,7 @@ def pull_changed_messages_report(
             failure_counts=poll_report.failure_counts,
             next_history_cursor=poll_report.next_history_cursor,
             mode="recovery_poll",
+            recovery_reason=recovery_reason,
         )
 
     if next_history_cursor == last_history_cursor:

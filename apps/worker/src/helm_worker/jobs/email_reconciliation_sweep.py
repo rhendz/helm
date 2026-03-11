@@ -8,17 +8,27 @@ logger = get_logger("helm_worker.jobs.email_reconciliation_sweep")
 
 def run() -> None:
     runtime = build_email_agent_runtime()
+    config = runtime.get_email_agent_config()
     report = pull_new_messages_report()
     logger.info(
         "email_reconciliation_sweep_tick",
         count=len(report.messages),
         normalization_failures=report.failure_counts,
+        recovery_reason=report.recovery_reason,
+        last_history_cursor=config.last_history_cursor,
         next_history_cursor=report.next_history_cursor,
     )
 
     ingest_report = process_inbound_messages(runtime=runtime, messages=report.messages)
+    if (
+        report.next_history_cursor is not None
+        and report.next_history_cursor != config.last_history_cursor
+    ):
+        runtime.update_email_agent_config(last_history_cursor=report.next_history_cursor)
+
     logger.info(
         "email_reconciliation_sweep_completed",
         processed_count=ingest_report.processed_count,
         skipped_count=ingest_report.skipped_count,
+        next_history_cursor=report.next_history_cursor,
     )
