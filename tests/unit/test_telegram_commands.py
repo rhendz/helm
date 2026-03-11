@@ -802,6 +802,19 @@ async def test_job_command_surfaces_unknown_job(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
+async def test_job_controls_command_rejects_invalid_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job_controls, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await job_controls.handle(update, _Context(args=["bad"]))
+
+    assert update.message.replies == ["Usage: /job_controls [paused]"]
+
+
+@pytest.mark.asyncio
 async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def list_job_controls(self) -> list[JobControlView]:
@@ -834,6 +847,64 @@ async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatc
         "replay: paused (run=/run_replay [limit]; bounded manual trigger)\n"
         "email_triage: active (run=/run_job email_triage)"
     ]
+
+
+@pytest.mark.asyncio
+async def test_job_controls_command_filters_paused_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_job_controls(self) -> list[JobControlView]:
+            return [
+                JobControlView(
+                    job_name="replay",
+                    paused=True,
+                    run_command="/run_replay [limit]",
+                    note="bounded manual trigger",
+                ),
+                JobControlView(
+                    job_name="email_triage",
+                    paused=False,
+                    run_command="/run_job email_triage",
+                    note=None,
+                ),
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job_controls, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job_controls, "_service", _Service())
+    update = _Update()
+
+    await job_controls.handle(update, _Context(args=["paused"]))
+
+    assert update.message.replies == [
+        "Paused jobs:\nreplay: paused (run=/run_replay [limit]; bounded manual trigger)"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_job_controls_command_reports_no_paused_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_job_controls(self) -> list[JobControlView]:
+            return [
+                JobControlView(
+                    job_name="email_triage",
+                    paused=False,
+                    run_command="/run_job email_triage",
+                    note=None,
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job_controls, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job_controls, "_service", _Service())
+    update = _Update()
+
+    await job_controls.handle(update, _Context(args=["paused"]))
+
+    assert update.message.replies == ["No paused jobs."]
 
 
 @pytest.mark.asyncio
