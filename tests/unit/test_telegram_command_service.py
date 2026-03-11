@@ -627,6 +627,59 @@ def test_pause_job_rejects_unknown_job() -> None:
     assert result.message == "Unknown job: not_a_job."
 
 
+def test_run_job_rejects_unknown_job() -> None:
+    service = command_service.TelegramCommandService()
+
+    result = service.run_job("not_a_job")
+
+    assert result.ok is False
+    assert result.message == "Unknown job: not_a_job."
+
+
+def test_run_job_rejects_replay_with_guidance() -> None:
+    service = command_service.TelegramCommandService()
+
+    result = service.run_job("replay")
+
+    assert result.ok is False
+    assert result.message == "Use /run_replay [limit] for the replay job."
+
+
+def test_run_job_rejects_paused_job(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(command_service, "is_job_paused", lambda job_name: job_name == "digest")
+
+    service = command_service.TelegramCommandService()
+    result = service.run_job("digest")
+
+    assert result.ok is False
+    assert result.message == "digest job is paused; resume it before running manually."
+
+
+def test_run_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    seen: list[str] = []
+    monkeypatch.setattr(command_service, "is_job_paused", lambda _job_name: False)
+    monkeypatch.setattr(
+        command_service,
+        "JOBS",
+        {
+            **command_service.JOBS,
+            "digest": lambda: seen.append("digest"),
+        },
+    )
+    monkeypatch.setattr(
+        command_service,
+        "MANUALLY_RUNNABLE_JOBS",
+        frozenset({"digest"}),
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.run_job("digest")
+
+    assert result.ok is True
+    assert result.message == "Ran digest job."
+    assert seen == ["digest"]
+
+
 def test_pause_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(
         command_service,

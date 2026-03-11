@@ -27,6 +27,7 @@ from helm_telegram_bot.commands import (
     resume_replay,
     review,
     reviews,
+    run_job,
     run_replay,
     send,
     set_email_timezone,
@@ -66,6 +67,7 @@ def main() -> None:
     application.add_handler(CommandHandler("proposals", proposals.handle))
     application.add_handler(CommandHandler("replay_status", replay_status.handle))
     application.add_handler(CommandHandler("replays", replays.handle))
+    application.add_handler(CommandHandler("run_job", run_job.handle))
     application.add_handler(CommandHandler("run_replay", run_replay.handle))
     application.add_handler(CommandHandler("requeue_replay", requeue_replay.handle))
     application.add_handler(CommandHandler("reprocess_thread", reprocess_thread.handle))

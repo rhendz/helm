@@ -26,6 +26,7 @@ from helm_telegram_bot.commands import (
     resume_replay,
     review,
     reviews,
+    run_job,
     run_replay,
     send,
     set_email_timezone,
@@ -603,6 +604,43 @@ async def test_run_replay_command_rejects_invalid_usage(monkeypatch: pytest.Monk
     await run_replay.handle(update, _Context(args=["bad"]))
 
     assert update.message.replies == ["Usage: /run_replay [limit]"]
+
+
+@pytest.mark.asyncio
+async def test_run_job_command_rejects_invalid_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(run_job, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await run_job.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /run_job <job_name>"]
+
+
+@pytest.mark.asyncio
+async def test_run_job_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen_job_name: str | None = None
+
+        def run_job(self, job_name: str) -> ThreadTaskTransitionResult:
+            self.seen_job_name = job_name
+            return ThreadTaskTransitionResult(ok=True, message=f"Ran {job_name} job.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(run_job, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(run_job, "_service", service)
+    update = _Update()
+
+    await run_job.handle(update, _Context(args=["digest"]))
+
+    assert service.seen_job_name == "digest"
+    assert update.message.replies == ["Ran digest job."]
 
 
 @pytest.mark.asyncio
