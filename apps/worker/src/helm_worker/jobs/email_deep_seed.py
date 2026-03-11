@@ -1,12 +1,12 @@
-from email_agent.adapters import build_helm_runtime
 from email_agent.seed import run_pending_deep_seed_queue
 from helm_observability.logging import get_logger
+from helm_runtime.email_agent import build_email_agent_runtime
 
 logger = get_logger("helm_worker.jobs.email_deep_seed")
 
 
 def run() -> None:
-    runtime = build_helm_runtime()
+    runtime = build_email_agent_runtime()
     results = run_pending_deep_seed_queue(runtime=runtime, limit=10)
     logger.info(
         "email_deep_seed_job_tick",

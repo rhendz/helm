@@ -2,7 +2,7 @@
 
 ## Goal
 
-Let multiple Codex agents run in parallel with minimal environment/setup churn.
+Let multiple Codex agents run in parallel with minimal environment/setup churn and low boundary collision risk.
 
 ## 1. Create worktrees
 
@@ -28,11 +28,29 @@ Run in each worktree:
 bash scripts/worktree-env.sh link-self
 ```
 
+This shared environment model is a Helm monorepo convenience. It should not be treated as the default for extracted `study-agent` or `email-agent` repos.
+
 ## 3. Assign tracks
 
-Use `docs/workstreams/README.md` and select any non-overlapping set of issues.
+Use `docs/workstreams/README.md` and select non-overlapping boundaries.
+
+Preferred split:
+
+- Helm host: `apps/api`, `apps/worker`, `apps/telegram-bot`, `packages/runtime`, `packages/observability`, `migrations`
+- Email agent core: `packages/agents/src/email_agent`
+- Study agent standalone: `apps/study-agent`
+- Shared infra: CI, scripts, docs, repo-process changes
 
 ## 4. Daily sync
 
 - Keep PRs narrow to one issue or one boundary.
 - Run `scripts/lint.sh` + `scripts/test.sh` before push.
+- Call out any contract change that affects extraction or repo boundaries.
+
+## 5. Linear Usage
+
+Use Linear selectively.
+
+- Create a ticket when work needs handoff, sequencing, architectural memory, or follow-up beyond the current PR.
+- Skip tickets for short-lived implementation steps inside one active boundary.
+- Keep fast inner-loop development in PRs, docs, and focused TODOs.

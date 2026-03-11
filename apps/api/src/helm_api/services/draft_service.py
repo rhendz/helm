@@ -1,6 +1,6 @@
 def list_drafts() -> list[dict]:
-    from email_agent.adapters import build_helm_runtime
     from email_agent.query import list_email_drafts
+    from helm_runtime.email_agent import build_email_agent_runtime
 
     return [
         {
@@ -10,16 +10,16 @@ def list_drafts() -> list[dict]:
             "preview": draft["preview"],
             "is_stale": draft["approval_status"] == "snoozed",
         }
-        for draft in list_email_drafts(runtime=build_helm_runtime())
+        for draft in list_email_drafts(runtime=build_email_agent_runtime())
         if draft["approval_status"] in {"pending_user", "snoozed"}
     ]
 
 
 def requeue_stale_drafts(*, stale_after_hours: int, limit: int, dry_run: bool) -> dict:
-    from email_agent.adapters import build_helm_runtime
     from email_agent.query import list_email_drafts
+    from helm_runtime.email_agent import build_email_agent_runtime
 
-    runtime = build_helm_runtime()
+    runtime = build_email_agent_runtime()
     drafts = [
         draft
         for draft in list_email_drafts(limit=limit * 4, runtime=runtime)

@@ -1,7 +1,6 @@
 from collections.abc import Mapping
 from dataclasses import asdict
 
-from email_agent.adapters import build_helm_runtime
 from email_agent.query import (
     get_email_draft_detail,
     get_email_thread_detail,
@@ -29,11 +28,12 @@ from email_agent.triage import build_email_triage_graph, process_inbound_email_m
 from email_agent.types import EmailMessage
 from helm_connectors.gmail import pull_new_messages_report
 from helm_observability.agent_runs import record_agent_run
+from helm_runtime.email_agent import build_email_agent_runtime
 from sqlalchemy.exc import SQLAlchemyError
 
 
 def _runtime():
-    return build_helm_runtime()
+    return build_email_agent_runtime()
 
 
 def list_threads(

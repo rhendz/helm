@@ -374,23 +374,25 @@ def test_rules_apply_full_and_lite_differently_and_keep_compact_history(
 
 
 def test_repeated_failures_force_next_day_review_and_clear_cooldown() -> None:
+    now = rules.now_utc()
+    today = now.date()
     topic = TopicState(
         id="fragile",
         name="Fragile Topic",
         state="learning",
         mastery=0.52,
         confidence="medium",
-        cooldown_until=(date.today() + timedelta(days=3)).isoformat(),
+        cooldown_until=(today + timedelta(days=3)).isoformat(),
         recent_history=[
             TopicPerformance(
-                date=(date.today() - timedelta(days=1)).isoformat(),
+                date=(today - timedelta(days=1)).isoformat(),
                 mode="lite",
                 score=0.3,
                 weak_signals=["recall"],
                 outcome="completed_lite",
             ),
             TopicPerformance(
-                date=(date.today() - timedelta(days=2)).isoformat(),
+                date=(today - timedelta(days=2)).isoformat(),
                 mode="lite",
                 score=0.2,
                 weak_signals=["recall"],
@@ -400,10 +402,10 @@ def test_repeated_failures_force_next_day_review_and_clear_cooldown() -> None:
     )
     course = _make_course(topics=[topic])
 
-    updated = rules.apply_miss(course, "fragile", "bad day", now=rules.now_utc())
+    updated = rules.apply_miss(course, "fragile", "bad day", now=now)
     fragile = next(item for item in updated.topics if item.id == "fragile")
 
-    assert fragile.next_review == (date.today() + timedelta(days=1)).isoformat()
+    assert fragile.next_review == (today + timedelta(days=1)).isoformat()
     assert fragile.cooldown_until is None
     assert updated.adherence.miss_streak == 1
 

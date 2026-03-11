@@ -1,14 +1,14 @@
-from email_agent.adapters import build_helm_runtime
 from email_agent.triage import process_inbound_email_message
 from email_agent.types import EmailMessage
 from helm_connectors.gmail import pull_new_messages_report
 from helm_observability.logging import get_logger
+from helm_runtime.email_agent import build_email_agent_runtime
 
 logger = get_logger("helm_worker.jobs.email_triage")
 
 
 def run() -> None:
-    runtime = build_helm_runtime()
+    runtime = build_email_agent_runtime()
     report = pull_new_messages_report()
     logger.info(
         "email_triage_job_tick",

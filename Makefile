@@ -1,4 +1,4 @@
-.PHONY: install format lint test smoke doctor bootstrap migrate linear-projects linear-issues linear-export up down
+.PHONY: install format lint test verify smoke doctor bootstrap migrate linear-projects linear-issues linear-export up down
 
 install:
 	uv sync --extra dev
@@ -17,6 +17,9 @@ format:
 
 test:
 	bash scripts/test.sh
+
+verify:
+	bash scripts/verify.sh
 
 smoke:
 	bash scripts/smoke.sh

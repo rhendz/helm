@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "email-agent-core"
+version = "0.1.0"
+description = "Host-agnostic email agent core for Helm extraction."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "langgraph>=0.2.50",
+  "sqlalchemy>=2.0.36",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "ruff>=0.8.0",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["email_agent", "email_agent.*"]

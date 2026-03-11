@@ -21,8 +21,10 @@ Study Agent is a local, file-backed Telegram study bot. It recommends what to st
 
 ```bash
 cd apps/study-agent
-pip install -r requirements.txt
+uv sync
 ```
+
+`requirements.txt` remains as a simple fallback, but `pyproject.toml` is now the preferred local and extraction-ready dependency contract.
 
 3. Create a local env file:
 
@@ -74,6 +76,7 @@ python -m app.onboarding \
 ```text
 apps/study-agent/
   README.md
+  pyproject.toml
   requirements.txt
   .env.example
   prompts/

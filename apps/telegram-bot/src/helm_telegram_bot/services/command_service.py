@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from email_agent.adapters import build_helm_runtime
 from email_agent.operator import (
     DraftTransitionResult,
     DraftView,
@@ -16,6 +15,7 @@ from email_agent.reminders import complete_scheduled_task, create_thread_reminde
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
 from helm_observability.logging import get_logger
+from helm_runtime.email_agent import build_email_agent_runtime
 
 logger = get_logger("helm_telegram_bot.services.command_service")
 
@@ -96,7 +96,7 @@ class DraftDetailView:
 
 class TelegramCommandService:
     def list_action_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
-        items = build_helm_runtime().list_email_threads(label="Action", limit=limit)
+        items = build_email_agent_runtime().list_email_threads(label="Action", limit=limit)
         return [
             ThreadQueueView(
                 id=item["id"],
@@ -107,7 +107,7 @@ class TelegramCommandService:
         ]
 
     def list_uninitialized_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
-        items = build_helm_runtime().list_email_threads(
+        items = build_email_agent_runtime().list_email_threads(
             business_state="uninitialized",
             limit=limit,
         )
@@ -121,7 +121,7 @@ class TelegramCommandService:
         ]
 
     def list_waiting_on_user_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
-        items = build_helm_runtime().list_email_threads(
+        items = build_email_agent_runtime().list_email_threads(
             business_state="waiting_on_user",
             limit=limit,
         )
@@ -135,7 +135,7 @@ class TelegramCommandService:
         ]
 
     def list_waiting_on_other_party_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
-        items = build_helm_runtime().list_email_threads(
+        items = build_email_agent_runtime().list_email_threads(
             business_state="waiting_on_other_party",
             limit=limit,
         )
@@ -149,7 +149,7 @@ class TelegramCommandService:
         ]
 
     def list_resolved_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
-        items = build_helm_runtime().list_email_threads(
+        items = build_email_agent_runtime().list_email_threads(
             business_state="resolved",
             limit=limit,
         )
@@ -163,7 +163,7 @@ class TelegramCommandService:
         ]
 
     def list_needs_review_threads(self, *, limit: int = 5) -> list[ThreadQueueView]:
-        items = build_helm_runtime().list_email_threads(label="NeedsReview", limit=limit)
+        items = build_email_agent_runtime().list_email_threads(label="NeedsReview", limit=limit)
         return [
             ThreadQueueView(
                 id=item["id"],
@@ -180,7 +180,7 @@ class TelegramCommandService:
         business_state: str | None = None,
         label: str | None = None,
     ) -> list[ThreadDetailView]:
-        items = build_helm_runtime().list_email_threads(
+        items = build_email_agent_runtime().list_email_threads(
             business_state=business_state,
             label=label,
             limit=limit,
@@ -197,7 +197,7 @@ class TelegramCommandService:
         ]
 
     def list_open_actions(self, *, limit: int = 5) -> list[object]:
-        return list_open_actions(limit=limit, runtime=build_helm_runtime())
+        return list_open_actions(limit=limit, runtime=build_email_agent_runtime())
 
     def list_proposals(
         self,
@@ -205,7 +205,7 @@ class TelegramCommandService:
         limit: int = 5,
         proposal_type: str | None = None,
     ) -> list[ProposalView]:
-        items = build_helm_runtime().list_email_proposals(
+        items = build_email_agent_runtime().list_email_proposals(
             status="proposed",
             proposal_type=proposal_type,
             limit=limit,
@@ -228,21 +228,21 @@ class TelegramCommandService:
         approval_status: str | None = None,
     ) -> list[object]:
         if approval_status is None:
-            return list_pending_drafts(limit=limit, runtime=build_helm_runtime())
+            return list_pending_drafts(limit=limit, runtime=build_email_agent_runtime())
         return [
             DraftView(
                 id=item["id"],
                 status=item["approval_status"],
                 draft_text=item["preview"],
             )
-            for item in build_helm_runtime().list_email_drafts(
+            for item in build_email_agent_runtime().list_email_drafts(
                 limit=limit,
                 approval_status=approval_status,
             )
         ]
 
     def get_draft_detail(self, draft_id: int) -> DraftDetailView | None:
-        runtime = build_helm_runtime()
+        runtime = build_email_agent_runtime()
         draft = runtime.get_email_draft_by_id(draft_id)
         if draft is None:
             return None
@@ -270,7 +270,7 @@ class TelegramCommandService:
         limit: int = 5,
         status: str = "pending",
     ) -> list[ScheduledTaskView]:
-        items = build_helm_runtime().list_scheduled_tasks(status=status, limit=limit)
+        items = build_email_agent_runtime().list_scheduled_tasks(status=status, limit=limit)
         return [
             ScheduledTaskView(
                 id=item["id"],
@@ -284,7 +284,7 @@ class TelegramCommandService:
         ]
 
     def get_thread_detail(self, thread_id: int) -> ThreadDetailView | None:
-        runtime = build_helm_runtime()
+        runtime = build_email_agent_runtime()
         detail = runtime.get_email_thread_detail(thread_id=thread_id)
         if detail is None:
             return None
@@ -326,13 +326,13 @@ class TelegramCommandService:
         )
 
     def approve_draft(self, draft_id: int) -> DraftTransitionResult:
-        result = approve_draft(draft_id, runtime=build_helm_runtime())
+        result = approve_draft(draft_id, runtime=build_email_agent_runtime())
         if not result.ok:
             logger.warning("draft_transition_failed", action="approve", draft_id=draft_id)
         return result
 
     def snooze_draft(self, draft_id: int) -> DraftTransitionResult:
-        result = snooze_draft(draft_id, runtime=build_helm_runtime())
+        result = snooze_draft(draft_id, runtime=build_email_agent_runtime())
         if not result.ok:
             logger.warning("draft_transition_failed", action="snooze", draft_id=draft_id)
         return result
@@ -349,7 +349,7 @@ class TelegramCommandService:
             due_at=due_at,
             created_by="user",
             task_type=task_type,
-            runtime=build_helm_runtime(),
+            runtime=build_email_agent_runtime(),
         )
         if result.status != "accepted":
             logger.warning(
@@ -368,7 +368,7 @@ class TelegramCommandService:
         )
 
     def complete_task(self, task_id: int) -> ThreadTaskTransitionResult:
-        result = complete_scheduled_task(task_id=task_id, runtime=build_helm_runtime())
+        result = complete_scheduled_task(task_id=task_id, runtime=build_email_agent_runtime())
         if result.status != "accepted":
             logger.warning(
                 "thread_task_complete_failed",
@@ -385,7 +385,7 @@ class TelegramCommandService:
         )
 
     def resolve_thread(self, thread_id: int) -> ThreadOverrideTransitionResult:
-        runtime = build_helm_runtime()
+        runtime = build_email_agent_runtime()
         thread = runtime.get_thread_by_id(thread_id)
         if thread is None:
             return ThreadOverrideTransitionResult(
@@ -416,7 +416,7 @@ class TelegramCommandService:
         )
 
     def mark_thread_needs_review(self, thread_id: int) -> ThreadOverrideTransitionResult:
-        runtime = build_helm_runtime()
+        runtime = build_email_agent_runtime()
         thread = runtime.get_thread_by_id(thread_id)
         if thread is None:
             return ThreadOverrideTransitionResult(
@@ -450,7 +450,7 @@ class TelegramCommandService:
         result = reprocess_email_thread(
             thread_id=thread_id,
             dry_run=dry_run,
-            runtime=build_helm_runtime(),
+            runtime=build_email_agent_runtime(),
         )
         if result.status != "accepted":
             return ThreadReprocessResult(

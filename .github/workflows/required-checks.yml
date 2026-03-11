@@ -9,39 +9,51 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  detect-changes:
     runs-on: ubuntu-latest
+    outputs:
+      compose: ${{ steps.filter.outputs.compose }}
+      python: ${{ steps.filter.outputs.python }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
-          python-version: "3.11"
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-      - name: Install deps
-        run: uv sync --frozen --extra dev
-      - name: Lint
-        run: bash scripts/lint.sh
+          filters: |
+            python:
+              - 'apps/**'
+              - 'packages/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'Makefile'
+            compose:
+              - 'apps/api/**'
+              - 'apps/worker/**'
+              - 'apps/telegram-bot/**'
+              - 'packages/connectors/**'
+              - 'packages/domain/**'
+              - 'packages/llm/**'
+              - 'packages/observability/**'
+              - 'packages/orchestration/**'
+              - 'packages/runtime/**'
+              - 'packages/storage/**'
+              - 'migrations/**'
+              - 'docker-compose.yml'
+              - 'Dockerfile'
+              - 'alembic.ini'
+              - 'scripts/compose-api-health-smoke.sh'
+              - 'scripts/migrate.sh'
 
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-      - name: Install deps
-        run: uv sync --frozen --extra dev
-      - name: Test
-        run: bash scripts/test.sh
+  python-checks:
+    needs: detect-changes
+    if: github.event_name == 'push' || needs.detect-changes.outputs.python == 'true'
+    uses: ./.github/workflows/python-checks-reusable.yml
 
   compose-smoke:
+    needs: detect-changes
+    if: github.event_name == 'push' || needs.detect-changes.outputs.compose == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:

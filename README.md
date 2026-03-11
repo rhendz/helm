@@ -7,8 +7,8 @@ V1 is intentionally scoped for one user and one primary interface: Telegram.
 ## V1 Scope
 
 - Opportunity/inbox triage with durable artifacts in Postgres.
-- Daily command briefing generated from action items, priorities, and study context.
-- Study execution and weakness tracking via structured artifacts.
+- Daily command briefing generated from action items and priorities.
+- Study execution lives in the standalone `apps/study-agent` app for now.
 - Draft generation and approval/snooze loop through Telegram.
 - Human-in-the-loop for meaningful outbound actions.
 
@@ -29,7 +29,7 @@ Primary product spec: [`docs/internal/helm-v1.md`](docs/internal/helm-v1.md)
 - `packages/domain`: shared domain primitives and value objects.
 - `packages/storage`: SQLAlchemy models, session setup, and repositories.
 - `packages/connectors`: external ingestion connectors (Gmail/Telegram adapters).
-- `packages/agents`: domain agents (email/study/digest).
+- `packages/agents`: domain agents (email/digest).
 - `packages/orchestration`: LangGraph graphs and workflow control logic.
 - `packages/llm`: OpenAI Responses API client wrappers and prompt interfaces.
 - `packages/observability`: structured logging, run instrumentation, and health metadata.
@@ -80,8 +80,7 @@ bash scripts/bootstrap.sh
 bash scripts/doctor.sh
 uv run pre-commit install
 bash scripts/format.sh
-bash scripts/lint.sh
-bash scripts/test.sh
+bash scripts/verify.sh
 ```
 
 ### 5. Gmail credential smoke test (optional)
@@ -117,6 +116,10 @@ Phase 1 bootstrap scaffolding is in place.
 
 
 - Parallel worktree helper: `scripts/worktree-env.sh`
+- Local verification entrypoint: `scripts/verify.sh` / `make verify`
+- Extraction-prep manifests:
+  - `apps/study-agent/pyproject.toml`
+  - `packages/agents/pyproject.toml`
 
 
 Linear intake:

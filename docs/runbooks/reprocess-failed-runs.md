@@ -5,7 +5,7 @@ Use this runbook when `agent_runs` show failures and you need to re-run with cur
 ## Scope (V1 Today)
 
 - Reprocessable through API: digest workflow (`POST /v1/workflows/digest/run`).
-- Reprocessable through worker loop: `email_triage`, `digest`, `study` by restarting/rerunning worker jobs.
+- Reprocessable through worker loop: `email_triage`, `digest` by restarting/rerunning worker jobs.
 - No run-id replay endpoint exists yet.
 
 ## 1) Confirm a Failure Exists
@@ -92,7 +92,7 @@ docker compose logs -f worker
 Expected healthy loop signals:
 
 - `worker_started` once on boot.
-- Per poll: `email_triage_job_tick`, `digest_job_tick`, `study_job_tick`.
+- Per poll: `email_triage_job_tick`, `digest_job_tick`.
 - No repeating `worker_job_failed`.
 
 ## 5) Closeout Checks

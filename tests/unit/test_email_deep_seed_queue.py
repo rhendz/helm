@@ -43,8 +43,8 @@ def test_email_deep_seed_worker_processes_pending_items(monkeypatch) -> None:  #
         )
         item_id = item.id
 
-    runtime = email_deep_seed.build_helm_runtime(session_local)
-    monkeypatch.setattr(email_deep_seed, "build_helm_runtime", lambda: runtime)
+    runtime = email_deep_seed.build_email_agent_runtime(session_local)
+    monkeypatch.setattr(email_deep_seed, "build_email_agent_runtime", lambda: runtime)
 
     email_deep_seed.run()
 

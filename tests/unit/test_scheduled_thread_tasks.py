@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
-from email_agent.adapters import build_helm_runtime
 from email_agent.scheduling import run_due_scheduled_thread_tasks
+from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
 from helm_storage.models import AgentRunORM
 from helm_storage.repositories.agent_runs import AgentRunStatus
@@ -57,7 +57,7 @@ def test_due_scheduled_tasks_update_resurfacing_metadata_and_complete_tasks() ->
             )
         )
 
-    result = run_due_scheduled_thread_tasks(runtime=build_helm_runtime(session_local))
+    result = run_due_scheduled_thread_tasks(runtime=build_email_agent_runtime(session_local))
     assert result.processed_count == 2
     assert result.skipped_count == 0
     assert result.failed_count == 0
@@ -94,7 +94,7 @@ def test_due_scheduled_task_failures_are_recorded_without_stopping_batch() -> No
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)

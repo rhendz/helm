@@ -1,6 +1,6 @@
 
-from email_agent.adapters import build_helm_runtime
 from email_agent.operator import approve_draft, snooze_draft
+from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
 from helm_storage.models import DraftTransitionAuditORM
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
@@ -37,7 +37,7 @@ def test_approve_draft_persists_transition_audit() -> None:
             )
         )
 
-    result = approve_draft(draft.id, runtime=build_helm_runtime(session_local))
+    result = approve_draft(draft.id, runtime=build_email_agent_runtime(session_local))
 
     assert result.ok is True
     with Session(engine) as session:
@@ -75,7 +75,7 @@ def test_snooze_draft_failure_persists_audit() -> None:
             )
         )
 
-    result = snooze_draft(draft.id, runtime=build_helm_runtime(session_local))
+    result = snooze_draft(draft.id, runtime=build_email_agent_runtime(session_local))
 
     assert result.ok is False
     with Session(engine) as session:
