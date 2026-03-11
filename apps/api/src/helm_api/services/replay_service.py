@@ -117,3 +117,57 @@ def reprocess_failed_runs(
             "skipped_count": 0,
             "reason": "storage_unavailable",
         }
+
+
+def list_replay_items(*, status: str | None, limit: int) -> list[dict[str, object]]:
+    try:
+        with SessionLocal() as session:
+            replay_repository = SQLAlchemyReplayQueueRepository(session)
+            rows = replay_repository.list_recent(status=status, limit=limit)
+            return [
+                {
+                    "id": row.id,
+                    "agent_run_id": row.agent_run_id,
+                    "source_type": row.source_type,
+                    "source_id": row.source_id,
+                    "status": row.status,
+                    "attempts": row.attempts,
+                    "last_error": row.last_error,
+                    "created_at": row.created_at,
+                    "updated_at": row.updated_at,
+                }
+                for row in rows
+            ]
+    except SQLAlchemyError:
+        return []
+
+
+def requeue_replay_item(*, replay_id: int) -> dict[str, object]:
+    try:
+        with SessionLocal() as session:
+            replay_repository = SQLAlchemyReplayQueueRepository(session)
+            row = replay_repository.get_by_id(replay_id)
+            if row is None:
+                return {
+                    "status": "rejected",
+                    "replay_id": replay_id,
+                    "reason": "replay_not_found",
+                }
+            if row.status not in {"failed", "dead_lettered"}:
+                return {
+                    "status": "rejected",
+                    "replay_id": replay_id,
+                    "reason": "replay_not_requeueable",
+                }
+            replay_repository.requeue(replay_id)
+            return {
+                "status": "accepted",
+                "replay_id": replay_id,
+                "reason": None,
+            }
+    except SQLAlchemyError:
+        return {
+            "status": "unavailable",
+            "replay_id": replay_id,
+            "reason": "storage_unavailable",
+        }

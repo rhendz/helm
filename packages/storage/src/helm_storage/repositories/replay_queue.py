@@ -50,6 +50,21 @@ class SQLAlchemyReplayQueueRepository:
         )
         return list(self._session.execute(statement).scalars().all())
 
+    def list_recent(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 20,
+    ) -> list[ReplayQueueORM]:
+        statement = select(ReplayQueueORM).order_by(
+            ReplayQueueORM.updated_at.desc(),
+            ReplayQueueORM.id.desc(),
+        )
+        if status is not None:
+            statement = statement.where(ReplayQueueORM.status == status)
+        statement = statement.limit(limit)
+        return list(self._session.execute(statement).scalars().all())
+
     def mark_processing(self, item_id: int) -> ReplayQueueORM | None:
         item = self.get_by_id(item_id)
         if item is None:
@@ -90,3 +105,17 @@ class SQLAlchemyReplayQueueRepository:
     def get_by_id(self, item_id: int) -> ReplayQueueORM | None:
         statement = select(ReplayQueueORM).where(ReplayQueueORM.id == item_id)
         return self._session.execute(statement).scalar_one_or_none()
+
+    def requeue(self, item_id: int) -> ReplayQueueORM | None:
+        item = self.get_by_id(item_id)
+        if item is None:
+            return None
+        if item.status not in {"failed", "dead_lettered"}:
+            return item
+        item.status = "pending"
+        item.attempts = 0
+        item.last_error = None
+        self._session.add(item)
+        self._session.commit()
+        self._session.refresh(item)
+        return item

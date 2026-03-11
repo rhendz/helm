@@ -228,3 +228,98 @@ def test_reprocess_failed_runs_dry_run_and_execute(monkeypatch) -> None:  # noqa
     assert execute["matched_count"] == 2
     assert execute["enqueued_count"] == 2
     assert execute["skipped_count"] == 0
+
+
+def test_list_replay_items_filters_recent_status(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(replay_service, "SessionLocal", session_local)
+
+    with Session(engine) as session:
+        replay_repo = SQLAlchemyReplayQueueRepository(session)
+        pending_item, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=1,
+            source_type="worker",
+            source_id="scheduler-1",
+        )
+        dead_lettered_item, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=2,
+            source_type="worker",
+            source_id="scheduler-2",
+        )
+        replay_repo.mark_processing(dead_lettered_item.id)
+        replay_repo.mark_failed(dead_lettered_item.id, error_message="boom", max_attempts=1)
+        pending_item_id = pending_item.id
+        dead_lettered_item_id = dead_lettered_item.id
+
+    dead_lettered = replay_service.list_replay_items(status="dead_lettered", limit=10)
+
+    assert [row["id"] for row in dead_lettered] == [dead_lettered_item_id]
+    assert dead_lettered[0]["status"] == "dead_lettered"
+
+    recent = replay_service.list_replay_items(status=None, limit=10)
+
+    assert [row["id"] for row in recent] == [dead_lettered_item_id, pending_item_id]
+    assert recent[0]["attempts"] == 1
+
+
+def test_requeue_replay_item_resets_dead_lettered_row(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(replay_service, "SessionLocal", session_local)
+
+    with Session(engine) as session:
+        replay_repo = SQLAlchemyReplayQueueRepository(session)
+        replay_item, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=7,
+            source_type="worker",
+            source_id="scheduler",
+        )
+        replay_repo.mark_processing(replay_item.id)
+        replay_repo.mark_failed(replay_item.id, error_message="boom", max_attempts=1)
+        replay_item_id = replay_item.id
+
+    result = replay_service.requeue_replay_item(replay_id=replay_item_id)
+
+    assert result == {"status": "accepted", "replay_id": replay_item_id, "reason": None}
+
+    with Session(engine) as session:
+        replay_row = session.execute(
+            select(ReplayQueueORM).where(ReplayQueueORM.id == replay_item_id)
+        ).scalar_one()
+
+    assert replay_row.status == "pending"
+    assert replay_row.attempts == 0
+    assert replay_row.last_error is None
+
+
+def test_requeue_replay_item_rejects_pending_and_missing(monkeypatch) -> None:  # noqa: ANN001
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(replay_service, "SessionLocal", session_local)
+
+    with Session(engine) as session:
+        replay_repo = SQLAlchemyReplayQueueRepository(session)
+        replay_item, _created = replay_repo.enqueue_from_failed_run(
+            agent_run_id=8,
+            source_type="worker",
+            source_id="scheduler",
+        )
+        replay_item_id = replay_item.id
+
+    pending = replay_service.requeue_replay_item(replay_id=replay_item_id)
+    missing = replay_service.requeue_replay_item(replay_id=999999)
+
+    assert pending == {
+        "status": "rejected",
+        "replay_id": replay_item_id,
+        "reason": "replay_not_requeueable",
+    }
+    assert missing == {
+        "status": "rejected",
+        "replay_id": 999999,
+        "reason": "replay_not_found",
+    }

@@ -119,6 +119,13 @@ def test_routes_exist() -> None:
     replay_response = client.post("/v1/replay/enqueue", json={"agent_run_id": 999999})
     assert replay_response.status_code == 200
     assert replay_response.json()["status"] in {"rejected", "unavailable"}
+    replay_items_response = client.get("/v1/replay/items")
+    assert replay_items_response.status_code == 200
+    replay_items_filtered_response = client.get("/v1/replay/items?status=dead_lettered")
+    assert replay_items_filtered_response.status_code == 200
+    replay_requeue_response = client.post("/v1/replay/999999/requeue")
+    assert replay_requeue_response.status_code == 200
+    assert replay_requeue_response.json()["status"] in {"rejected", "unavailable"}
     replay_reprocess_rejected = client.post(
         "/v1/replay/reprocess",
         json={"dry_run": True, "limit": 10},
