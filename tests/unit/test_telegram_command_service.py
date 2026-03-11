@@ -588,6 +588,34 @@ def test_run_replay_worker_rejects_paused_job(monkeypatch) -> None:  # noqa: ANN
     )
 
 
+def test_pause_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(
+        command_service,
+        "set_job_pause",
+        lambda *, job_name, paused: {"job_name": job_name, "paused": paused},
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.pause_replay_job()
+
+    assert result.ok is True
+    assert result.message == "Replay job paused."
+
+
+def test_resume_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(
+        command_service,
+        "set_job_pause",
+        lambda *, job_name, paused: {"job_name": job_name, "paused": paused},
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.resume_replay_job()
+
+    assert result.ok is True
+    assert result.message == "Replay job resumed."
+
+
 def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
     monkeypatch.setattr(

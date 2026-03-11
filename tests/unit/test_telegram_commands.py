@@ -11,6 +11,7 @@ from helm_telegram_bot.commands import (
     email_config,
     followup,
     needsreview_threads,
+    pause_replay,
     proposals,
     remind,
     replays,
@@ -18,6 +19,7 @@ from helm_telegram_bot.commands import (
     requeue_replay,
     resolve,
     resolved_threads,
+    resume_replay,
     review,
     reviews,
     run_replay,
@@ -646,6 +648,42 @@ async def test_run_replay_command_surfaces_paused_job(monkeypatch: pytest.Monkey
     assert update.message.replies == [
         "Replay job is paused; resume it before running replay manually."
     ]
+
+
+@pytest.mark.asyncio
+async def test_pause_replay_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def pause_replay_job(self) -> ThreadTaskTransitionResult:
+            return ThreadTaskTransitionResult(ok=True, message="Replay job paused.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(pause_replay, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(pause_replay, "_service", _Service())
+    update = _Update()
+
+    await pause_replay.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Replay job paused."]
+
+
+@pytest.mark.asyncio
+async def test_resume_replay_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def resume_replay_job(self) -> ThreadTaskTransitionResult:
+            return ThreadTaskTransitionResult(ok=True, message="Replay job resumed.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(resume_replay, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(resume_replay, "_service", _Service())
+    update = _Update()
+
+    await resume_replay.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Replay job resumed."]
 
 
 @pytest.mark.asyncio
