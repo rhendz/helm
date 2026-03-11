@@ -101,6 +101,18 @@ class NewEmailDraft:
 
 
 @dataclass(frozen=True, slots=True)
+class EmailDraftContentPatch:
+    draft_body: str
+    draft_subject: str | None
+    action_proposal_id: int | None = None
+    status: str | None = None
+    approval_status: str | None = None
+    model_name: str | None = None
+    prompt_version: str | None = None
+    draft_reasoning_artifact_ref: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class NewDraftReasoningArtifact:
     email_draft_id: int
     email_thread_id: int
@@ -248,6 +260,12 @@ class EmailDraftRepository(Protocol):
     def get_latest_for_thread(self, *, email_thread_id: int) -> EmailDraftORM | None: ...
 
     def set_approval_status(self, draft_id: int, *, approval_status: str) -> bool: ...
+
+    def update_content(
+        self,
+        draft_id: int,
+        patch: EmailDraftContentPatch,
+    ) -> EmailDraftORM | None: ...
 
     def set_reasoning_artifact_ref(self, draft_id: int, *, artifact_ref: str) -> bool: ...
 

@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from helm_storage.models import EmailDraftORM
-from helm_storage.repositories.contracts import NewEmailDraft
+from helm_storage.repositories.contracts import EmailDraftContentPatch, NewEmailDraft
 
 
 class SQLAlchemyEmailDraftRepository:
@@ -74,6 +74,25 @@ class SQLAlchemyEmailDraftRepository:
         self._session.add(record)
         self._session.commit()
         return True
+
+    def update_content(self, draft_id: int, patch: EmailDraftContentPatch) -> EmailDraftORM | None:
+        record = self.get_by_id(draft_id)
+        if record is None:
+            return None
+        record.draft_body = patch.draft_body
+        record.draft_subject = patch.draft_subject
+        record.action_proposal_id = patch.action_proposal_id
+        if patch.status is not None:
+            record.status = patch.status
+        if patch.approval_status is not None:
+            record.approval_status = patch.approval_status
+        record.model_name = patch.model_name
+        record.prompt_version = patch.prompt_version
+        record.draft_reasoning_artifact_ref = patch.draft_reasoning_artifact_ref
+        self._session.add(record)
+        self._session.commit()
+        self._session.refresh(record)
+        return record
 
     def set_reasoning_artifact_ref(self, draft_id: int, *, artifact_ref: str) -> bool:
         record = self.get_by_id(draft_id)

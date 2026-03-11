@@ -10,6 +10,7 @@ from helm_storage.repositories.classification_artifacts import (
     SQLAlchemyClassificationArtifactRepository,
 )
 from helm_storage.repositories.contracts import (
+    EmailDraftContentPatch,
     NewActionProposal,
     NewClassificationArtifact,
     NewDigestItem,
@@ -224,25 +225,62 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
                 )
             )
             if reasoning_artifact is not None:
-                artifact_record = SQLAlchemyDraftReasoningArtifactRepository(session).create(
-                    NewDraftReasoningArtifact(
-                        email_draft_id=record.id,
-                        email_thread_id=email_thread_id,
-                        action_proposal_id=action_proposal_id,
-                        schema_version=str(reasoning_artifact["schema_version"]),
-                        prompt_context=_json_object(reasoning_artifact.get("prompt_context")),
-                        model_metadata=_json_object(reasoning_artifact.get("model_metadata")),
-                        reasoning_payload=_json_object(reasoning_artifact.get("reasoning_payload")),
-                        refinement_metadata=_json_object(
-                            reasoning_artifact.get("refinement_metadata")
-                        ),
-                    )
+                artifact_record = _create_draft_reasoning_artifact(
+                    session=session,
+                    draft_id=record.id,
+                    email_thread_id=email_thread_id,
+                    action_proposal_id=action_proposal_id,
+                    reasoning_artifact=reasoning_artifact,
                 )
                 draft_repository.set_reasoning_artifact_ref(
                     record.id,
                     artifact_ref=artifact_record.internal_uuid,
                 )
             return DraftRecord(id=record.id)
+
+    def update_email_draft(
+        self,
+        *,
+        draft_id: int,
+        email_thread_id: int,
+        action_proposal_id: int | None,
+        draft_body: str,
+        draft_subject: str | None,
+        reasoning_artifact: dict[str, object] | None = None,
+    ) -> DraftRecord | None:
+        with self.session_factory() as session:
+            draft_repository = SQLAlchemyEmailDraftRepository(session)
+            existing = draft_repository.get_by_id(draft_id)
+            if existing is None:
+                return None
+
+            approval_status = existing.approval_status
+            if draft_body != existing.draft_body or draft_subject != existing.draft_subject:
+                approval_status = "pending_user"
+
+            artifact_ref = existing.draft_reasoning_artifact_ref
+            if reasoning_artifact is not None:
+                artifact_record = _create_draft_reasoning_artifact(
+                    session=session,
+                    draft_id=draft_id,
+                    email_thread_id=email_thread_id,
+                    action_proposal_id=action_proposal_id,
+                    reasoning_artifact=reasoning_artifact,
+                )
+                artifact_ref = artifact_record.internal_uuid
+
+            updated = draft_repository.update_content(
+                draft_id,
+                EmailDraftContentPatch(
+                    draft_body=draft_body,
+                    draft_subject=draft_subject,
+                    action_proposal_id=action_proposal_id,
+                    status="generated",
+                    approval_status=approval_status,
+                    draft_reasoning_artifact_ref=artifact_ref,
+                ),
+            )
+            return DraftRecord(id=updated.id) if updated is not None else None
 
     def get_email_draft_by_id(self, draft_id: int) -> dict | None:
         with self.session_factory() as session:
@@ -694,6 +732,28 @@ def _draft_reasoning_artifact_payload(record: object) -> dict:
         "refinement_metadata": record.refinement_metadata,
         "created_at": record.created_at,
     }
+
+
+def _create_draft_reasoning_artifact(
+    *,
+    session: Session,
+    draft_id: int,
+    email_thread_id: int,
+    action_proposal_id: int | None,
+    reasoning_artifact: dict[str, object],
+):
+    return SQLAlchemyDraftReasoningArtifactRepository(session).create(
+        NewDraftReasoningArtifact(
+            email_draft_id=draft_id,
+            email_thread_id=email_thread_id,
+            action_proposal_id=action_proposal_id,
+            schema_version=str(reasoning_artifact["schema_version"]),
+            prompt_context=_json_object(reasoning_artifact.get("prompt_context")),
+            model_metadata=_json_object(reasoning_artifact.get("model_metadata")),
+            reasoning_payload=_json_object(reasoning_artifact.get("reasoning_payload")),
+            refinement_metadata=_json_object(reasoning_artifact.get("refinement_metadata")),
+        )
+    )
 
 
 def _json_object(value: object) -> dict[str, object]:

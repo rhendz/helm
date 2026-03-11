@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 from email_agent.adapters import build_helm_runtime
+from email_agent.operator import approve_draft
 from email_agent.triage import (
     build_email_triage_graph,
     process_inbound_email_message,
@@ -252,10 +253,24 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert len(action_proposals) == 1
     assert len(email_drafts) == 1
     assert email_drafts[0].draft_reasoning_artifact_ref is not None
-    assert len(draft_reasoning_artifacts) == 1
-    assert draft_reasoning_artifacts[0].email_draft_id == email_drafts[0].id
-    assert draft_reasoning_artifacts[0].action_proposal_id == action_proposals[0].id
-    assert draft_reasoning_artifacts[0].schema_version == "email_draft_reasoning_v1"
+    assert len(draft_reasoning_artifacts) == 2
+    assert all(
+        artifact.email_draft_id == email_drafts[0].id
+        for artifact in draft_reasoning_artifacts
+    )
+    assert all(
+        artifact.action_proposal_id == action_proposals[0].id
+        for artifact in draft_reasoning_artifacts
+    )
+    assert all(
+        artifact.schema_version == "email_draft_reasoning_v1"
+        for artifact in draft_reasoning_artifacts
+    )
+    event_types = {
+        artifact.refinement_metadata["event_type"]
+        for artifact in draft_reasoning_artifacts
+    }
+    assert event_types == {"generation", "refinement"}
     assert len(classification_artifacts) == 2
     assert classification_artifacts[0].email_thread_id == first_result.email_thread_id
     assert classification_artifacts[0].email_message_id == email_messages[0].id
@@ -366,6 +381,103 @@ def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> N
     assert len(action_proposals) == 1
     assert len(email_drafts) == 1
     assert len(email_messages) == 2
+
+
+def test_email_triage_refines_existing_draft_in_place_and_resets_approval_on_change() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    first_message = normalize_message(
+        {
+            "id": "msg-refine-a",
+            "threadId": "thr-refine",
+            "from": "recruiter@example.com",
+            "subject": "Role intro",
+            "snippet": "Would you be interested in chatting?",
+        }
+    )
+    second_message = normalize_message(
+        {
+            "id": "msg-refine-b",
+            "threadId": "thr-refine",
+            "from": "recruiter@example.com",
+            "subject": "Role intro updated",
+            "snippet": "Could you share times for this week?",
+        }
+    )
+
+    first_result = process_inbound_email_message(
+        _email_message(first_message),
+        graph=build_email_triage_graph(),
+        runtime=runtime,
+    )
+    assert first_result.email_draft_id is not None
+    assert approve_draft(first_result.email_draft_id, runtime=runtime).ok is True
+
+    second_result = process_inbound_email_message(
+        _email_message(second_message),
+        graph=build_email_triage_graph(),
+        runtime=runtime,
+    )
+
+    assert second_result.email_draft_id == first_result.email_draft_id
+
+    with Session(engine) as session:
+        drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
+        reasoning_artifacts = list(
+            session.execute(select(DraftReasoningArtifactORM)).scalars().all()
+        )
+
+    assert len(drafts) == 1
+    assert drafts[0].approval_status == "pending_user"
+    assert "Role intro updated" in drafts[0].draft_body
+    assert drafts[0].draft_subject == "Role intro updated"
+    assert len(reasoning_artifacts) == 2
+
+
+def test_email_triage_keeps_approval_when_refinement_content_is_unchanged() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    runtime = build_helm_runtime(session_local)
+
+    message = normalize_message(
+        {
+            "id": "msg-same-a",
+            "threadId": "thr-same",
+            "from": "recruiter@example.com",
+            "subject": "Role intro",
+            "snippet": "Would you be interested in chatting?",
+        }
+    )
+
+    first_result = process_inbound_email_message(
+        _email_message(message),
+        graph=build_email_triage_graph(),
+        runtime=runtime,
+    )
+    assert first_result.email_draft_id is not None
+    assert approve_draft(first_result.email_draft_id, runtime=runtime).ok is True
+
+    second_result = process_inbound_email_message(
+        _email_message(message),
+        graph=build_email_triage_graph(),
+        runtime=runtime,
+    )
+
+    assert second_result.email_draft_id == first_result.email_draft_id
+
+    with Session(engine) as session:
+        drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
+        reasoning_artifacts = list(
+            session.execute(select(DraftReasoningArtifactORM)).scalars().all()
+        )
+
+    assert len(drafts) == 1
+    assert drafts[0].approval_status == "approved"
+    assert len(reasoning_artifacts) == 2
 
 
 def test_email_triage_supports_proposal_only_path_without_draft() -> None:
