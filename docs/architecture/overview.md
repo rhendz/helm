@@ -9,4 +9,4 @@ Primary flow:
 
 Key rule: Postgres is the source of truth for system state.
 
-TODO(v1-phase1): add sequence diagrams for email triage, digest, and study ingest.
+TODO(v1-phase1): add sequence diagrams for email triage and digest flows.

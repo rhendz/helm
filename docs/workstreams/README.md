@@ -2,6 +2,12 @@
 
 This file defines low-conflict tracks for parallel Codex agents.
 
+Current modular direction:
+
+- `apps/study-agent` is the canonical standalone study implementation.
+- `packages/agents/src/email_agent` should stay extractable; Helm-specific adapters should live outside the agent core.
+- Helm host work should stay focused on orchestration, transport, storage adapters, observability, and migrations.
+
 ## Track A: Storage + Migrations
 
 - Directory focus: `packages/storage`, `migrations`, `docs/domain`.
@@ -23,14 +29,14 @@ This file defines low-conflict tracks for parallel Codex agents.
 - Directory focus: `apps/worker`, `packages/orchestration`, `packages/agents`.
 - Deliverables:
   - Job registry and scheduler.
-  - Email triage workflow skeleton.
-  - Retry/error handling scaffolding.
+  - Helm-side workflow wiring and retry/error handling.
+  - Runtime composition that does not leak Helm concerns into extractable agent cores.
 
 ## Track D: Telegram Bot
 
 - Directory focus: `apps/telegram-bot`.
 - Deliverables:
-  - Command handlers (`/digest`, `/drafts`, `/actions`, `/study`).
+  - Command handlers (`/digest`, `/drafts`, `/actions`).
   - Approval/snooze command contracts.
 
 ## Track E: Connectors + LLM
@@ -39,6 +45,14 @@ This file defines low-conflict tracks for parallel Codex agents.
 - Deliverables:
   - Gmail ingest path.
   - LLM prompt contract helpers.
+
+## Track F: Agent Extraction
+
+- Directory focus: `apps/study-agent`, `packages/agents/src/email_agent`, CI/docs/process files.
+- Deliverables:
+  - Clear host-vs-agent ownership boundaries.
+  - Removal of Helm-specific adapter placement from agent-core packages.
+  - Repo/process changes that support future extraction into standalone repos.
 
 
 

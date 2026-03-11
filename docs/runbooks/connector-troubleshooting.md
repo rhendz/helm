@@ -59,7 +59,7 @@ docker compose logs --tail=150 worker
 Expected V1 connector log patterns:
 
 - Gmail scaffold with no manual payload: `gmail_pull_stub`
-- Worker loop tick: `email_triage_job_tick`, `digest_job_tick`, `study_job_tick`
+- Worker loop tick: `email_triage_job_tick`, `digest_job_tick`
 
 If `worker_job_failed` appears:
 

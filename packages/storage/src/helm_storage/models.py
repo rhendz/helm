@@ -344,50 +344,6 @@ class OpportunityORM(Base):
     )
 
 
-class StudySessionORM(Base):
-    __tablename__ = "study_sessions"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    source_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    raw_text: Mapped[str] = mapped_column(Text(), nullable=False)
-    summary: Mapped[str | None] = mapped_column(Text())
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
-class KnowledgeGapORM(Base):
-    __tablename__ = "knowledge_gaps"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    topic: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str] = mapped_column(Text(), nullable=False)
-    severity: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
-    source_session_id: Mapped[int | None] = mapped_column(
-        ForeignKey("study_sessions.id", ondelete="SET NULL")
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
-
-
-class LearningTaskORM(Base):
-    __tablename__ = "learning_tasks"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text())
-    priority: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default="open", nullable=False)
-    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    related_gap_id: Mapped[int | None] = mapped_column(
-        ForeignKey("knowledge_gaps.id", ondelete="SET NULL")
-    )
-
-
 class ReplayQueueORM(Base):
     __tablename__ = "replay_queue"
 

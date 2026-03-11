@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 from email_agent import query as email_query
-from email_agent.adapters import build_helm_runtime
 from email_agent.operator import approve_draft
 from email_agent.reminders import (
     complete_scheduled_task,
@@ -13,6 +12,7 @@ from email_agent.reminders import (
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.types import EmailMessage
 from helm_api.services.email_service import override_thread
+from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.contracts import NewActionProposal, NewEmailDraft, NewEmailThread
@@ -27,7 +27,7 @@ def test_email_service_lists_threads_proposals_and_drafts(monkeypatch) -> None: 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
@@ -79,7 +79,7 @@ def test_email_service_filters_threads_by_state_and_label() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
@@ -116,7 +116,7 @@ def test_email_service_filters_proposals_and_drafts() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
@@ -176,7 +176,7 @@ def test_email_thread_detail_and_reprocess() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
@@ -276,7 +276,7 @@ def test_email_draft_detail_includes_transition_audits() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
@@ -333,7 +333,7 @@ def test_email_service_lists_global_scheduled_tasks() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread_repo = SQLAlchemyEmailThreadRepository(session)
@@ -379,7 +379,7 @@ def test_email_service_completes_task_from_global_queue() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread = SQLAlchemyEmailThreadRepository(session).create(
@@ -407,7 +407,7 @@ def test_email_thread_override_updates_state(monkeypatch) -> None:  # noqa: ANN0
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
 
     with Session(engine) as session:
         thread = SQLAlchemyEmailThreadRepository(session).create(

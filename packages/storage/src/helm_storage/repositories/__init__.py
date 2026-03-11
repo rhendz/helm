@@ -44,7 +44,6 @@ from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepositor
 from helm_storage.repositories.opportunities import SQLAlchemyOpportunityRepository
 from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
-from helm_storage.repositories.study_ingest import SQLAlchemyStudyIngestRepository
 
 __all__ = [
     "ActionItemRepository",
@@ -84,5 +83,4 @@ __all__ = [
     "SQLAlchemyOpportunityRepository",
     "SQLAlchemyReplayQueueRepository",
     "SQLAlchemyScheduledThreadTaskRepository",
-    "SQLAlchemyStudyIngestRepository",
 ]

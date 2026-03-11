@@ -1,1 +1,1 @@
-"""Business agents for email, study, and digest flows."""
+"""Business agents for email and digest flows."""

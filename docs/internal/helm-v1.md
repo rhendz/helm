@@ -245,8 +245,6 @@ Telegram is used for:
     
 - `/opportunities`  
     
-- `/study`  
-    
 - `/actions`  
     
 - `/approve <id>`  
@@ -261,8 +259,6 @@ Telegram is used for:
     
 - “rewrite draft 12 warmer”  
     
-- “what should I study tonight?”
-
 ---
 
 ## 7\. System Architecture
@@ -555,38 +551,6 @@ Suggested fields:
 * `created_at`  
 * `updated_at`
 
-### Study
-
-#### `study_sessions`
-
-* `id`  
-* `source_type`  
-* `raw_text`  
-* `summary`  
-* `created_at`
-
-#### `knowledge_gaps`
-
-* `id`  
-* `topic`  
-* `description`  
-* `severity`  
-* `source_session_id`  
-* `created_at`  
-* `updated_at`
-
-#### `learning_tasks`
-
-* `id`  
-* `title`  
-* `description`  
-* `priority`  
-* `status`  
-* `due_at`  
-* `related_gap_id`
-
----
-
 ## 11\. Initial Agents
 
 ## 11.1 Email Agent
@@ -604,10 +568,9 @@ Responsibilities:
 
 Responsibilities:
 
-* summarize study inputs  
-* extract learning tasks  
-* detect knowledge gaps  
-* generate digest items for important weaknesses
+* run as a standalone system outside the Helm host repo for now  
+* manage study continuity and weakness tracking independently  
+* expose future integration points back into Helm when needed
 
 ## 11.3 Digest Agent
 
@@ -815,7 +778,7 @@ Not in V1:
 
 ## Phase 5 — Reliability, Operator Control, and Autonomy Acceleration
 
-* reliability hardening across ingest/triage/digest/study flows  
+* reliability hardening across ingest/triage/digest flows  
 * operator-safe reprocess controls and run visibility  
 * deterministic idempotency and replay behavior  
 * stronger digest ranking quality using multi-source artifact signals  
@@ -980,7 +943,7 @@ Validation:
 
 Acceptance criteria:
 
-* operator can pause and resume scheduled job families (email/digest/study)  
+* operator can pause and resume scheduled job families (email/digest)  
 * paused jobs emit explicit status in `/v1/status` family endpoints  
 * worker respects pause state before executing job body
 

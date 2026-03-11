@@ -7,7 +7,7 @@ from helm_telegram_bot.services import command_service
 
 
 def test_list_open_actions_applies_limit(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
 
     def fake_list_open_actions(*, limit: int = 5, runtime: object) -> list[ActionView]:
         return [
@@ -41,7 +41,7 @@ def test_list_action_threads_uses_action_label(monkeypatch) -> None:  # noqa: AN
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_action_threads(limit=2)
@@ -64,7 +64,7 @@ def test_list_uninitialized_threads_uses_state_filter(monkeypatch) -> None:  # n
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_uninitialized_threads(limit=2)
@@ -88,7 +88,7 @@ def test_list_waiting_on_user_threads_uses_state_filter(monkeypatch) -> None:  #
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_waiting_on_user_threads(limit=2)
@@ -112,7 +112,7 @@ def test_list_waiting_on_other_party_threads_uses_state_filter(monkeypatch) -> N
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_waiting_on_other_party_threads(limit=2)
@@ -136,7 +136,7 @@ def test_list_resolved_threads_uses_state_filter(monkeypatch) -> None:  # noqa: 
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_resolved_threads(limit=2)
@@ -160,7 +160,7 @@ def test_list_needs_review_threads_uses_label(monkeypatch) -> None:  # noqa: ANN
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_needs_review_threads(limit=2)
@@ -185,7 +185,7 @@ def test_list_proposals_filters_by_type(monkeypatch) -> None:  # noqa: ANN001
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     proposals = service.list_proposals(limit=2, proposal_type="reply")
@@ -210,7 +210,7 @@ def test_list_threads_filters_by_business_state(monkeypatch) -> None:  # noqa: A
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_threads(limit=2, business_state="waiting_on_user")
@@ -235,7 +235,7 @@ def test_list_threads_filters_by_label(monkeypatch) -> None:  # noqa: ANN001
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     threads = service.list_threads(limit=2, label="Urgent")
@@ -245,7 +245,7 @@ def test_list_threads_filters_by_label(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_list_pending_drafts_applies_limit(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
 
     def fake_list_pending_drafts(*, limit: int = 5, runtime: object) -> list[DraftView]:
         return [
@@ -279,7 +279,7 @@ def test_list_pending_drafts_filters_by_approval_status(monkeypatch) -> None:  #
             ]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     drafts = service.list_pending_drafts(limit=2, approval_status="approved")
@@ -312,7 +312,7 @@ def test_get_draft_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
             ],
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     draft = service.get_draft_detail(5)
@@ -324,7 +324,7 @@ def test_get_draft_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_approve_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
 
     monkeypatch.setattr(
         command_service,
@@ -343,7 +343,7 @@ def test_approve_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_approve_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
 
     def fake_approve_draft(draft_id: int, runtime: object) -> DraftTransitionResult:
         return DraftTransitionResult(
@@ -365,7 +365,7 @@ def test_approve_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_snooze_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
 
     monkeypatch.setattr(
         command_service,
@@ -384,7 +384,7 @@ def test_snooze_draft_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_snooze_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
 
     monkeypatch.setattr(
         command_service,
@@ -403,7 +403,7 @@ def test_snooze_draft_failure_passthrough(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
     monkeypatch.setattr(
         command_service,
         "create_thread_reminder",
@@ -446,7 +446,7 @@ def test_resolve_thread_happy_path(monkeypatch) -> None:  # noqa: ANN001
             "update_thread_state": lambda self, *args, **kwargs: object(),
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     result = service.resolve_thread(7)
@@ -485,7 +485,7 @@ def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
             ],
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     result = service.get_thread_detail(5)
@@ -501,7 +501,7 @@ def test_get_thread_detail_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
 
 def test_reprocess_thread_passes_dry_run(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
     monkeypatch.setattr(
         command_service,
         "reprocess_email_thread",
@@ -550,7 +550,7 @@ def test_list_review_threads_filters_results(monkeypatch) -> None:  # noqa: ANN0
             "list_email_threads": _list_email_threads,
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     results = service.list_review_threads()
@@ -575,7 +575,7 @@ def test_list_scheduled_tasks_applies_status_and_limit(monkeypatch) -> None:  # 
             ][:limit]
         },
     )()
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: runtime)
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: runtime)
 
     service = command_service.TelegramCommandService()
     results = service.list_scheduled_tasks(limit=1, status="pending")
@@ -586,7 +586,7 @@ def test_list_scheduled_tasks_applies_status_and_limit(monkeypatch) -> None:  # 
 
 
 def test_complete_task_happy_path(monkeypatch) -> None:  # noqa: ANN001
-    monkeypatch.setattr(command_service, "build_helm_runtime", lambda: object())
+    monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
     monkeypatch.setattr(
         command_service,
         "complete_scheduled_task",

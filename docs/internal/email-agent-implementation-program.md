@@ -63,7 +63,7 @@ Implementation stance:
 
 Decoupling status:
 - `packages/agents/src/email_agent` now defines the Email Agent core boundary.
-- Helm app layers call Email Agent through explicit ports plus the Helm-backed adapter in `email_agent.adapters`.
+- Helm app layers call Email Agent through explicit ports plus the Helm-backed adapter in `helm_runtime.email_agent`.
 - legacy Helm compatibility wrappers for email triage and scheduling have been removed.
 
 ## Priority Order

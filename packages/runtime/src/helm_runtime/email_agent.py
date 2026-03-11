@@ -3,6 +3,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 
+from email_agent.runtime import (
+    ClassificationArtifactRecord,
+    DigestRecord,
+    DraftRecord,
+    EmailAgentRuntime,
+    MessageRecord,
+    ProposalRecord,
+    RunRecord,
+    ScheduledTaskRecord,
+    ThreadRecord,
+)
 from helm_storage.db import SessionLocal
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.agent_runs import SQLAlchemyAgentRunRepository
@@ -30,18 +41,6 @@ from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepos
 from helm_storage.repositories.email_threads import SQLAlchemyEmailThreadRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
 from sqlalchemy.orm import Session
-
-from email_agent.runtime import (
-    ClassificationArtifactRecord,
-    DigestRecord,
-    DraftRecord,
-    EmailAgentRuntime,
-    MessageRecord,
-    ProposalRecord,
-    RunRecord,
-    ScheduledTaskRecord,
-    ThreadRecord,
-)
 
 
 class HelmEmailAgentRuntime(EmailAgentRuntime):
@@ -634,7 +633,7 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
             }
 
 
-def build_helm_runtime(
+def build_email_agent_runtime(
     session_factory: Callable[[], Session] | None = None,
 ) -> EmailAgentRuntime:
     return HelmEmailAgentRuntime(session_factory=session_factory or SessionLocal)

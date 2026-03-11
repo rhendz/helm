@@ -1,0 +1,57 @@
+name: Python Checks Reusable
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: false
+        type: string
+        default: "3.11"
+      install-command:
+        required: false
+        type: string
+        default: "uv sync --frozen --extra dev"
+      lint-command:
+        required: false
+        type: string
+        default: "bash scripts/lint.sh"
+      test-command:
+        required: false
+        type: string
+        default: "bash scripts/test.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install deps
+        run: ${{ inputs.install-command }}
+      - name: Lint
+        run: ${{ inputs.lint-command }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install deps
+        run: ${{ inputs.install-command }}
+      - name: Test
+        run: ${{ inputs.test-command }}

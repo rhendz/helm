@@ -96,12 +96,6 @@ def test_routes_exist() -> None:
     assert complete_task_response.json()["status"] in {"not_found", "unavailable"}
     drafts_response = client.get("/v1/drafts")
     assert drafts_response.status_code == 200
-    response = client.post(
-        "/v1/study/ingest",
-        json={"source_type": "manual", "raw_text": "Gap: weak in graph DP\nTODO: solve 3 problems"},
-    )
-    assert response.status_code == 200
-    assert response.json()["status"] == "accepted"
     replay_response = client.post("/v1/replay/enqueue", json={"agent_run_id": 999999})
     assert replay_response.status_code == 200
     assert replay_response.json()["status"] in {"rejected", "unavailable"}

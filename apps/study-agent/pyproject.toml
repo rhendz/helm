@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "study-agent"
+version = "0.1.0"
+description = "Standalone Telegram-first study agent."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "openai>=1.60.0",
+  "pydantic>=2.9.0",
+  "python-telegram-bot>=21.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.8.0",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app", "app.*"]

@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 
 import pytest
-from email_agent.adapters import build_helm_runtime
 from email_agent.triage import (
     build_email_triage_graph,
     process_inbound_email_message,
@@ -10,6 +9,7 @@ from email_agent.triage import (
 from email_agent.types import EmailMessage
 from helm_connectors import gmail
 from helm_connectors.gmail import normalize_message, pull_new_messages, pull_new_messages_report
+from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
 from helm_storage.models import (
     ActionProposalORM,
@@ -173,7 +173,7 @@ def test_email_triage_graph_scaffold_result_shape() -> None:
     result = process_inbound_email_message(
         _email_message(message),
         graph=graph,
-        runtime=build_helm_runtime(session_local),
+        runtime=build_email_agent_runtime(session_local),
     )
 
     assert result.message_id == "msg-3"
@@ -205,12 +205,12 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     first_result = process_inbound_email_message(
         _email_message(message),
         graph=graph,
-        runtime=build_helm_runtime(session_local),
+        runtime=build_email_agent_runtime(session_local),
     )
     second_result = process_inbound_email_message(
         _email_message(message),
         graph=graph,
-        runtime=build_helm_runtime(session_local),
+        runtime=build_email_agent_runtime(session_local),
     )
 
     assert first_result.action_item_required is True
@@ -274,7 +274,7 @@ def test_classification_artifact_failure_does_not_revert_thread_truth() -> None:
     Base.metadata.create_all(engine)
     session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-    runtime = build_helm_runtime(session_local)
+    runtime = build_email_agent_runtime(session_local)
     original_create = runtime.create_classification_artifact
 
     def _fail_create(**kwargs):  # noqa: ANN001
@@ -339,12 +339,12 @@ def test_email_triage_consolidates_near_duplicate_messages_on_same_thread() -> N
     first_result = process_inbound_email_message(
         _email_message(first_message),
         graph=graph,
-        runtime=build_helm_runtime(session_local),
+        runtime=build_email_agent_runtime(session_local),
     )
     second_result = process_inbound_email_message(
         _email_message(second_message),
         graph=graph,
-        runtime=build_helm_runtime(session_local),
+        runtime=build_email_agent_runtime(session_local),
     )
 
     assert first_result.email_thread_id is not None
@@ -386,7 +386,7 @@ def test_email_triage_supports_proposal_only_path_without_draft() -> None:
     result = process_inbound_email_message(
         _email_message(message),
         graph=build_email_triage_graph(),
-        runtime=build_helm_runtime(session_local),
+        runtime=build_email_agent_runtime(session_local),
     )
 
     assert result.action_item_required is True
