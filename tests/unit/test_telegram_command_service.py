@@ -85,12 +85,16 @@ def test_list_job_controls_includes_known_jobs(monkeypatch) -> None:  # noqa: AN
     monkeypatch.setattr(
         command_service,
         "list_job_control_rows",
-        lambda: [{"job_name": "replay", "paused": True}],
+        lambda: [
+            {"job_name": "replay", "paused": True},
+            {"job_name": "digest", "paused": True},
+        ],
     )
 
     service = command_service.TelegramCommandService()
     items = service.list_job_controls()
 
+    assert [item.job_name for item in items[:2]] == ["digest", "replay"]
     by_name = {item.job_name: item for item in items}
     assert by_name["replay"].paused is True
     assert by_name["replay"].run_command == "/run_replay [limit]"
