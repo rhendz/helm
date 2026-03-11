@@ -271,7 +271,7 @@ def _persist_triage_artifacts(
         email_draft_record = runtime.get_latest_email_draft_for_thread(
             email_thread_id=email_thread_id
         )
-        draft_body = _build_draft_stub(message=message, classification=classification)
+        draft_body = _build_grounded_draft_reply(message=message, classification=classification)
         reasoning_artifact = {
             "schema_version": "email_draft_reasoning_v1",
             "prompt_context": {
@@ -279,19 +279,21 @@ def _persist_triage_artifacts(
                 "thread_summary": thread_summary,
                 "from_address": message.from_address,
                 "subject": message.subject,
+                "body_text": message.body_text,
             },
             "model_metadata": {
-                "generator": "draft_stub_scaffold",
-                "prompt_version": "email_draft_scaffold_v1",
+                "generator": "deterministic_grounded_reply",
+                "prompt_version": "email_draft_grounded_v1",
             },
             "reasoning_payload": {
                 "classification": classification,
                 "draft_reply_required": state.get("draft_reply_required", False),
                 "action_item_required": state.get("action_item_required", False),
+                "grounding_signals": _draft_grounding_signals(message),
             },
             "refinement_metadata": {
                 "event_type": "refinement" if email_draft_record is not None else "generation",
-                "strategy": "stub",
+                "strategy": "deterministic_grounded_reply",
             },
         }
         if email_draft_record is None:
@@ -369,16 +371,47 @@ def _build_fallback_summary(message: EmailMessage) -> str:
     return f"{message.from_address}: (no subject/body)"
 
 
-def _build_draft_stub(*, message: EmailMessage, classification: str) -> str:
-    subject = message.subject or "(no subject)"
-    snippet = message.body_text[:240] if message.body_text else "(no body provided)"
-    return (
-        "Draft reply stub.\n\n"
-        f"Thread: {message.provider_thread_id}\n"
-        f"From: {message.from_address}\n"
-        f"Subject: {subject}\n"
-        f"Classification: {classification}\n\n"
-        "Context snippet:\n"
-        f"{snippet}\n\n"
-        "TODO: personalize response and approve before sending."
+def _build_grounded_draft_reply(*, message: EmailMessage, classification: str) -> str:
+    lines = ["Thanks for reaching out."]
+
+    if classification == "opportunity":
+        lines.append("I'm interested in learning more about this opportunity.")
+    else:
+        lines.append("I wanted to follow up on your note.")
+
+    if _has_scheduling_cue(message):
+        lines.append(
+            "I'd be glad to chat. If you send over a few times that work on your side, "
+            "I can confirm one."
+        )
+    elif _has_detail_request_cue(message):
+        lines.append("Please share the relevant details and next steps when you can.")
+    else:
+        lines.append("Please let me know the best next step from here.")
+
+    return "\n\n".join(lines)
+
+
+def _draft_grounding_signals(message: EmailMessage) -> dict[str, bool]:
+    return {
+        "has_scheduling_cue": _has_scheduling_cue(message),
+        "has_detail_request_cue": _has_detail_request_cue(message),
+        "has_subject": bool(message.subject.strip()),
+        "has_body_text": bool(message.body_text.strip()),
+    }
+
+
+def _has_scheduling_cue(message: EmailMessage) -> bool:
+    haystack = f"{message.subject}\n{message.body_text}".lower()
+    return any(
+        token in haystack
+        for token in ("interview", "chat", "call", "availability", "times", "this week")
+    )
+
+
+def _has_detail_request_cue(message: EmailMessage) -> bool:
+    haystack = f"{message.subject}\n{message.body_text}".lower()
+    return any(
+        token in haystack
+        for token in ("details", "next steps", "learn more", "share more", "role")
     )
