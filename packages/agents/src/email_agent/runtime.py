@@ -73,6 +73,13 @@ class DeepSeedQueueRecord:
     id: int
 
 
+@dataclass(slots=True, frozen=True)
+class EmailAgentConfigRecord:
+    approval_required_before_send: bool
+    default_follow_up_business_days: int
+    last_history_cursor: str | None
+
+
 class EmailAgentRuntime(Protocol):
     def start_run(
         self,
@@ -300,6 +307,8 @@ class EmailAgentRuntime(Protocol):
         source: str,
     ) -> MessageRecord: ...
 
+    def get_email_agent_config(self) -> EmailAgentConfigRecord: ...
+
     def list_due_tasks(
         self,
         *,
@@ -342,6 +351,8 @@ class EmailAgentRuntime(Protocol):
     def get_email_thread_detail(self, *, thread_id: int) -> dict | None: ...
 
     def get_latest_inbound_email_message(self, *, thread_id: int) -> dict | None: ...
+
+    def get_latest_outbound_email_message(self, *, thread_id: int) -> dict | None: ...
 
     def list_scheduled_tasks_for_thread(self, *, thread_id: int) -> list[dict]: ...
 

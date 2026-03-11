@@ -8,6 +8,7 @@ from email_agent.runtime import (
     DeepSeedQueueRecord,
     DigestRecord,
     DraftRecord,
+    EmailAgentConfigRecord,
     EmailAgentRuntime,
     MessageRecord,
     ProposalRecord,
@@ -43,6 +44,7 @@ from helm_storage.repositories.draft_reasoning_artifacts import (
 from helm_storage.repositories.draft_transition_audits import (
     SQLAlchemyDraftTransitionAuditRepository,
 )
+from helm_storage.repositories.email_agent_config import SQLAlchemyEmailAgentConfigRepository
 from helm_storage.repositories.email_deep_seed_queue import SQLAlchemyEmailDeepSeedQueueRepository
 from helm_storage.repositories.email_drafts import SQLAlchemyEmailDraftRepository
 from helm_storage.repositories.email_messages import SQLAlchemyEmailMessageRepository
@@ -588,6 +590,15 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
             )
             return MessageRecord(id=record.id)
 
+    def get_email_agent_config(self) -> EmailAgentConfigRecord:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailAgentConfigRepository(session).get_or_create()
+            return EmailAgentConfigRecord(
+                approval_required_before_send=record.approval_required_before_send,
+                default_follow_up_business_days=record.default_follow_up_business_days,
+                last_history_cursor=record.last_history_cursor,
+            )
+
     def list_due_tasks(
         self,
         *,
@@ -787,6 +798,24 @@ class HelmEmailAgentRuntime(EmailAgentRuntime):
     def get_latest_inbound_email_message(self, *, thread_id: int) -> dict | None:
         with self.session_factory() as session:
             record = SQLAlchemyEmailMessageRepository(session).get_latest_inbound_for_thread(
+                email_thread_id=thread_id,
+            )
+            if record is None:
+                return None
+            return {
+                "provider_message_id": record.provider_message_id,
+                "provider_thread_id": record.provider_thread_id,
+                "from_address": record.from_address,
+                "subject": record.subject,
+                "body_text": record.body_text,
+                "received_at": record.received_at,
+                "normalized_at": record.normalized_at,
+                "source": record.source,
+            }
+
+    def get_latest_outbound_email_message(self, *, thread_id: int) -> dict | None:
+        with self.session_factory() as session:
+            record = SQLAlchemyEmailMessageRepository(session).get_latest_outbound_for_thread(
                 email_thread_id=thread_id,
             )
             if record is None:
