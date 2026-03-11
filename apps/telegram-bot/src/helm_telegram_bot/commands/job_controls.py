@@ -12,11 +12,20 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     if not update.message:
         return
+    if len(context.args) > 1 or (context.args and context.args[0] != "paused"):
+        await update.message.reply_text("Usage: /job_controls [paused]")
+        return
     items = _service.list_job_controls()
+    paused_only = bool(context.args)
+    if paused_only:
+        items = [item for item in items if item.paused]
     if not items:
+        if paused_only:
+            await update.message.reply_text("No paused jobs.")
+            return
         await update.message.reply_text("No job controls.")
         return
-    lines = ["Job controls:"]
+    lines = ["Paused jobs:" if paused_only else "Job controls:"]
     for item in items:
         state = "paused" if item.paused else "active"
         suffix_parts = []
