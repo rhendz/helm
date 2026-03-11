@@ -14,6 +14,7 @@ from helm_telegram_bot.commands import (
     pause_replay,
     proposals,
     remind,
+    replay_status,
     replays,
     reprocess_thread,
     requeue_replay,
@@ -666,6 +667,24 @@ async def test_pause_replay_command_calls_service(monkeypatch: pytest.MonkeyPatc
     await pause_replay.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Replay job paused."]
+
+
+@pytest.mark.asyncio
+async def test_replay_status_command_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def get_replay_job_status(self) -> ThreadTaskTransitionResult:
+            return ThreadTaskTransitionResult(ok=True, message="Replay job status: paused.")
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(replay_status, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(replay_status, "_service", _Service())
+    update = _Update()
+
+    await replay_status.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Replay job status: paused."]
 
 
 @pytest.mark.asyncio

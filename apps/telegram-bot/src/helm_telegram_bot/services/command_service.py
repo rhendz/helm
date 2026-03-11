@@ -16,7 +16,7 @@ from email_agent.reminders import complete_scheduled_task, create_thread_reminde
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
-from helm_api.services.job_control_service import set_job_pause
+from helm_api.services.job_control_service import list_job_controls, set_job_pause
 from helm_observability.logging import get_logger
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_worker.jobs import replay as replay_job
@@ -121,6 +121,16 @@ class ReplayQueueView:
 
 
 class TelegramCommandService:
+    def get_replay_job_status(self) -> ThreadTaskTransitionResult:
+        controls = list_job_controls()
+        replay = next((item for item in controls if item.get("job_name") == "replay"), None)
+        paused = bool(replay.get("paused")) if replay is not None else False
+        state = "paused" if paused else "active"
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"Replay job status: {state}.",
+        )
+
     def list_replay_queue(
         self,
         *,

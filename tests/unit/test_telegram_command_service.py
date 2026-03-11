@@ -602,6 +602,20 @@ def test_pause_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
     assert result.message == "Replay job paused."
 
 
+def test_get_replay_job_status_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(
+        command_service,
+        "list_job_controls",
+        lambda: [{"job_name": "replay", "paused": True}],
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.get_replay_job_status()
+
+    assert result.ok is True
+    assert result.message == "Replay job status: paused."
+
+
 def test_resume_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(
         command_service,
