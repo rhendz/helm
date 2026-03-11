@@ -16,6 +16,7 @@ from email_agent.reminders import complete_scheduled_task, create_thread_reminde
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
+from helm_api.services.job_control_service import set_job_pause
 from helm_observability.logging import get_logger
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_worker.jobs import replay as replay_job
@@ -638,6 +639,32 @@ class TelegramCommandService:
                 f"Triggered replay worker for up to {limit} items; "
                 f"processed {processed_count}."
             ),
+        )
+
+    def pause_replay_job(self) -> ThreadTaskTransitionResult:
+        result = set_job_pause(job_name="replay", paused=True)
+        paused = bool(result.get("paused"))
+        if not paused:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message="Replay job could not be paused.",
+            )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message="Replay job paused.",
+        )
+
+    def resume_replay_job(self) -> ThreadTaskTransitionResult:
+        result = set_job_pause(job_name="replay", paused=False)
+        paused = bool(result.get("paused"))
+        if paused:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message="Replay job could not be resumed.",
+            )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message="Replay job resumed.",
         )
 
 
