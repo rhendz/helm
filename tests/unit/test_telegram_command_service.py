@@ -618,6 +618,29 @@ def test_pause_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
     assert result.message == "Replay job paused."
 
 
+def test_pause_job_rejects_unknown_job() -> None:
+    service = command_service.TelegramCommandService()
+
+    result = service.pause_job("not_a_job")
+
+    assert result.ok is False
+    assert result.message == "Unknown job: not_a_job."
+
+
+def test_pause_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(
+        command_service,
+        "set_job_pause",
+        lambda *, job_name, paused: {"job_name": job_name, "paused": paused},
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.pause_job("email_triage")
+
+    assert result.ok is True
+    assert result.message == "email_triage job paused."
+
+
 def test_get_replay_job_status_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(
         command_service,
@@ -644,6 +667,20 @@ def test_resume_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
 
     assert result.ok is True
     assert result.message == "Replay job resumed."
+
+
+def test_resume_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(
+        command_service,
+        "set_job_pause",
+        lambda *, job_name, paused: {"job_name": job_name, "paused": paused},
+    )
+
+    service = command_service.TelegramCommandService()
+    result = service.resume_job("email_triage")
+
+    assert result.ok is True
+    assert result.message == "email_triage job resumed."
 
 
 def test_create_thread_task_happy_path(monkeypatch) -> None:  # noqa: ANN001

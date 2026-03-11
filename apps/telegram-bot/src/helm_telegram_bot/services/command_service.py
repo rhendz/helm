@@ -155,6 +155,42 @@ class TelegramCommandService:
             message=f"Replay job status: {state}.",
         )
 
+    def pause_job(self, job_name: str) -> ThreadTaskTransitionResult:
+        if job_name not in JOBS:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Unknown job: {job_name}.",
+            )
+        result = set_job_pause(job_name=job_name, paused=True)
+        paused = bool(result.get("paused"))
+        if not paused:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"{job_name} job could not be paused.",
+            )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"{job_name} job paused.",
+        )
+
+    def resume_job(self, job_name: str) -> ThreadTaskTransitionResult:
+        if job_name not in JOBS:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Unknown job: {job_name}.",
+            )
+        result = set_job_pause(job_name=job_name, paused=False)
+        paused = bool(result.get("paused"))
+        if paused:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"{job_name} job could not be resumed.",
+            )
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"{job_name} job resumed.",
+        )
+
     def list_replay_queue(
         self,
         *,
@@ -676,30 +712,23 @@ class TelegramCommandService:
         )
 
     def pause_replay_job(self) -> ThreadTaskTransitionResult:
-        result = set_job_pause(job_name="replay", paused=True)
-        paused = bool(result.get("paused"))
-        if not paused:
-            return ThreadTaskTransitionResult(
-                ok=False,
-                message="Replay job could not be paused.",
-            )
-        return ThreadTaskTransitionResult(
-            ok=True,
-            message="Replay job paused.",
-        )
+        result = self.pause_job("replay")
+        if result.ok:
+            return ThreadTaskTransitionResult(ok=True, message="Replay job paused.")
+        if result.message == "replay job could not be paused.":
+            return ThreadTaskTransitionResult(ok=False, message="Replay job could not be paused.")
+        return result
 
     def resume_replay_job(self) -> ThreadTaskTransitionResult:
-        result = set_job_pause(job_name="replay", paused=False)
-        paused = bool(result.get("paused"))
-        if paused:
+        result = self.resume_job("replay")
+        if result.ok:
+            return ThreadTaskTransitionResult(ok=True, message="Replay job resumed.")
+        if result.message == "replay job could not be resumed.":
             return ThreadTaskTransitionResult(
                 ok=False,
                 message="Replay job could not be resumed.",
             )
-        return ThreadTaskTransitionResult(
-            ok=True,
-            message="Replay job resumed.",
-        )
+        return result
 
 
 def _is_valid_timezone(value: str) -> bool:
