@@ -10,6 +10,7 @@ from helm_telegram_bot.commands import (
     drafts,
     email_config,
     followup,
+    job_controls,
     needsreview_threads,
     pause_replay,
     proposals,
@@ -39,6 +40,7 @@ from helm_telegram_bot.commands import (
 )
 from helm_telegram_bot.services.command_service import (
     DraftTransitionResult,
+    JobControlView,
     ProposalView,
     ReplayQueueView,
     ScheduledTaskView,
@@ -667,6 +669,27 @@ async def test_pause_replay_command_calls_service(monkeypatch: pytest.MonkeyPatc
     await pause_replay.handle(update, _Context(args=[]))
 
     assert update.message.replies == ["Replay job paused."]
+
+
+@pytest.mark.asyncio
+async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_job_controls(self) -> list[JobControlView]:
+            return [
+                JobControlView(job_name="email_triage", paused=False),
+                JobControlView(job_name="replay", paused=True),
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job_controls, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job_controls, "_service", _Service())
+    update = _Update()
+
+    await job_controls.handle(update, _Context(args=[]))
+
+    assert update.message.replies == ["Job controls:\nemail_triage: active\nreplay: paused"]
 
 
 @pytest.mark.asyncio

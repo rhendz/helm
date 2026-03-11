@@ -81,6 +81,22 @@ def test_list_replay_queue_applies_status_filter(monkeypatch) -> None:  # noqa: 
     assert items[0].agent_name == "email_triage"
 
 
+def test_list_job_controls_includes_known_jobs(monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setattr(
+        command_service,
+        "list_job_control_rows",
+        lambda: [{"job_name": "replay", "paused": True}],
+    )
+
+    service = command_service.TelegramCommandService()
+    items = service.list_job_controls()
+
+    by_name = {item.job_name: item for item in items}
+    assert by_name["replay"].paused is True
+    assert by_name["email_triage"].paused is False
+    assert by_name["scheduled_thread_tasks"].paused is False
+
+
 def test_list_uninitialized_threads_uses_state_filter(monkeypatch) -> None:  # noqa: ANN001
     runtime = type(
         "Runtime",
@@ -605,7 +621,7 @@ def test_pause_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001
 def test_get_replay_job_status_happy_path(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(
         command_service,
-        "list_job_controls",
+        "list_job_control_rows",
         lambda: [{"job_name": "replay", "paused": True}],
     )
 

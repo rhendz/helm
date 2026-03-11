@@ -16,11 +16,17 @@ from email_agent.reminders import complete_scheduled_task, create_thread_reminde
 from email_agent.reprocess import reprocess_email_thread
 from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_needs_review, transition_for_resolve
-from helm_api.services.job_control_service import list_job_controls, set_job_pause
+from helm_api.services.job_control_service import (
+    list_job_controls as list_job_control_rows,
+)
+from helm_api.services.job_control_service import (
+    set_job_pause,
+)
 from helm_observability.logging import get_logger
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_worker.jobs import replay as replay_job
 from helm_worker.jobs.control import is_job_paused
+from helm_worker.jobs.registry import JOBS
 
 logger = get_logger("helm_telegram_bot.services.command_service")
 
@@ -120,11 +126,29 @@ class ReplayQueueView:
     last_error: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class JobControlView:
+    job_name: str
+    paused: bool
+
+
 class TelegramCommandService:
+    def list_job_controls(self) -> list[JobControlView]:
+        persisted = {
+            str(item["job_name"]): bool(item.get("paused"))
+            for item in list_job_control_rows()
+        }
+        return [
+            JobControlView(job_name=job_name, paused=persisted.get(job_name, False))
+            for job_name in sorted(JOBS)
+        ]
+
     def get_replay_job_status(self) -> ThreadTaskTransitionResult:
-        controls = list_job_controls()
-        replay = next((item for item in controls if item.get("job_name") == "replay"), None)
-        paused = bool(replay.get("paused")) if replay is not None else False
+        replay = next(
+            (item for item in self.list_job_controls() if item.job_name == "replay"),
+            None,
+        )
+        paused = replay.paused if replay is not None else False
         state = "paused" if paused else "active"
         return ThreadTaskTransitionResult(
             ok=True,
