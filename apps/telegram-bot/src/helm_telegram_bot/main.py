@@ -61,6 +61,7 @@ def main() -> None:
     application.add_handler(CommandHandler("drafts", drafts.handle))
     application.add_handler(CommandHandler("email_config", email_config.handle))
     application.add_handler(CommandHandler("job_controls", job_controls.handle))
+    application.add_handler(CommandHandler("jobs", job_controls.handle))
     application.add_handler(CommandHandler("needsreview_threads", needsreview_threads.handle))
     application.add_handler(CommandHandler("pause_job", pause_job.handle))
     application.add_handler(CommandHandler("pause_replay", pause_replay.handle))
