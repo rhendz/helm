@@ -41,6 +41,8 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         suffix_parts = [f"inspect=/job {item.job_name}"]
         if item.run_command:
             suffix_parts.append(f"run={item.run_command}")
+        else:
+            suffix_parts.append("run=unavailable")
         if item.note:
             suffix_parts.append(item.note)
         suffix = ""

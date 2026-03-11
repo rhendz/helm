@@ -932,6 +932,33 @@ async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
+async def test_job_controls_command_shows_unavailable_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_job_controls(self) -> list[JobControlView]:
+            return [
+                JobControlView(
+                    job_name="some_job",
+                    paused=False,
+                    run_command=None,
+                    note=None,
+                )
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(job_controls, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(job_controls, "_service", _Service())
+    update = _Update()
+
+    await job_controls.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Job controls:\nsome_job: active (inspect=/job some_job; run=unavailable)"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_job_controls_command_filters_paused_items(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def list_job_controls(self) -> list[JobControlView]:
