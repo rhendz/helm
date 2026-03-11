@@ -38,7 +38,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines = ["Job controls:"]
     for item in items:
         state = "paused" if item.paused else "active"
-        suffix_parts = []
+        suffix_parts = [f"inspect=/job {item.job_name}"]
         if item.run_command:
             suffix_parts.append(f"run={item.run_command}")
         if item.note:
