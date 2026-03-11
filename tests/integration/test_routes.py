@@ -8,6 +8,7 @@ def test_routes_exist() -> None:
     assert client.get("/v1/status/agent-runs/failures").status_code == 200
     assert client.get("/v1/status/draft-transitions/failures").status_code == 200
     assert client.get("/v1/job-controls").status_code == 200
+    assert client.get("/v1/job-controls/not-a-real-job").status_code == 404
     assert client.get("/v1/actions").status_code == 200
     email_ingest_response = client.post(
         "/v1/email/ingest",
@@ -147,6 +148,10 @@ def test_routes_exist() -> None:
     pause_response = client.post("/v1/job-controls/digest/pause")
     assert pause_response.status_code == 200
     assert pause_response.json()["paused"] is True
+    detail_response = client.get("/v1/job-controls/digest")
+    assert detail_response.status_code in {200, 404}
+    if detail_response.status_code == 200:
+        assert detail_response.json() == {"job_name": "digest", "paused": True}
     resume_response = client.post("/v1/job-controls/digest/resume")
     assert resume_response.status_code == 200
     assert resume_response.json()["paused"] is False
