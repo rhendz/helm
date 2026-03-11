@@ -861,8 +861,8 @@ async def test_job_controls_command_formats_items(monkeypatch: pytest.MonkeyPatc
 
     assert update.message.replies == [
         "Job controls:\n"
-        "replay: paused (run=/run_replay [limit]; bounded manual trigger)\n"
-        "email_triage: active (run=/run_job email_triage)"
+        "replay: paused (inspect=/job replay; run=/run_replay [limit]; bounded manual trigger)\n"
+        "email_triage: active (inspect=/job email_triage; run=/run_job email_triage)"
     ]
 
 
@@ -895,7 +895,8 @@ async def test_job_controls_command_filters_paused_items(monkeypatch: pytest.Mon
     await job_controls.handle(update, _Context(args=["paused"]))
 
     assert update.message.replies == [
-        "Paused jobs:\nreplay: paused (run=/run_replay [limit]; bounded manual trigger)"
+        "Paused jobs:\n"
+        "replay: paused (inspect=/job replay; run=/run_replay [limit]; bounded manual trigger)"
     ]
 
 
@@ -953,7 +954,8 @@ async def test_job_controls_command_filters_active_items(monkeypatch: pytest.Mon
     await job_controls.handle(update, _Context(args=["active"]))
 
     assert update.message.replies == [
-        "Active jobs:\nemail_triage: active (run=/run_job email_triage)"
+        "Active jobs:\n"
+        "email_triage: active (inspect=/job email_triage; run=/run_job email_triage)"
     ]
 
 
