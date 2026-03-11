@@ -87,7 +87,7 @@ def test_email_service_filters_threads_by_state_and_label() -> None:
             NewEmailThread(
                 provider_thread_id="thr-review",
                 business_state="needs_review",
-                visible_labels=("NeedsReview", "Action"),
+                visible_labels=("NeedsReview",),
             )
         )
         thread_repo.create(
@@ -109,7 +109,7 @@ def test_email_service_filters_threads_by_state_and_label() -> None:
 
     assert len(review_threads) == 1
     assert review_threads[0]["provider_thread_id"] == "thr-review"
-    assert len(action_threads) == 2
+    assert len(action_threads) == 1
 
 
 def test_email_service_filters_proposals_and_drafts() -> None:

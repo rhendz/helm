@@ -16,8 +16,11 @@ class EmailTriageState(TypedDict, total=False):
     classification: str
     priority_score: int
     thread_summary: str
+    should_surface: bool
     action_item_required: bool
     draft_reply_required: bool
+    review_required: bool
+    time_sensitive: bool
     digest_item_required: bool
     workflow_status: str
 
@@ -42,16 +45,39 @@ class EmailTriageWorkflowResult:
 def _classify_message(state: EmailTriageState) -> EmailTriageState:
     message = state["normalized_message"]
     haystack = f"{message.subject}\n{message.body_text}".lower()
+    time_sensitive = any(token in haystack for token in ("urgent", "asap", "today", "deadline"))
 
     if any(token in haystack for token in ("recruiter", "interview", "opportunity", "role")):
-        return {"classification": "opportunity", "priority_score": 1}
+        return {
+            "classification": "opportunity",
+            "priority_score": 1,
+            "time_sensitive": time_sensitive,
+        }
     if any(token in haystack for token in ("review", "heads up", "fyi", "for your awareness")):
-        return {"classification": "review", "priority_score": 2}
-    if any(token in haystack for token in ("urgent", "asap", "today", "deadline")):
-        return {"classification": "urgent", "priority_score": 1}
+        return {
+            "classification": "review",
+            "priority_score": 2,
+            "time_sensitive": time_sensitive,
+        }
     if any(token in haystack for token in ("newsletter", "unsubscribe")):
-        return {"classification": "newsletter", "priority_score": 4}
-    return {"classification": "unclassified", "priority_score": 3}
+        return {
+            "classification": "newsletter",
+            "priority_score": 4,
+            "time_sensitive": False,
+        }
+    if time_sensitive or any(
+        token in haystack for token in ("intro", "deck", "proposal", "founder", "investor")
+    ):
+        return {
+            "classification": "unclassified",
+            "priority_score": 2,
+            "time_sensitive": time_sensitive,
+        }
+    return {
+        "classification": "unclassified",
+        "priority_score": 3,
+        "time_sensitive": False,
+    }
 
 
 def _summarize_thread(state: EmailTriageState) -> EmailTriageState:
@@ -68,12 +94,17 @@ def _summarize_thread(state: EmailTriageState) -> EmailTriageState:
 def _decide_artifacts(state: EmailTriageState) -> EmailTriageState:
     classification = state.get("classification", "unclassified")
     priority_score = state.get("priority_score", 3)
-    action_required = classification in {"opportunity", "urgent"} or priority_score <= 2
-    draft_required = classification in {"opportunity", "urgent"}
-    digest_required = priority_score <= 2
+    should_surface = classification != "newsletter" and priority_score <= 2
+    review_required = classification == "unclassified" and should_surface
+    action_required = should_surface and classification in {"opportunity", "review", "unclassified"}
+    draft_required = should_surface and classification == "opportunity" and not review_required
+    digest_required = should_surface and not review_required
     return {
+        "should_surface": should_surface,
         "action_item_required": action_required,
         "draft_reply_required": draft_required,
+        "review_required": review_required,
+        "time_sensitive": state.get("time_sensitive", False),
         "digest_item_required": digest_required,
     }
 
@@ -178,8 +209,11 @@ def _persist_triage_artifacts(
         classification=classification,
         priority_score=priority,
         thread_summary=thread_summary or None,
+        should_surface=state.get("should_surface", False),
         action_item_required=state.get("action_item_required", False),
         draft_reply_required=state.get("draft_reply_required", False),
+        review_required=state.get("review_required", False),
+        time_sensitive=state.get("time_sensitive", False),
         email_message_id=email_message_id,
         previous_thread=existing_thread,
     )
@@ -208,8 +242,11 @@ def _persist_triage_artifacts(
         confidence_band=thread_update.latest_confidence_band,
         decision_context={
             "trigger_family": trigger_family,
+            "should_surface": state.get("should_surface", False),
             "action_item_required": state.get("action_item_required", False),
             "draft_reply_required": state.get("draft_reply_required", False),
+            "review_required": state.get("review_required", False),
+            "time_sensitive": state.get("time_sensitive", False),
             "digest_item_required": state.get("digest_item_required", False),
             "thread_summary": thread_summary,
         },
@@ -220,9 +257,12 @@ def _persist_triage_artifacts(
     if state.get("action_item_required", False):
         proposal_record = runtime.get_latest_proposal_for_thread(email_thread_id=email_thread_id)
         if proposal_record is None:
+            proposal_type = "review"
+            if state.get("draft_reply_required", False):
+                proposal_type = "reply"
             proposal_record = runtime.create_proposal(
                 email_thread_id=email_thread_id,
-                proposal_type="reply" if state.get("draft_reply_required", False) else "review",
+                proposal_type=proposal_type,
                 rationale=thread_summary or None,
                 confidence_band=thread_update.latest_confidence_band,
             )

@@ -307,7 +307,7 @@ def test_classification_artifact_failure_does_not_revert_thread_truth() -> None:
 
     assert thread.provider_thread_id == "thr-fail-1"
     assert thread.business_state == "waiting_on_user"
-    assert thread.visible_labels == "Action"
+    assert thread.visible_labels == "Action,Urgent"
     assert artifacts == []
 
 
@@ -405,6 +405,88 @@ def test_email_triage_supports_proposal_only_path_without_draft() -> None:
     assert len(proposals) == 1
     assert proposals[0].proposal_type == "review"
     assert drafts == []
+
+
+def test_email_triage_routes_uncertain_important_mail_to_needs_review() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    message = normalize_message(
+        {
+            "id": "msg-review-uncertain-1",
+            "threadId": "thr-review-uncertain-1",
+            "from": "investor@example.com",
+            "subject": "Deck update for today",
+            "snippet": "Please take a look when you can.",
+        }
+    )
+
+    result = process_inbound_email_message(
+        _email_message(message),
+        graph=build_email_triage_graph(),
+        runtime=build_helm_runtime(session_local),
+    )
+
+    assert result.action_item_required is True
+    assert result.draft_reply_required is False
+    assert result.trigger_family == "new_thread_inbound"
+    assert result.action_proposal_id is not None
+    assert result.email_draft_id is None
+
+    with Session(engine) as session:
+        thread = session.execute(select(EmailThreadORM)).scalars().one()
+        proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
+        drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
+
+    assert thread.business_state == "needs_review"
+    assert thread.visible_labels == "NeedsReview"
+    assert thread.action_reason == "classification_uncertain"
+    assert thread.latest_confidence_band == "Low"
+    assert len(proposals) == 1
+    assert proposals[0].proposal_type == "review"
+    assert drafts == []
+
+
+def test_email_triage_suppresses_low_signal_newsletters() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session_local = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    message = normalize_message(
+        {
+            "id": "msg-newsletter-1",
+            "threadId": "thr-newsletter-1",
+            "from": "updates@example.com",
+            "subject": "Weekly newsletter",
+            "snippet": "Read more or unsubscribe anytime.",
+        }
+    )
+
+    result = process_inbound_email_message(
+        _email_message(message),
+        graph=build_email_triage_graph(),
+        runtime=build_helm_runtime(session_local),
+    )
+
+    assert result.classification == "newsletter"
+    assert result.action_item_required is False
+    assert result.draft_reply_required is False
+    assert result.digest_item_required is False
+    assert result.action_proposal_id is None
+    assert result.email_draft_id is None
+
+    with Session(engine) as session:
+        thread = session.execute(select(EmailThreadORM)).scalars().one()
+        proposals = list(session.execute(select(ActionProposalORM)).scalars().all())
+        drafts = list(session.execute(select(EmailDraftORM)).scalars().all())
+        digests = list(session.execute(select(DigestItemORM)).scalars().all())
+
+    assert thread.business_state == "resolved"
+    assert thread.visible_labels == ""
+    assert proposals == []
+    assert drafts == []
+    assert digests == []
 
 
 def _email_message(message) -> EmailMessage:  # noqa: ANN001

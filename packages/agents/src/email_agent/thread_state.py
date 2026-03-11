@@ -33,26 +33,39 @@ def transition_for_inbound(
     classification: str,
     priority_score: int,
     thread_summary: str | None,
+    should_surface: bool,
     action_item_required: bool,
     draft_reply_required: bool,
+    review_required: bool,
+    time_sensitive: bool,
     email_message_id: int,
     previous_thread: ThreadRecord | None = None,
 ) -> ThreadStateUpdate:
+    confidence_band = _derive_confidence_band(
+        classification=classification,
+        priority_score=priority_score,
+        review_required=review_required,
+        should_surface=should_surface,
+    )
     return ThreadStateUpdate(
-        business_state="waiting_on_user" if action_item_required else "resolved",
-        visible_labels=_derive_visible_labels(
-            classification=classification,
-            priority_score=priority_score,
+        business_state=_derive_business_state(
+            should_surface=should_surface,
             action_item_required=action_item_required,
+            review_required=review_required,
         ),
-        latest_confidence_band=_derive_confidence_band(
-            classification=classification,
-            priority_score=priority_score,
+        visible_labels=_derive_visible_labels(
+            should_surface=should_surface,
+            action_item_required=action_item_required,
+            review_required=review_required,
+            time_sensitive=time_sensitive,
         ),
+        latest_confidence_band=confidence_band,
         resurfacing_source="new_message",
         action_reason=_derive_action_reason(
+            should_surface=should_surface,
             action_item_required=action_item_required,
             draft_reply_required=draft_reply_required,
+            review_required=review_required,
         ),
         current_summary=thread_summary,
         last_message_id=email_message_id,
@@ -120,7 +133,7 @@ def transition_for_needs_review(thread: ThreadRecord) -> ThreadStateUpdate:
     return transition_for_human_override(
         thread,
         business_state="needs_review",
-        visible_labels=_merge_labels(thread.visible_labels, "NeedsReview"),
+        visible_labels=("NeedsReview",),
         current_summary=thread.current_summary,
         latest_confidence_band=thread.latest_confidence_band,
         action_reason="user_requested_review",
@@ -150,7 +163,32 @@ def _derive_task_metadata(task_type: str) -> tuple[str, str]:
     return "reminder_due", "reminder_due"
 
 
-def _derive_action_reason(*, action_item_required: bool, draft_reply_required: bool) -> str | None:
+def _derive_business_state(
+    *,
+    should_surface: bool,
+    action_item_required: bool,
+    review_required: bool,
+) -> str:
+    if not should_surface:
+        return "resolved"
+    if review_required:
+        return "needs_review"
+    if action_item_required:
+        return "waiting_on_user"
+    return "resolved"
+
+
+def _derive_action_reason(
+    *,
+    should_surface: bool,
+    action_item_required: bool,
+    draft_reply_required: bool,
+    review_required: bool,
+) -> str | None:
+    if not should_surface:
+        return None
+    if review_required:
+        return "classification_uncertain"
     if draft_reply_required:
         return "reply_needed"
     if action_item_required:
@@ -160,23 +198,37 @@ def _derive_action_reason(*, action_item_required: bool, draft_reply_required: b
 
 def _derive_visible_labels(
     *,
-    classification: str,
-    priority_score: int,
+    should_surface: bool,
     action_item_required: bool,
+    review_required: bool,
+    time_sensitive: bool,
 ) -> tuple[str, ...]:
+    if not should_surface:
+        return ()
+    if review_required:
+        return ("NeedsReview",)
+
     labels: list[str] = []
     if action_item_required:
         labels.append("Action")
-    if classification == "urgent":
+    if time_sensitive:
         labels.append("Urgent")
-    if classification == "unclassified" and priority_score <= 2:
-        labels.append("NeedsReview")
     return tuple(labels)
 
 
-def _derive_confidence_band(*, classification: str, priority_score: int) -> str:
-    if classification in {"opportunity", "urgent"} and priority_score <= 2:
+def _derive_confidence_band(
+    *,
+    classification: str,
+    priority_score: int,
+    review_required: bool,
+    should_surface: bool,
+) -> str:
+    if review_required:
+        return "Low"
+    if classification in {"opportunity", "review", "newsletter"}:
         return "High"
+    if should_surface and priority_score <= 2:
+        return "Medium"
     if classification == "unclassified":
         return "Medium"
     return "Low"
