@@ -33,6 +33,7 @@ from helm_telegram_bot.commands import (
     set_email_timezone,
     set_followup_days,
     snooze,
+    start,
     tasks,
     thread,
     threads,
@@ -104,6 +105,22 @@ def test_parse_two_arg_task_inputs() -> None:
     )
     assert common.parse_two_arg_task_inputs(["42"]) is None
     assert common.parse_two_arg_task_inputs(["x", "2026-01-03T09:00:00Z"]) is None
+
+
+@pytest.mark.asyncio
+async def test_start_command_shows_job_control_shortcuts(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(start, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await start.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Helm bot is online.\n"
+        "Job controls: /jobs, /jobs paused, /jobs active, /job <job_name>"
+    ]
 
 
 @pytest.mark.asyncio
