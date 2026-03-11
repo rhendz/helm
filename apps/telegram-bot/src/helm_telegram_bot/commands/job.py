@@ -20,7 +20,7 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"Unknown job: {context.args[0]}.")
         return
     state = "paused" if item.paused else "active"
-    lines = [f"Job {item.job_name}", f"Status: {state}"]
+    lines = [f"Job {item.job_name}", f"Status: {state}", "List: /jobs"]
     if item.run_command:
         lines.append(f"Run: {item.run_command}")
     if item.note:
