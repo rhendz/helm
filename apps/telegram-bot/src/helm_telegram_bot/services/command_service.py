@@ -29,6 +29,7 @@ from helm_worker.jobs.control import is_job_paused
 from helm_worker.jobs.registry import JOBS
 
 logger = get_logger("helm_telegram_bot.services.command_service")
+MANUALLY_RUNNABLE_JOBS = frozenset(job_name for job_name in JOBS if job_name != "replay")
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,6 +190,34 @@ class TelegramCommandService:
         return ThreadTaskTransitionResult(
             ok=True,
             message=f"{job_name} job resumed.",
+        )
+
+    def run_job(self, job_name: str) -> ThreadTaskTransitionResult:
+        if job_name == "replay":
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message="Use /run_replay [limit] for the replay job.",
+            )
+        job = JOBS.get(job_name)
+        if job is None:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"Unknown job: {job_name}.",
+            )
+        if job_name not in MANUALLY_RUNNABLE_JOBS:
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"{job_name} cannot be run manually.",
+            )
+        if is_job_paused(job_name):
+            return ThreadTaskTransitionResult(
+                ok=False,
+                message=f"{job_name} job is paused; resume it before running manually.",
+            )
+        job()
+        return ThreadTaskTransitionResult(
+            ok=True,
+            message=f"Ran {job_name} job.",
         )
 
     def list_replay_queue(
