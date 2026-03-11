@@ -12,6 +12,7 @@ from helm_telegram_bot.commands import (
     followup,
     job,
     job_controls,
+    jobs_help,
     needsreview_threads,
     pause_job,
     pause_replay,
@@ -758,6 +759,31 @@ async def test_pause_job_command_calls_service(monkeypatch: pytest.MonkeyPatch) 
     await pause_job.handle(update, _Context(args=["email_triage"]))
 
     assert update.message.replies == ["email_triage job paused."]
+
+
+@pytest.mark.asyncio
+async def test_jobs_help_command_lists_job_control_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(jobs_help, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await jobs_help.handle(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Job control commands:\n"
+        "/jobs - list all jobs\n"
+        "/jobs paused - list paused jobs\n"
+        "/jobs active - list active jobs\n"
+        "/job <job_name> - inspect one job\n"
+        "/pause_job <job_name> - pause a job\n"
+        "/resume_job <job_name> - resume a job\n"
+        "/run_job <job_name> - run a manually runnable job\n"
+        "/run_replay [limit] - run bounded replay work"
+    ]
 
 
 @pytest.mark.asyncio
