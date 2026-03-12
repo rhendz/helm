@@ -72,7 +72,7 @@
 
 ### Operator Experience
 
-- **OPER-01**: User can inspect and control workflow runs through richer Telegram and API tooling, including artifact browsing and step-level replay options.
+- [x] **OPER-01**: User can inspect and control workflow runs through richer Telegram and API tooling, including artifact browsing and step-level replay options.
 - **OPER-02**: User can compare revisions of a proposal before approving a later attempt.
 
 ### Workflow Breadth
@@ -126,6 +126,7 @@
 | RCVR-02 | Phase 3 | Complete |
 | RCVR-03 | Phase 3 | Complete |
 | RCVR-04 | Phase 3 | Complete |
+| OPER-01 | Phase 3 | Complete |
 | DEMO-01 | Phase 4 | Pending |
 | DEMO-02 | Phase 2 | Complete |
 | DEMO-03 | Phase 2 | Complete |
@@ -140,4 +141,4 @@
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-12 after completing Phase 3 plan 03*
+*Last updated: 2026-03-12 after completing Phase 3 plan 04*
