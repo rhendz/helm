@@ -1327,15 +1327,21 @@ def test_sync_retry_resume_only_replays_remaining_failed_items() -> None:
             specialist_steps={},
         ).resume_run(retried.run.id)
         sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(resumed.run.id)
+        retry_events = SQLAlchemyWorkflowEventRepository(session).list_for_run_by_type(
+            retried.run.id,
+            event_type="step_retry_requested",
+        )
 
         assert resumed.run.status == WorkflowRunStatus.COMPLETED.value
         assert [record.status for record in sync_records] == [
             WorkflowSyncStatus.SUCCEEDED.value,
             WorkflowSyncStatus.SUCCEEDED.value,
         ]
+        assert [record.lineage_generation for record in sync_records] == [0, 0]
         assert task_adapter.calls == [("upsert", "task:triage-inbox")]
         assert calendar_adapter.calls == [("upsert", "calendar:inbox-triage:1")]
         assert sync_records[1].recovery_classification is None
+        assert retry_events[-1].details["previous_attempt"] == 1
 
 
 def test_terminate_after_partial_sync_preserves_succeeded_lineage_and_cancels_remaining_work() -> None:
@@ -1471,6 +1477,69 @@ def test_request_sync_replay_creates_new_lineage_without_mutating_original_recor
         )
         assert len(replay_events) == 1
         assert replay_events[0].details["source_sync_record_ids"] == [original_calendar_record.id]
+
+
+def test_request_sync_replay_after_termination_appends_new_lineage_to_frozen_partial_state() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        calendar_adapter.set_upsert_outcome(
+            "calendar:inbox-triage:1",
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.RETRYABLE_FAILURE,
+                retry_disposition=SyncRetryDisposition.RETRYABLE,
+                error_summary="Calendar API timed out.",
+            ),
+        )
+
+        failed = service.execute_pending_sync_step(approved.run.id)
+        terminated = service.terminate_run(
+            failed.run.id,
+            reason="Operator froze remaining writes after partial success.",
+        )
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        cancelled_record = sync_repo.list_for_run(terminated.run.id)[1]
+
+        replay_state = service.request_sync_replay(
+            terminated.run.id,
+            actor="telegram:1",
+            sync_record_ids=(cancelled_record.id,),
+            reason="Replay cancelled calendar write with preserved lineage.",
+        )
+        lineage = sync_repo.list_for_run(replay_state.run.id)
+        replay_record = lineage[-1]
+
+        assert replay_state.run.status == WorkflowRunStatus.TERMINATED.value
+        assert lineage[0].status == WorkflowSyncStatus.SUCCEEDED.value
+        assert lineage[1].status == WorkflowSyncStatus.CANCELLED.value
+        assert replay_record.status == WorkflowSyncStatus.PENDING.value
+        assert replay_record.replayed_from_sync_record_id == cancelled_record.id
+        assert replay_record.lineage_generation == 1
 
 
 def test_approval_decision_reject_closes_run_cleanly() -> None:
