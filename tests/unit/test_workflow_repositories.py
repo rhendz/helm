@@ -451,6 +451,22 @@ def test_workflow_sync_record_repository_queries_remaining_and_failed_items() ->
             WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value
         )
 
+        terminated = sync_repo.update(
+            failed.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.CANCELLED.value,
+                recovery_classification=(
+                    WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
+                ),
+                termination_reason="Operator terminated remaining writes.",
+                terminated_after_sync_count=1,
+                terminated_after_planned_item_key="calendar:focus-block-1",
+            ),
+        )
+        assert terminated is not None
+        assert terminated.status == WorkflowSyncStatus.CANCELLED.value
+        assert terminated.termination_reason == "Operator terminated remaining writes."
+
 
 def test_workflow_sync_record_repository_retry_sync_items_by_step_attempt_lineage() -> None:
     with _session() as session:

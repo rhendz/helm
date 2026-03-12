@@ -764,6 +764,7 @@ class WorkflowOrchestrationService:
     def terminate_run(self, run_id: int, *, reason: str) -> WorkflowRunState:
         state = self.get_run_state(run_id)
         current_step = state.current_step
+        partial_sync_snapshot = self._terminate_pending_sync_records(run_id, reason=reason)
         if current_step is not None and current_step.status in {
             WorkflowStepStatus.PENDING.value,
             WorkflowStepStatus.RUNNING.value,
@@ -796,7 +797,7 @@ class WorkflowOrchestrationService:
                 run_status=WorkflowRunStatus.TERMINATED.value,
                 step_status=WorkflowStepStatus.CANCELLED.value if current_step is not None else None,
                 summary=reason,
-                details={"reason": reason},
+                details={"reason": reason, **partial_sync_snapshot},
             )
         )
         return self.get_run_state(run_id)
@@ -1026,6 +1027,9 @@ class WorkflowOrchestrationService:
         return persisted_records
 
     def execute_pending_sync_step(self, run_id: int) -> WorkflowRunState:
+        state = self.get_run_state(run_id)
+        if state.run.status == WorkflowRunStatus.TERMINATED.value:
+            raise ValueError(f"Workflow run {run_id} is terminated and cannot execute sync steps.")
         state = self.start_current_step(run_id)
         step = self._require_current_step(state)
         if step.step_name != "apply_schedule":
@@ -1423,6 +1427,53 @@ class WorkflowOrchestrationService:
                 details=transition.model_dump(mode="json"),
             )
         )
+
+    def _terminate_pending_sync_records(self, run_id: int, *, reason: str) -> dict[str, Any]:
+        sync_records = self._sync_repo.list_for_run(run_id)
+        if not sync_records:
+            return {
+                "partial_sync_succeeded_count": 0,
+                "partial_sync_cancelled_count": 0,
+                "partial_sync_last_attempted_item_key": None,
+            }
+
+        succeeded_count = len(
+            [record for record in sync_records if record.status == WorkflowSyncStatus.SUCCEEDED.value]
+        )
+        cancelled_count = 0
+        last_attempted = max(
+            (record for record in sync_records if record.last_attempted_at is not None),
+            key=lambda record: record.last_attempted_at,
+            default=None,
+        )
+        for record in sync_records:
+            if record.status == WorkflowSyncStatus.SUCCEEDED.value:
+                continue
+            self._sync_repo.update(
+                record.id,
+                WorkflowSyncRecordPatch(
+                    status=WorkflowSyncStatus.CANCELLED.value,
+                    recovery_classification=(
+                        WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
+                    ),
+                    recovery_updated_at=_now(),
+                    terminated_at=_now(),
+                    termination_reason=reason,
+                    terminated_after_sync_count=succeeded_count,
+                    terminated_after_planned_item_key=(
+                        last_attempted.planned_item_key if last_attempted is not None else None
+                    ),
+                ),
+            )
+            cancelled_count += 1
+
+        return {
+            "partial_sync_succeeded_count": succeeded_count,
+            "partial_sync_cancelled_count": cancelled_count,
+            "partial_sync_last_attempted_item_key": (
+                last_attempted.planned_item_key if last_attempted is not None else None
+            ),
+        }
 
     def _sync_item_from_record(self, sync_record) -> ApprovedSyncItem:
         return ApprovedSyncItem(
