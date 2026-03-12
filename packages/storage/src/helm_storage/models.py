@@ -332,6 +332,7 @@ class WorkflowSyncRecordORM(Base):
             "target_system",
             "sync_kind",
             "planned_item_key",
+            "lineage_generation",
             name="uq_workflow_sync_record_identity",
         ),
         UniqueConstraint("idempotency_key", name="uq_workflow_sync_record_idempotency"),
@@ -361,6 +362,15 @@ class WorkflowSyncRecordORM(Base):
     )
     last_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lineage_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_classification: Mapped[str | None] = mapped_column(String(64))
+    recovery_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replay_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replay_requested_by: Mapped[str | None] = mapped_column(String(255))
+    terminated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    termination_reason: Mapped[str | None] = mapped_column(Text())
+    terminated_after_sync_count: Mapped[int | None] = mapped_column(Integer)
+    terminated_after_planned_item_key: Mapped[str | None] = mapped_column(String(255))
     supersedes_sync_record_id: Mapped[int | None] = mapped_column(
         ForeignKey("workflow_sync_records.id", ondelete="SET NULL")
     )

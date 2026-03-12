@@ -146,6 +146,14 @@ class WorkflowSyncStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class WorkflowSyncRecoveryClassification(StrEnum):
+    RECOVERABLE_FAILURE = "recoverable_failure"
+    TERMINAL_FAILURE = "terminal_failure"
+    RETRY_REQUESTED = "retry_requested"
+    REPLAY_REQUESTED = "replay_requested"
+    TERMINATED_AFTER_PARTIAL_SUCCESS = "terminated_after_partial_success"
+
+
 class WorkflowTargetSystem(StrEnum):
     TASK_SYSTEM = "task_system"
     CALENDAR_SYSTEM = "calendar_system"
@@ -499,6 +507,15 @@ class NewWorkflowSyncRecord:
     last_attempt_step_id: int | None = None
     last_attempted_at: datetime | None = None
     completed_at: datetime | None = None
+    lineage_generation: int = 0
+    recovery_classification: str | None = None
+    recovery_updated_at: datetime | None = None
+    replay_requested_at: datetime | None = None
+    replay_requested_by: str | None = None
+    terminated_at: datetime | None = None
+    termination_reason: str | None = None
+    terminated_after_sync_count: int | None = None
+    terminated_after_planned_item_key: str | None = None
     supersedes_sync_record_id: int | None = None
     replayed_from_sync_record_id: int | None = None
 
@@ -512,6 +529,15 @@ class WorkflowSyncRecordPatch:
     last_attempt_step_id: int | None = None
     last_attempted_at: datetime | None = None
     completed_at: datetime | None = None
+    lineage_generation: int | None = None
+    recovery_classification: str | None = None
+    recovery_updated_at: datetime | None = None
+    replay_requested_at: datetime | None = None
+    replay_requested_by: str | None = None
+    terminated_at: datetime | None = None
+    termination_reason: str | None = None
+    terminated_after_sync_count: int | None = None
+    terminated_after_planned_item_key: str | None = None
     supersedes_sync_record_id: int | None = None
     replayed_from_sync_record_id: int | None = None
 
@@ -557,6 +583,15 @@ class WorkflowSyncStepQuery:
         WorkflowSyncStatus.FAILED_RETRYABLE.value,
         WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSyncIdentityQuery:
+    proposal_artifact_id: int
+    proposal_version_number: int
+    target_system: str
+    sync_kind: str
+    planned_item_key: str
 
 
 @runtime_checkable
@@ -782,6 +817,11 @@ class WorkflowSyncRecordRepository(Protocol):
         planned_item_key: str,
     ) -> WorkflowSyncRecordORM | None: ...
 
+    def list_lineage(
+        self,
+        query: WorkflowSyncIdentityQuery,
+    ) -> list[WorkflowSyncRecordORM]: ...
+
     def list_for_run(self, run_id: int) -> list[WorkflowSyncRecordORM]: ...
 
     def list_for_proposal(self, proposal_artifact_id: int) -> list[WorkflowSyncRecordORM]: ...
@@ -825,6 +865,7 @@ class WorkflowSyncRecordRepository(Protocol):
         error_summary: str | None,
         completed_at: datetime | None = None,
         external_object_id: str | None = None,
+        recovery_classification: str | None = None,
     ) -> WorkflowSyncRecordORM | None: ...
 
     def update(

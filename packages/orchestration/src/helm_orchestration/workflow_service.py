@@ -15,6 +15,9 @@ from helm_orchestration.schemas import (
     CalendarSyncRequest,
     CalendarSyncResult,
     ExecutionFailurePayload,
+    RecoveryClassification,
+    RecoveryTransition,
+    ReplayRequest,
     SyncLookupRequest,
     SyncLookupResult,
     SyncOutcomeStatus,
@@ -50,6 +53,7 @@ from helm_storage.repositories import (
     SQLAlchemyWorkflowApprovalCheckpointRepository,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowEventRepository,
+    SQLAlchemyReplayQueueRepository,
     SQLAlchemyWorkflowRunRepository,
     SQLAlchemyWorkflowSpecialistInvocationRepository,
     SQLAlchemyWorkflowSyncRecordRepository,
@@ -62,6 +66,8 @@ from helm_storage.repositories import (
     WorkflowRunStatus,
     WorkflowSyncKind,
     WorkflowSyncPayload,
+    WorkflowSyncRecoveryClassification,
+    WorkflowSyncRecordPatch,
     WorkflowSyncStatus,
     WorkflowSyncStepQuery,
     WorkflowTargetSystem,
@@ -88,6 +94,7 @@ class WorkflowOrchestrationService:
         self._artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
         self._approval_repo = SQLAlchemyWorkflowApprovalCheckpointRepository(session)
         self._event_repo = SQLAlchemyWorkflowEventRepository(session)
+        self._replay_queue_repo = SQLAlchemyReplayQueueRepository(session)
         self._invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
         self._sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
         self._validator_registry = validator_registry or ValidatorRegistry()
@@ -638,6 +645,120 @@ class WorkflowOrchestrationService:
                 },
             )
         )
+        for sync_record in self._sync_repo.list_for_step_attempt(
+            WorkflowSyncStepQuery(
+                run_id=run_id,
+                step_name=failed_step.step_name,
+                max_attempt_number=failed_step.attempt_number,
+                statuses=(
+                    WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                    WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+                ),
+            )
+        ):
+            self._sync_repo.update(
+                sync_record.id,
+                WorkflowSyncRecordPatch(
+                    recovery_classification=WorkflowSyncRecoveryClassification.RETRY_REQUESTED.value,
+                    recovery_updated_at=_now(),
+                ),
+            )
+        return self.get_run_state(run_id)
+
+    def request_sync_replay(
+        self,
+        run_id: int,
+        *,
+        actor: str,
+        sync_record_ids: tuple[int, ...],
+        reason: str,
+    ) -> WorkflowRunState:
+        if not sync_record_ids:
+            raise ValueError("Replay requires at least one sync record.")
+        state = self.get_run_state(run_id)
+        current_step = self._require_current_step(state)
+        requested_at = _now()
+        replay_records: list[object] = []
+
+        for sync_record_id in sync_record_ids:
+            original = self._sync_repo.get_by_id(sync_record_id)
+            if original is None or original.run_id != run_id:
+                raise ValueError(f"Workflow sync record {sync_record_id} does not exist for run {run_id}.")
+            replay_queue_item, _ = self._replay_queue_repo.enqueue_workflow_sync_replay(
+                run_id=run_id,
+                sync_record_id=sync_record_id,
+            )
+            replay_record = self._sync_repo.create(
+                NewWorkflowSyncRecord(
+                    run_id=run_id,
+                    step_id=current_step.id,
+                    proposal_artifact_id=original.proposal_artifact_id,
+                    proposal_version_number=original.proposal_version_number,
+                    target_system=original.target_system,
+                    sync_kind=original.sync_kind,
+                    planned_item_key=original.planned_item_key,
+                    execution_order=original.execution_order,
+                    idempotency_key=f"{original.idempotency_key}:replay:{original.lineage_generation + 1}",
+                    payload_fingerprint=original.payload_fingerprint,
+                    payload=original.payload,
+                    status=WorkflowSyncStatus.PENDING.value,
+                    lineage_generation=original.lineage_generation + 1,
+                    recovery_classification=WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value,
+                    recovery_updated_at=requested_at,
+                    replay_requested_at=requested_at,
+                    replay_requested_by=actor,
+                    supersedes_sync_record_id=original.id,
+                    replayed_from_sync_record_id=original.id,
+                )
+            )
+            self._sync_repo.update(
+                original.id,
+                WorkflowSyncRecordPatch(
+                    recovery_classification=WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value,
+                    recovery_updated_at=requested_at,
+                    replay_requested_at=requested_at,
+                    replay_requested_by=actor,
+                    supersedes_sync_record_id=replay_record.id,
+                ),
+            )
+            replay_records.append(replay_record)
+            self._event_repo.create(
+                NewWorkflowEvent(
+                    run_id=run_id,
+                    step_id=current_step.id,
+                    event_type="sync_replay_enqueued",
+                    run_status=state.run.status,
+                    step_status=current_step.status,
+                    summary=f"Replay requested for {original.planned_item_key}.",
+                    details={
+                        "sync_record_id": original.id,
+                        "replay_sync_record_id": replay_record.id,
+                        "replay_queue_id": replay_queue_item.id,
+                        "actor": actor,
+                        "reason": reason,
+                    },
+                )
+            )
+
+        replay_request = ReplayRequest(
+            run_id=run_id,
+            actor=actor,
+            requested_at=requested_at.isoformat(),
+            reason=reason,
+            source_sync_record_ids=sync_record_ids,
+            replay_sync_record_ids=tuple(record.id for record in replay_records),
+        )
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=current_step.id,
+                event_type="sync_replay_requested",
+                run_status=state.run.status,
+                step_status=current_step.status,
+                summary="Explicit sync replay requested.",
+                details=replay_request.model_dump(mode="json"),
+            )
+        )
         return self.get_run_state(run_id)
 
     def terminate_run(self, run_id: int, *, reason: str) -> WorkflowRunState:
@@ -971,6 +1092,19 @@ class WorkflowOrchestrationService:
                     status=WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
                     error_summary=result.error_summary,
                     external_object_id=result.external_object_id or claimed.external_object_id,
+                    recovery_classification=WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
+                )
+                self._record_recovery_transition(
+                    run_id=run_id,
+                    step_id=step.id,
+                    transition=RecoveryTransition(
+                        sync_record_id=claimed.id,
+                        planned_item_key=claimed.planned_item_key,
+                        classification=RecoveryClassification.RECOVERABLE_FAILURE,
+                        prior_status=prior_status,
+                        next_status=WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+                        details={"target_system": claimed.target_system},
+                    ),
                 )
                 return self._fail_started_step(
                     run_id,
@@ -1000,6 +1134,27 @@ class WorkflowOrchestrationService:
                 status=failure_status,
                 error_summary=result.error_summary,
                 external_object_id=result.external_object_id or claimed.external_object_id,
+                recovery_classification=(
+                    WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value
+                    if retryable
+                    else WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value
+                ),
+            )
+            self._record_recovery_transition(
+                run_id=run_id,
+                step_id=step.id,
+                transition=RecoveryTransition(
+                    sync_record_id=claimed.id,
+                    planned_item_key=claimed.planned_item_key,
+                    classification=(
+                        RecoveryClassification.RECOVERABLE_FAILURE
+                        if retryable
+                        else RecoveryClassification.TERMINAL_FAILURE
+                    ),
+                    prior_status=prior_status,
+                    next_status=failure_status,
+                    details={"target_system": claimed.target_system},
+                ),
             )
             return self._fail_started_step(
                 run_id,
@@ -1255,6 +1410,19 @@ class WorkflowOrchestrationService:
             )
         )
         return self.get_run_state(run_id)
+
+    def _record_recovery_transition(self, run_id: int, *, step_id: int, transition: RecoveryTransition) -> None:
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=step_id,
+                event_type="sync_recovery_transition_recorded",
+                run_status=WorkflowRunStatus.RUNNING.value,
+                step_status=WorkflowStepStatus.RUNNING.value,
+                summary=f"Recorded {transition.classification.value} for {transition.planned_item_key}.",
+                details=transition.model_dump(mode="json"),
+            )
+        )
 
     def _sync_item_from_record(self, sync_record) -> ApprovedSyncItem:
         return ApprovedSyncItem(

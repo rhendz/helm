@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, aliased
 from helm_storage.models import WorkflowStepORM, WorkflowSyncRecordORM
 from helm_storage.repositories.contracts import (
     NewWorkflowSyncRecord,
+    WorkflowSyncIdentityQuery,
     WorkflowSyncFailedQuery,
     WorkflowSyncRecordPatch,
     WorkflowSyncRemainingQuery,
@@ -38,6 +39,15 @@ class SQLAlchemyWorkflowSyncRecordRepository:
             last_attempt_step_id=sync_record.last_attempt_step_id,
             last_attempted_at=sync_record.last_attempted_at,
             completed_at=sync_record.completed_at,
+            lineage_generation=sync_record.lineage_generation,
+            recovery_classification=sync_record.recovery_classification,
+            recovery_updated_at=sync_record.recovery_updated_at,
+            replay_requested_at=sync_record.replay_requested_at,
+            replay_requested_by=sync_record.replay_requested_by,
+            terminated_at=sync_record.terminated_at,
+            termination_reason=sync_record.termination_reason,
+            terminated_after_sync_count=sync_record.terminated_after_sync_count,
+            terminated_after_planned_item_key=sync_record.terminated_after_planned_item_key,
             supersedes_sync_record_id=sync_record.supersedes_sync_record_id,
             replayed_from_sync_record_id=sync_record.replayed_from_sync_record_id,
         )
@@ -65,8 +75,22 @@ class SQLAlchemyWorkflowSyncRecordRepository:
             WorkflowSyncRecordORM.target_system == target_system,
             WorkflowSyncRecordORM.sync_kind == sync_kind,
             WorkflowSyncRecordORM.planned_item_key == planned_item_key,
-        )
+        ).order_by(WorkflowSyncRecordORM.lineage_generation.desc(), WorkflowSyncRecordORM.id.desc())
         return self._session.execute(stmt).scalars().first()
+
+    def list_lineage(self, query: WorkflowSyncIdentityQuery) -> list[WorkflowSyncRecordORM]:
+        stmt = (
+            select(WorkflowSyncRecordORM)
+            .where(
+                WorkflowSyncRecordORM.proposal_artifact_id == query.proposal_artifact_id,
+                WorkflowSyncRecordORM.proposal_version_number == query.proposal_version_number,
+                WorkflowSyncRecordORM.target_system == query.target_system,
+                WorkflowSyncRecordORM.sync_kind == query.sync_kind,
+                WorkflowSyncRecordORM.planned_item_key == query.planned_item_key,
+            )
+            .order_by(WorkflowSyncRecordORM.lineage_generation.asc(), WorkflowSyncRecordORM.id.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
 
     def list_for_run(self, run_id: int) -> list[WorkflowSyncRecordORM]:
         stmt = (
@@ -154,6 +178,7 @@ class SQLAlchemyWorkflowSyncRecordRepository:
         record.last_attempted_at = attempted_at or _now()
         record.last_error_summary = None
         record.completed_at = None
+        record.recovery_updated_at = record.last_attempted_at
         record.attempt_count = record.attempt_count + 1
         self._session.add(record)
         self._session.commit()
@@ -167,15 +192,19 @@ class SQLAlchemyWorkflowSyncRecordRepository:
         external_object_id: str | None = None,
         completed_at: datetime | None = None,
     ) -> WorkflowSyncRecordORM | None:
-        return self.update(
-            sync_record_id,
-            WorkflowSyncRecordPatch(
-                status=WorkflowSyncStatus.SUCCEEDED.value,
-                external_object_id=external_object_id,
-                last_error_summary=None,
-                completed_at=completed_at or _now(),
-            ),
-        )
+        record = self.get_by_id(sync_record_id)
+        if record is None:
+            return None
+        record.status = WorkflowSyncStatus.SUCCEEDED.value
+        record.external_object_id = external_object_id
+        record.last_error_summary = None
+        record.completed_at = completed_at or _now()
+        record.recovery_classification = None
+        record.recovery_updated_at = _now()
+        self._session.add(record)
+        self._session.commit()
+        self._session.refresh(record)
+        return record
 
     def mark_failed(
         self,
@@ -185,6 +214,7 @@ class SQLAlchemyWorkflowSyncRecordRepository:
         error_summary: str | None,
         completed_at: datetime | None = None,
         external_object_id: str | None = None,
+        recovery_classification: str | None = None,
     ) -> WorkflowSyncRecordORM | None:
         return self.update(
             sync_record_id,
@@ -193,6 +223,8 @@ class SQLAlchemyWorkflowSyncRecordRepository:
                 external_object_id=external_object_id,
                 last_error_summary=error_summary,
                 completed_at=completed_at or _now(),
+                recovery_classification=recovery_classification,
+                recovery_updated_at=_now(),
             ),
         )
 

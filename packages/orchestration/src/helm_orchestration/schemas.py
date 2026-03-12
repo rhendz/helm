@@ -55,6 +55,14 @@ class SyncRetryDisposition(StrEnum):
     RECONCILE = "reconcile"
 
 
+class RecoveryClassification(StrEnum):
+    RECOVERABLE_FAILURE = "recoverable_failure"
+    TERMINAL_FAILURE = "terminal_failure"
+    RETRY_REQUESTED = "retry_requested"
+    REPLAY_REQUESTED = "replay_requested"
+    TERMINATED_AFTER_PARTIAL_SUCCESS = "terminated_after_partial_success"
+
+
 class ValidationIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -271,6 +279,28 @@ class ExecutionFailurePayload(BaseModel):
     retry_state: RetryState
     retryable: bool
     details: dict[str, Any] = Field(default_factory=dict)
+
+
+class RecoveryTransition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sync_record_id: int
+    planned_item_key: str
+    classification: RecoveryClassification
+    prior_status: str | None = None
+    next_status: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReplayRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: int
+    actor: str
+    requested_at: str
+    reason: str
+    source_sync_record_ids: tuple[int, ...]
+    replay_sync_record_ids: tuple[int, ...]
 
 
 class WorkflowSummaryArtifact(BaseModel):

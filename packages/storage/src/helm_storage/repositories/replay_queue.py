@@ -40,6 +40,39 @@ class SQLAlchemyReplayQueueRepository:
         self._session.refresh(item)
         return item, True
 
+    def enqueue_workflow_sync_replay(
+        self,
+        *,
+        run_id: int,
+        sync_record_id: int,
+    ) -> tuple[ReplayQueueORM, bool]:
+        source_type = "workflow_sync_replay"
+        source_id = f"{run_id}:{sync_record_id}"
+        statement = (
+            select(ReplayQueueORM)
+            .where(
+                ReplayQueueORM.source_type == source_type,
+                ReplayQueueORM.source_id == source_id,
+                ReplayQueueORM.status.in_(_ACTIVE_REPLAY_STATUSES),
+            )
+            .order_by(ReplayQueueORM.id.desc())
+        )
+        active = self._session.execute(statement).scalar_one_or_none()
+        if active is not None:
+            return active, False
+
+        item = ReplayQueueORM(
+            agent_run_id=None,
+            source_type=source_type,
+            source_id=source_id,
+            status="pending",
+            attempts=0,
+        )
+        self._session.add(item)
+        self._session.commit()
+        self._session.refresh(item)
+        return item, True
+
     def list_pending(self, *, limit: int) -> list[ReplayQueueORM]:
         statement = (
             select(ReplayQueueORM)

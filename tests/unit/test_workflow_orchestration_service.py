@@ -49,6 +49,7 @@ from helm_storage.repositories import (
     WorkflowArtifactType,
     WorkflowBlockedReason,
     WorkflowRunStatus,
+    WorkflowSyncRecoveryClassification,
     WorkflowSyncRecordPatch,
     WorkflowSyncStatus,
     WorkflowStepStatus,
@@ -1080,6 +1081,66 @@ def test_sync_retryable_failure_stops_step_and_preserves_partial_lineage() -> No
             WorkflowSyncStatus.SUCCEEDED.value,
             WorkflowSyncStatus.FAILED_RETRYABLE.value,
         ]
+        assert sync_records[1].recovery_classification == (
+            WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value
+        )
+
+        recovery_events = SQLAlchemyWorkflowEventRepository(session).list_for_run_by_type(
+            failed.run.id,
+            event_type="sync_recovery_transition_recorded",
+        )
+        assert len(recovery_events) == 1
+        assert recovery_events[0].details["classification"] == (
+            WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value
+        )
+
+
+def test_sync_terminal_failure_records_terminal_recovery_classification() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        calendar_adapter.set_upsert_outcome(
+            "calendar:inbox-triage:1",
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.TERMINAL_FAILURE,
+                retry_disposition=SyncRetryDisposition.TERMINAL,
+                error_summary="Calendar payload rejected.",
+            ),
+        )
+
+        failed = service.execute_pending_sync_step(approved.run.id)
+        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(failed.run.id)
+
+        assert failed.run.status == WorkflowRunStatus.FAILED.value
+        assert sync_records[1].status == WorkflowSyncStatus.FAILED_TERMINAL.value
+        assert sync_records[1].recovery_classification == (
+            WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value
+        )
 
 
 def test_sync_resume_service_rebuilds_remaining_work_after_restart() -> None:
@@ -1274,6 +1335,78 @@ def test_sync_retry_resume_only_replays_remaining_failed_items() -> None:
         ]
         assert task_adapter.calls == [("upsert", "task:triage-inbox")]
         assert calendar_adapter.calls == [("upsert", "calendar:inbox-triage:1")]
+        assert sync_records[1].recovery_classification is None
+
+
+def test_request_sync_replay_creates_new_lineage_without_mutating_original_record() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        original_calendar_record = sync_repo.list_for_run(approved.run.id)[1]
+        sync_repo.update(
+            original_calendar_record.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                recovery_classification=WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
+            ),
+        )
+
+        replay_state = service.request_sync_replay(
+            approved.run.id,
+            actor="telegram:1",
+            sync_record_ids=(original_calendar_record.id,),
+            reason="Explicit operator replay after adapter repair.",
+        )
+        lineage = sync_repo.list_for_run(replay_state.run.id)
+        replay_record = lineage[-1]
+
+        assert len(lineage) == 3
+        assert replay_record.replayed_from_sync_record_id == original_calendar_record.id
+        assert replay_record.supersedes_sync_record_id == original_calendar_record.id
+        assert replay_record.lineage_generation == 1
+        assert replay_record.recovery_classification == (
+            WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        )
+
+        original = sync_repo.get_by_id(original_calendar_record.id)
+        assert original is not None
+        assert original.status == WorkflowSyncStatus.FAILED_RETRYABLE.value
+        assert original.recovery_classification == (
+            WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        )
+
+        replay_events = SQLAlchemyWorkflowEventRepository(session).list_for_run_by_type(
+            replay_state.run.id,
+            event_type="sync_replay_requested",
+        )
+        assert len(replay_events) == 1
+        assert replay_events[0].details["source_sync_record_ids"] == [original_calendar_record.id]
 
 
 def test_approval_decision_reject_closes_run_cleanly() -> None:

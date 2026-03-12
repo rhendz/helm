@@ -29,8 +29,10 @@ from helm_storage.repositories import (
     WorkflowSpecialistInvocationRepository,
     WorkflowSpecialistInvocationPatch,
     WorkflowSyncFailedQuery,
+    WorkflowSyncIdentityQuery,
     WorkflowSyncKind,
     WorkflowSyncRecordPatch,
+    WorkflowSyncRecoveryClassification,
     WorkflowSyncRecordRepository,
     WorkflowSyncRemainingQuery,
     WorkflowSyncStatus,
@@ -151,6 +153,15 @@ def test_workflow_schema_tables_include_specialist_dispatch_metadata() -> None:
         "last_attempt_step_id",
         "last_attempted_at",
         "completed_at",
+        "lineage_generation",
+        "recovery_classification",
+        "recovery_updated_at",
+        "replay_requested_at",
+        "replay_requested_by",
+        "terminated_at",
+        "termination_reason",
+        "terminated_after_sync_count",
+        "terminated_after_planned_item_key",
         "supersedes_sync_record_id",
         "replayed_from_sync_record_id",
     } <= sync_columns
@@ -305,6 +316,8 @@ def test_workflow_sync_record_repository_enforces_durable_identity_and_lineage()
                 idempotency_key=f"wf-sync:{proposal.id}:calendar:focus-block-1",
                 payload_fingerprint="sha256:cal-1",
                 payload={"title": "Inbox triage", "start": "2026-03-16T09:00:00Z"},
+                lineage_generation=1,
+                replay_requested_by="telegram:1",
                 supersedes_sync_record_id=task_sync.id,
             )
         )
@@ -322,7 +335,18 @@ def test_workflow_sync_record_repository_enforces_durable_identity_and_lineage()
             planned_item_key="calendar:focus-block-1",
         ) == calendar_sync
         assert listed[1].supersedes_sync_record_id == task_sync.id
+        assert listed[1].lineage_generation == 1
+        assert listed[1].replay_requested_by == "telegram:1"
         assert sync_repo.list_for_proposal(proposal.id)[0].proposal_version_number == proposal.version_number
+        assert [record.lineage_generation for record in sync_repo.list_lineage(
+            WorkflowSyncIdentityQuery(
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
+                planned_item_key="calendar:focus-block-1",
+            )
+        )] == [1]
 
 
 def test_workflow_sync_record_repository_queries_remaining_and_failed_items() -> None:
@@ -394,6 +418,7 @@ def test_workflow_sync_record_repository_queries_remaining_and_failed_items() ->
                 payload_fingerprint="sha256:cal-1",
                 payload={"title": "Inbox triage"},
                 status=WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                recovery_classification=WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
                 last_error_summary="Calendar API timed out.",
             )
         )
@@ -422,6 +447,9 @@ def test_workflow_sync_record_repository_queries_remaining_and_failed_items() ->
         assert [record.id for record in remaining] == [failed.id]
         failed_items = sync_repo.list_failed(WorkflowSyncFailedQuery(run_id=run.id))
         assert [record.id for record in failed_items] == [failed.id]
+        assert failed_items[0].recovery_classification == (
+            WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value
+        )
 
 
 def test_workflow_sync_record_repository_retry_sync_items_by_step_attempt_lineage() -> None:
@@ -494,6 +522,7 @@ def test_workflow_sync_record_repository_retry_sync_items_by_step_attempt_lineag
                 payload_fingerprint="sha256:retryable",
                 payload={"title": "Retryable"},
                 status=WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                recovery_classification=WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
             )
         )
         sync_repo.create(
