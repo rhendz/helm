@@ -1082,6 +1082,200 @@ def test_sync_retryable_failure_stops_step_and_preserves_partial_lineage() -> No
         ]
 
 
+def test_sync_resume_service_rebuilds_remaining_work_after_restart() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        task_record, calendar_record = sync_repo.list_for_run(approved.run.id)
+        sync_repo.mark_succeeded(task_record.id, external_object_id="task-existing")
+
+        restarted_service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        resumed = WorkflowResumeService(
+            session,
+            workflow_service=restarted_service,
+            specialist_steps={},
+        ).resume_run(approved.run.id)
+
+        refreshed = sync_repo.list_for_run(resumed.run.id)
+        assert resumed.run.status == WorkflowRunStatus.COMPLETED.value
+        assert [record.status for record in refreshed] == [
+            WorkflowSyncStatus.SUCCEEDED.value,
+            WorkflowSyncStatus.SUCCEEDED.value,
+        ]
+        assert task_adapter.calls == []
+        assert calendar_adapter.calls == [("upsert", calendar_record.planned_item_key)]
+
+
+def test_sync_resume_service_reconciles_uncertain_items_after_restart() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        task_record, calendar_record = sync_repo.list_for_run(approved.run.id)
+        sync_repo.mark_succeeded(task_record.id, external_object_id="task-existing")
+        sync_repo.update(
+            calendar_record.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+                external_object_id="calendar-existing",
+            ),
+        )
+        calendar_adapter.set_reconcile_outcome(
+            calendar_record.planned_item_key,
+            SyncLookupResult(
+                found=True,
+                external_object_id="calendar-existing",
+                payload_fingerprint_matches=True,
+                provider_state="present",
+            ),
+        )
+
+        restarted_service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        resumed = WorkflowResumeService(
+            session,
+            workflow_service=restarted_service,
+            specialist_steps={},
+        ).resume_run(approved.run.id)
+
+        refreshed = sync_repo.list_for_run(resumed.run.id)
+        assert resumed.run.status == WorkflowRunStatus.COMPLETED.value
+        assert [record.status for record in refreshed] == [
+            WorkflowSyncStatus.SUCCEEDED.value,
+            WorkflowSyncStatus.SUCCEEDED.value,
+        ]
+        assert calendar_adapter.calls == [("reconcile", calendar_record.planned_item_key)]
+
+
+def test_sync_retry_resume_only_replays_remaining_failed_items() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        calendar_adapter.set_upsert_outcome(
+            "calendar:inbox-triage:1",
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.RETRYABLE_FAILURE,
+                retry_disposition=SyncRetryDisposition.RETRYABLE,
+                error_summary="Calendar API timed out.",
+            ),
+        )
+
+        failed = service.execute_pending_sync_step(approved.run.id)
+        retried = service.retry_current_step(failed.run.id, reason="Retry sync execution.")
+        calendar_adapter.calls.clear()
+        calendar_adapter.set_upsert_outcome(
+            "calendar:inbox-triage:1",
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.SUCCEEDED,
+                retry_disposition=SyncRetryDisposition.TERMINAL,
+                external_object_id="calendar-recovered",
+            ),
+        )
+
+        restarted_service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        resumed = WorkflowResumeService(
+            session,
+            workflow_service=restarted_service,
+            specialist_steps={},
+        ).resume_run(retried.run.id)
+        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(resumed.run.id)
+
+        assert resumed.run.status == WorkflowRunStatus.COMPLETED.value
+        assert [record.status for record in sync_records] == [
+            WorkflowSyncStatus.SUCCEEDED.value,
+            WorkflowSyncStatus.SUCCEEDED.value,
+        ]
+        assert task_adapter.calls == [("upsert", "task:triage-inbox")]
+        assert calendar_adapter.calls == [("upsert", "calendar:inbox-triage:1")]
+
+
 def test_approval_decision_reject_closes_run_cleanly() -> None:
     with _session() as session:
         service = _service(session)

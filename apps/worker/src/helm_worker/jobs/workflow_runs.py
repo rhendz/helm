@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_observability.logging import get_logger
 from helm_orchestration import (
     CalendarAgentInput,
@@ -85,6 +86,8 @@ def _build_resume_service(
         workflow_service=WorkflowOrchestrationService(
             session,
             validator_registry=_build_validator_registry(),
+            task_system_adapter=StubTaskSystemAdapter(),
+            calendar_system_adapter=StubCalendarSystemAdapter(),
         ),
         specialist_steps=handlers,
     )

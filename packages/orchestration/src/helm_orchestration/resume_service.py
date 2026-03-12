@@ -28,6 +28,8 @@ class WorkflowResumeService:
         current_step = state.current_step
         if current_step is None:
             raise ValueError(f"Workflow run {run_id} has no runnable current step.")
+        if current_step.step_name == "apply_schedule":
+            return self._workflow_service.execute_pending_sync_step(run_id)
         dispatch_key = (state.run.workflow_type, current_step.step_name)
         specialist_step = self._specialist_steps.get(dispatch_key)
         if specialist_step is None:
