@@ -60,12 +60,14 @@ Plans:
   2. Retry and resume paths do not create duplicate downstream objects or lose sync lineage.
   3. Replay is recorded as an explicit lineage event rather than being confused with retry.
   4. Failed runs clearly distinguish recoverable failures from terminal failures and expose the next safe operator action.
-**Plans**: 3 plans
+**Plans**: 5 plans
 
 Plans:
-- [ ] 03-01: Implement task-system and calendar adapter contracts with sync-record persistence.
+- [x] 03-01: Implement task-system and calendar adapter contracts with sync-record persistence.
 - [ ] 03-02: Add idempotency keys, duplicate-write prevention, and reconciliation behavior across retry and resume.
 - [ ] 03-03: Add retry vs replay semantics, recovery state tracking, and operator-safe failure handling.
+- [ ] 03-04: Expose recovery semantics through the shared workflow status projection.
+- [ ] 03-05: Wire replay and recovery entrypoints through API, worker, and Telegram surfaces.
 
 ### Phase 4: Representative Scheduling Workflow
 **Goal**: Helm proves the kernel with the weekly scheduling workflow from raw user request through approved downstream writes.
@@ -91,5 +93,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
 | 2. Specialist Dispatch And Approval Semantics | 3/3 | Complete | 2026-03-12 |
-| 3. Adapter Writes And Recovery Guarantees | 0/3 | Not started | - |
+| 3. Adapter Writes And Recovery Guarantees | 1/5 | In Progress | - |
 | 4. Representative Scheduling Workflow | 0/2 | Not started | - |

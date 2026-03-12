@@ -40,9 +40,9 @@
 
 ### Adapters And Sync
 
-- [ ] **SYNC-01**: Helm writes approved task updates through a task-system adapter rather than directly from workflow logic.
-- [ ] **SYNC-02**: Helm writes approved calendar updates through a calendar adapter rather than directly from workflow logic.
-- [ ] **SYNC-03**: Helm persists adapter sync records for each outbound write, including target system, attempt status, and external object ID when created or updated.
+- [x] **SYNC-01**: Helm writes approved task updates through a task-system adapter rather than directly from workflow logic.
+- [x] **SYNC-02**: Helm writes approved calendar updates through a calendar adapter rather than directly from workflow logic.
+- [x] **SYNC-03**: Helm persists adapter sync records for each outbound write, including target system, attempt status, and external object ID when created or updated.
 - [ ] **SYNC-04**: Helm prevents duplicate downstream writes when a workflow step is retried after failure.
 - [ ] **SYNC-05**: Helm prevents duplicate downstream writes when a paused or interrupted workflow is resumed after restart or operator action.
 - [ ] **SYNC-06**: Helm uses persisted idempotency data or equivalent sync keys so downstream create, update, and delete actions can be reconciled safely across retry and resume paths.
@@ -116,9 +116,9 @@
 | APRV-04 | Phase 2 | Complete |
 | APRV-05 | Phase 2 | Complete |
 | APRV-06 | Phase 2 | Complete |
-| SYNC-01 | Phase 3 | Pending |
-| SYNC-02 | Phase 3 | Pending |
-| SYNC-03 | Phase 3 | Pending |
+| SYNC-01 | Phase 3 | Complete |
+| SYNC-02 | Phase 3 | Complete |
+| SYNC-03 | Phase 3 | Complete |
 | SYNC-04 | Phase 3 | Pending |
 | SYNC-05 | Phase 3 | Pending |
 | SYNC-06 | Phase 3 | Pending |
