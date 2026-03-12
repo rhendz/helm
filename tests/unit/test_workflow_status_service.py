@@ -97,10 +97,10 @@ class _RecordingTaskAdapter:
         self.calls: list[tuple[str, str]] = []
 
     def upsert_task(self, request):  # noqa: ANN001
-        self.calls.append(("upsert", request.idempotency_key))
+        self.calls.append(("upsert", request.item.planned_item_key))
         return TaskSyncResult(
             status=SyncOutcomeStatus.SUCCEEDED,
-            external_task_id=f"task-{request.planned_item_key}",
+            external_object_id=f"task-{request.item.planned_item_key}",
             retry_disposition=SyncRetryDisposition.TERMINAL,
         )
 
@@ -117,12 +117,12 @@ class _RecordingCalendarAdapter:
         self._outcomes[planned_item_key] = outcome
 
     def upsert_calendar_block(self, request):  # noqa: ANN001
-        self.calls.append(("upsert", request.idempotency_key))
+        self.calls.append(("upsert", request.item.planned_item_key))
         return self._outcomes.get(
-            request.planned_item_key,
+            request.item.planned_item_key,
             CalendarSyncResult(
                 status=SyncOutcomeStatus.SUCCEEDED,
-                external_event_id=f"event-{request.planned_item_key}",
+                external_object_id=f"event-{request.item.planned_item_key}",
                 retry_disposition=SyncRetryDisposition.TERMINAL,
             ),
         )
@@ -428,6 +428,75 @@ def test_sync_summary_projects_recoverable_failure_and_replay_lineage() -> None:
         assert summary["safe_next_actions"] == [
             {"action": "await_replay", "label": "Await replay processing"}
         ]
+
+
+def test_terminal_sync_failure_projects_terminal_recovery_without_event_parsing() -> None:
+    with _session() as session:
+        run_id, _orchestration, _calendar_adapter = _approved_sync_run(session)
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        failed_record = sync_repo.list_for_run(run_id)[1]
+        sync_repo.update(
+            failed_record.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.FAILED_TERMINAL.value,
+                last_error_summary="Calendar rejected the payload as invalid.",
+                recovery_classification=WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value,
+            ),
+        )
+
+        summary = WorkflowStatusService(session).get_run_detail(run_id)
+
+        assert summary is not None
+        assert summary["failure_kind"] == WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value
+        assert summary["failure_summary"] == "Calendar rejected the payload as invalid."
+        assert summary["retryable"] is False
+        assert summary["safe_next_actions"] == [
+            {"action": "request_replay", "label": "Request explicit replay after adapter fix"}
+        ]
+        assert summary["sync"]["counts_by_state"] == {
+            WorkflowSyncStatus.PENDING.value: 1,
+            WorkflowSyncStatus.FAILED_TERMINAL.value: 1,
+        }
+        assert summary["sync"]["last_failed_or_unresolved"]["status"] == WorkflowSyncStatus.FAILED_TERMINAL.value
+
+
+def test_partial_sync_summary_stays_visible_after_termination() -> None:
+    with _session() as session:
+        run_id, orchestration, calendar_adapter = _approved_sync_run(session)
+        calendar_adapter.set_upsert_outcome(
+            "calendar:inbox-triage:1",
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.RETRYABLE_FAILURE,
+                retry_disposition=SyncRetryDisposition.RETRYABLE,
+                error_summary="Calendar API timed out.",
+            ),
+        )
+        failed = orchestration.execute_pending_sync_step(run_id)
+        terminated = orchestration.terminate_run(
+            failed.run.id,
+            reason="Operator revoked approval after partial sync.",
+        )
+
+        summary = WorkflowStatusService(session).get_run_detail(terminated.run.id)
+
+        assert summary is not None
+        assert summary["status"] == WorkflowRunStatus.TERMINATED.value
+        assert summary["failure_kind"] == (
+            WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
+        )
+        assert summary["failure_summary"] == "Remaining approved writes were cancelled after partial sync success."
+        assert summary["retryable"] is False
+        assert summary["safe_next_actions"] == [
+            {"action": "request_replay", "label": "Request replay for cancelled writes"}
+        ]
+        assert summary["sync"]["counts_by_state"] == {
+            WorkflowSyncStatus.SUCCEEDED.value: 1,
+            WorkflowSyncStatus.CANCELLED.value: 1,
+        }
+        assert summary["sync"]["last_failed_or_unresolved"]["planned_item_key"] == "calendar:inbox-triage:1"
+        assert summary["sync"]["last_failed_or_unresolved"]["recovery_class"] == (
+            WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
+        )
 
 
 def test_run_detail_projects_latest_first_proposal_versions_and_decision_lineage() -> None:
