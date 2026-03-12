@@ -454,6 +454,80 @@ async def test_workflow_retry_usage_message_when_reason_missing(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
+async def test_workflow_list_surfaces_safe_replay_action(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_recent_runs(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "id": 14,
+                    "status": "failed",
+                    "current_step": "apply_schedule",
+                    "paused_state": "awaiting_retry",
+                    "last_event_summary": "Calendar payload was rejected.",
+                    "needs_action": True,
+                    "available_actions": [],
+                    "safe_next_actions": [
+                        {"action": "request_replay", "label": "Request explicit replay after adapter fix"}
+                    ],
+                }
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(workflows, "_service", _Service())
+    update = _Update()
+
+    await workflows.recent(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Run 14 [failed] step=apply_schedule paused=awaiting_retry\n"
+        "Last: Calendar payload was rejected.\n"
+        "Needs action: yes | Next: request_replay"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_workflow_replay_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen: tuple[int, str, str] | None = None
+
+        def request_replay(self, run_id: int, *, actor: str, reason: str) -> dict[str, object]:
+            self.seen = (run_id, actor, reason)
+            return {
+                "id": run_id,
+                "status": "failed",
+                "current_step": "apply_schedule",
+                "paused_state": "awaiting_retry",
+                "last_event_summary": "Explicit sync replay requested.",
+                "needs_action": True,
+                "available_actions": [],
+                "safe_next_actions": [
+                    {"action": "await_replay", "label": "Await replay processing"}
+                ],
+            }
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(workflows, "_service", service)
+    update = _Update()
+
+    await workflows.replay(update, _Context(args=["12", "Replay", "after", "adapter", "fix"]))
+
+    assert service.seen == (12, "telegram:1", "Replay after adapter fix")
+    assert update.message.replies == [
+        "Run 12 [failed] step=apply_schedule paused=awaiting_retry\n"
+        "Last: Explicit sync replay requested.\n"
+        "Needs action: yes | Next: await_replay"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_workflow_terminate_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def __init__(self) -> None:

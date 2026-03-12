@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
 from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
+from helm_telegram_bot import main as telegram_main
+from helm_telegram_bot.services.workflow_status_service import TelegramWorkflowStatusService
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -715,3 +717,91 @@ def test_completed_run_detail_exposes_final_summary_contract() -> None:
         assert detail["lineage"]["final_summary"]["approval_decision"] is None
         assert detail["lineage"]["final_summary"]["downstream_sync_status"] is None
         assert detail["lineage"]["final_summary"]["downstream_sync_artifact_ids"] == []
+
+
+def test_telegram_service_replay_wrapper_uses_shared_replay_request(monkeypatch) -> None:  # noqa: ANN001
+    seen: dict[str, object] = {}
+
+    def _request(*, run_id: int, actor: str, reason: str) -> dict[str, object]:
+        seen.update({"run_id": run_id, "actor": actor, "reason": reason})
+        return {
+            "status": "accepted",
+            "run_id": run_id,
+            "source_sync_record_ids": [8],
+            "replay_sync_record_ids": [13],
+            "replay_queue_source_ids": [f"{run_id}:8"],
+            "run": {
+                "id": run_id,
+                "status": "failed",
+                "current_step": "apply_schedule",
+                "paused_state": "awaiting_retry",
+                "last_event_summary": "Explicit sync replay requested.",
+                "needs_action": True,
+                "available_actions": [],
+                "safe_next_actions": [
+                    {"action": "await_replay", "label": "Await replay processing"}
+                ],
+            },
+            "reason": None,
+        }
+
+    monkeypatch.setattr(
+        "helm_telegram_bot.services.workflow_status_service.request_workflow_run_replay",
+        _request,
+    )
+
+    result = TelegramWorkflowStatusService().request_replay(
+        21,
+        actor="telegram:1",
+        reason="Replay after adapter fix.",
+    )
+
+    assert seen == {
+        "run_id": 21,
+        "actor": "telegram:1",
+        "reason": "Replay after adapter fix.",
+    }
+    assert result["id"] == 21
+    assert result["safe_next_actions"] == [
+        {"action": "await_replay", "label": "Await replay processing"}
+    ]
+
+
+def test_telegram_main_registers_workflow_replay_command(monkeypatch) -> None:  # noqa: ANN001
+    registered: list[str] = []
+
+    class _Application:
+        def add_handler(self, handler) -> None:  # noqa: ANN001
+            registered.append(next(iter(handler.commands)))
+
+        def run_polling(self) -> None:
+            return
+
+    class _Builder:
+        def token(self, _token: str) -> "_Builder":
+            return self
+
+        def build(self) -> _Application:
+            return _Application()
+
+    class _ApplicationFactory:
+        @staticmethod
+        def builder() -> _Builder:
+            return _Builder()
+
+    monkeypatch.setattr(telegram_main, "Application", _ApplicationFactory)
+    monkeypatch.setattr(
+        telegram_main,
+        "get_settings",
+        lambda: type("Settings", (), {"telegram_bot_token": "token"})(),
+    )
+    monkeypatch.setattr(telegram_main, "setup_logging", lambda: None)
+    monkeypatch.setattr(
+        telegram_main,
+        "get_logger",
+        lambda _name: type("Logger", (), {"info": lambda self, _event: None})(),
+    )
+
+    telegram_main.main()
+
+    assert "workflow_replay" in registered

@@ -7,11 +7,26 @@ from helm_telegram_bot.services.workflow_status_service import TelegramWorkflowS
 _service = TelegramWorkflowStatusService()
 
 
+def _next_actions(run: dict[str, object]) -> list[str]:
+    labels: list[str] = []
+    for key in ("available_actions", "safe_next_actions"):
+        actions = run.get(key, [])
+        if not isinstance(actions, list):
+            continue
+        for item in actions:
+            if not isinstance(item, dict):
+                continue
+            action = item.get("action")
+            if isinstance(action, str) and action not in labels:
+                labels.append(action)
+    return labels
+
+
 def _format_run(run: dict[str, object]) -> str:
     step = run.get("current_step") or "n/a"
     paused_state = run.get("paused_state") or "active"
     last_event = run.get("last_event_summary") or "No recent event."
-    actions = [item["action"] for item in run.get("available_actions", [])]
+    actions = _next_actions(run)
     next_action = ", ".join(actions) if actions else "none"
     lines = [
         f"Run {run['id']} [{run['status']}] step={step} paused={paused_state}\n"
@@ -126,6 +141,24 @@ async def terminate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Usage: /workflow_terminate <run_id> <reason>")
         return
     result = _service.terminate_run(run_id, reason=reason)
+    await update.message.reply_text(_format_run(result))
+
+
+async def replay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await reject_if_unauthorized(update, context):
+        return
+    if not update.message:
+        return
+    run_id = parse_single_id_arg(context.args[:1])
+    reason = " ".join(context.args[1:]).strip()
+    if run_id is None or not reason:
+        await update.message.reply_text("Usage: /workflow_replay <run_id> <reason>")
+        return
+    result = _service.request_replay(
+        run_id,
+        actor=f"telegram:{update.effective_user.id}",
+        reason=reason,
+    )
     await update.message.reply_text(_format_run(result))
 
 

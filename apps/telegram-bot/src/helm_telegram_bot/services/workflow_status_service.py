@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from helm_api.services.replay_service import request_workflow_run_replay
 from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
 from helm_storage.db import SessionLocal
 
@@ -37,6 +38,9 @@ class TelegramWorkflowStatusService:
     def terminate_run(self, run_id: int, *, reason: str) -> dict[str, object]:
         with SessionLocal() as session:
             return WorkflowStatusService(session).terminate_run(run_id, reason=reason)
+
+    def request_replay(self, run_id: int, *, actor: str, reason: str) -> dict[str, object]:
+        return request_workflow_run_replay(run_id=run_id, actor=actor, reason=reason)["run"]
 
     def approve_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
         with SessionLocal() as session:
