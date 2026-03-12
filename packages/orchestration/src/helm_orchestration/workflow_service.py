@@ -27,6 +27,7 @@ from helm_storage.repositories import (
     NewWorkflowRun,
     NewWorkflowSpecialistInvocation,
     NewWorkflowStep,
+    RevisionRequestArtifactPayload,
     SQLAlchemyWorkflowApprovalCheckpointRepository,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowEventRepository,
@@ -230,11 +231,17 @@ class WorkflowOrchestrationService:
             raise ValueError(
                 f"Approval action {decision.action.value} is not allowed for checkpoint {checkpoint.id}."
             )
+        if decision.target_artifact_id != checkpoint.target_artifact_id:
+            raise ValueError(
+                f"Approval action targets artifact {decision.target_artifact_id}, "
+                f"but checkpoint {checkpoint.id} is waiting on artifact {checkpoint.target_artifact_id}."
+            )
         if decision.action is ApprovalAction.REQUEST_REVISION and not decision.revision_feedback:
             raise ValueError("Revision feedback is required when requesting a revision.")
 
         current_step = self._require_current_step(state)
         decision_time = _now()
+        target_artifact = self._require_artifact(checkpoint.target_artifact_id)
         resolved = self._approval_repo.update(
             checkpoint.id,
             WorkflowApprovalCheckpointPatch(
@@ -267,6 +274,7 @@ class WorkflowOrchestrationService:
                 payload=ApprovalDecisionArtifactPayload(
                     checkpoint_id=resolved.id,
                     target_artifact_id=resolved.target_artifact_id,
+                    target_version_number=target_artifact.version_number,
                     decision=decision.action.value,
                     actor=decision.actor,
                     decision_at=decision_time,
@@ -279,6 +287,7 @@ class WorkflowOrchestrationService:
             checkpoint_id=resolved.id,
             action=decision.action,
             actor=decision.actor,
+            target_artifact_id=resolved.target_artifact_id,
             decision_at=decision_time.isoformat(),
             resumed_step_name=None,
         )
@@ -315,6 +324,11 @@ class WorkflowOrchestrationService:
         next_step_name: str | None = None,
         invocation_id: int | None = None,
     ) -> WorkflowRunState:
+        artifact_lineage = self._artifact_lineage_kwargs(
+            run_id=run_id,
+            step_name=step.step_name,
+            artifact_type=artifact_type,
+        )
         candidate_artifact = self._artifact_repo.create(
             NewWorkflowArtifact(
                 run_id=run_id,
@@ -322,6 +336,8 @@ class WorkflowOrchestrationService:
                 artifact_type=artifact_type,
                 schema_version=SCHEMA_VERSION,
                 producer_step_name=step.step_name,
+                lineage_parent_id=artifact_lineage["lineage_parent_id"],
+                supersedes_artifact_id=artifact_lineage["supersedes_artifact_id"],
                 payload=_payload_dict(artifact_payload),
             )
         )
@@ -647,12 +663,14 @@ class WorkflowOrchestrationService:
         if next_step_name is None:
             raise ValueError("Schedule proposal steps must declare the persisted step after approval.")
 
+        prior_approval_step = self._step_repo.get_last_for_run(run_id, step_name="await_schedule_approval")
+        next_approval_attempt = 1 if prior_approval_step is None else prior_approval_step.attempt_number + 1
         approval_step = self._step_repo.create(
             NewWorkflowStep(
                 run_id=run_id,
                 step_name="await_schedule_approval",
                 status=WorkflowStepStatus.PENDING.value,
-                attempt_number=1,
+                attempt_number=next_approval_attempt,
             )
         )
         checkpoint = self._approval_repo.create(
@@ -681,6 +699,7 @@ class WorkflowOrchestrationService:
                 payload=ApprovalRequestArtifactPayload(
                     checkpoint_id=checkpoint.id,
                     target_artifact_id=proposal_artifact_id,
+                    target_version_number=self._require_artifact(proposal_artifact_id).version_number,
                     allowed_actions=(
                         ApprovalAction.APPROVE.value,
                         ApprovalAction.REJECT.value,
@@ -845,12 +864,12 @@ class WorkflowOrchestrationService:
                 schema_version=SCHEMA_VERSION,
                 producer_step_name=current_step.step_name,
                 lineage_parent_id=checkpoint.target_artifact_id,
-                payload={
-                    "checkpoint_id": checkpoint.id,
-                    "target_artifact_id": checkpoint.target_artifact_id,
-                    "feedback": checkpoint.revision_feedback,
-                    "superseded_proposal_version": proposal_artifact.version_number,
-                },
+                payload=RevisionRequestArtifactPayload(
+                    checkpoint_id=checkpoint.id,
+                    target_artifact_id=checkpoint.target_artifact_id,
+                    target_version_number=proposal_artifact.version_number,
+                    feedback=checkpoint.revision_feedback or "",
+                ).to_dict(),
             )
         )
         prior_attempt = self._step_repo.get_last_for_run(run_id, step_name=proposal_artifact.producer_step_name)
@@ -919,6 +938,37 @@ class WorkflowOrchestrationService:
             validation_artifact_ids=validation_ids,
             final_summary_text=final_summary_text,
         )
+
+    def _artifact_lineage_kwargs(self, *, run_id: int, step_name: str, artifact_type: str) -> dict[str, int | None]:
+        if artifact_type != WorkflowArtifactType.SCHEDULE_PROPOSAL.value:
+            return {"lineage_parent_id": None, "supersedes_artifact_id": None}
+        proposals = self._artifact_repo.list_for_run_by_type(
+            run_id,
+            artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+        )
+        prior_proposal = proposals[-1] if proposals else None
+        revision_requests = self._artifact_repo.list_for_run_by_type(
+            run_id,
+            artifact_type=WorkflowArtifactType.REVISION_REQUEST.value,
+        )
+        latest_revision_request = revision_requests[-1] if revision_requests else None
+        if (
+            prior_proposal is None
+            or latest_revision_request is None
+            or latest_revision_request.payload.get("target_artifact_id") != prior_proposal.id
+            or prior_proposal.producer_step_name != step_name
+        ):
+            return {"lineage_parent_id": None, "supersedes_artifact_id": None}
+        return {
+            "lineage_parent_id": latest_revision_request.id,
+            "supersedes_artifact_id": prior_proposal.id,
+        }
+
+    def _require_artifact(self, artifact_id: int):
+        artifact = self._artifact_repo.get_by_id(artifact_id)
+        if artifact is None:
+            raise ValueError(f"Workflow artifact {artifact_id} does not exist.")
+        return artifact
 
     def _ensure_current_step(self, state: WorkflowRunState):
         if state.current_step is not None:

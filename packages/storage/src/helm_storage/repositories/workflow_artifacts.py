@@ -66,6 +66,17 @@ class SQLAlchemyWorkflowArtifactRepository:
                 latest[artifact.artifact_type] = artifact
         return latest
 
+    def list_for_run_by_type(self, run_id: int, *, artifact_type: str) -> list[WorkflowArtifactORM]:
+        stmt = (
+            select(WorkflowArtifactORM)
+            .where(
+                WorkflowArtifactORM.run_id == run_id,
+                WorkflowArtifactORM.artifact_type == artifact_type,
+            )
+            .order_by(WorkflowArtifactORM.version_number.asc(), WorkflowArtifactORM.id.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
     def _next_version_number(self, *, run_id: int, artifact_type: str) -> int:
         stmt = select(func.max(WorkflowArtifactORM.version_number)).where(
             WorkflowArtifactORM.run_id == run_id,

@@ -110,6 +110,10 @@ class CalendarAgentInput(BaseModel):
     source_context: dict[str, Any] = Field(default_factory=dict)
     request_text: str | None = None
     warnings: tuple[str, ...] = ()
+    revision_request_artifact_id: int | None = None
+    revision_feedback: str | None = None
+    prior_proposal_artifact_id: int | None = None
+    prior_proposal_version: int | None = None
 
 
 class ScheduleProposalArtifact(BaseModel):
@@ -132,6 +136,7 @@ class ApprovalRequest(BaseModel):
     checkpoint_id: int
     run_id: int
     target_artifact_id: int
+    target_version_number: int
     proposal_summary: str
     allowed_actions: tuple[ApprovalAction, ...]
     pause_reason: str
@@ -142,6 +147,7 @@ class ApprovalDecision(BaseModel):
 
     action: ApprovalAction
     actor: str
+    target_artifact_id: int
     revision_feedback: str | None = None
 
 
@@ -151,6 +157,7 @@ class ApprovalDecisionResult(BaseModel):
     checkpoint_id: int
     action: ApprovalAction
     actor: str
+    target_artifact_id: int
     decision_at: str
     resumed_step_name: str | None = None
 

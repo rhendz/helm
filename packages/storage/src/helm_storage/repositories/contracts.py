@@ -241,6 +241,7 @@ class WorkflowSummaryArtifactPayload:
 class ApprovalRequestArtifactPayload:
     checkpoint_id: int
     target_artifact_id: int
+    target_version_number: int
     allowed_actions: tuple[str, ...]
     pause_reason: str
 
@@ -248,6 +249,7 @@ class ApprovalRequestArtifactPayload:
         return {
             "checkpoint_id": self.checkpoint_id,
             "target_artifact_id": self.target_artifact_id,
+            "target_version_number": self.target_version_number,
             "allowed_actions": list(self.allowed_actions),
             "pause_reason": self.pause_reason,
         }
@@ -257,6 +259,7 @@ class ApprovalRequestArtifactPayload:
 class ApprovalDecisionArtifactPayload:
     checkpoint_id: int
     target_artifact_id: int
+    target_version_number: int
     decision: str
     actor: str
     decision_at: datetime
@@ -266,10 +269,27 @@ class ApprovalDecisionArtifactPayload:
         return {
             "checkpoint_id": self.checkpoint_id,
             "target_artifact_id": self.target_artifact_id,
+            "target_version_number": self.target_version_number,
             "decision": self.decision,
             "actor": self.actor,
             "decision_at": self.decision_at.isoformat(),
             "revision_feedback": self.revision_feedback,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RevisionRequestArtifactPayload:
+    checkpoint_id: int
+    target_artifact_id: int
+    target_version_number: int
+    feedback: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "checkpoint_id": self.checkpoint_id,
+            "target_artifact_id": self.target_artifact_id,
+            "target_version_number": self.target_version_number,
+            "feedback": self.feedback,
         }
 
 
