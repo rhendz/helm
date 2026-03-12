@@ -188,7 +188,10 @@ class WorkflowStepORM(Base):
     specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
         back_populates="step"
     )
-    sync_records: Mapped[list["WorkflowSyncRecordORM"]] = relationship(back_populates="step")
+    sync_records: Mapped[list["WorkflowSyncRecordORM"]] = relationship(
+        back_populates="step",
+        foreign_keys="WorkflowSyncRecordORM.step_id",
+    )
 
 
 class WorkflowArtifactORM(Base):
@@ -352,6 +355,10 @@ class WorkflowSyncRecordORM(Base):
     payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     external_object_id: Mapped[str | None] = mapped_column(String(255))
     last_error_summary: Mapped[str | None] = mapped_column(Text())
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_attempt_step_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_steps.id", ondelete="SET NULL")
+    )
     last_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     supersedes_sync_record_id: Mapped[int | None] = mapped_column(
@@ -368,7 +375,11 @@ class WorkflowSyncRecordORM(Base):
     )
 
     run: Mapped["WorkflowRunORM"] = relationship(back_populates="sync_records")
-    step: Mapped["WorkflowStepORM"] = relationship(back_populates="sync_records")
+    step: Mapped["WorkflowStepORM"] = relationship(
+        back_populates="sync_records",
+        foreign_keys=[step_id],
+    )
+    last_attempt_step: Mapped["WorkflowStepORM | None"] = relationship(foreign_keys=[last_attempt_step_id])
     proposal_artifact: Mapped["WorkflowArtifactORM"] = relationship(foreign_keys=[proposal_artifact_id])
     supersedes_sync_record: Mapped["WorkflowSyncRecordORM | None"] = relationship(
         remote_side="WorkflowSyncRecordORM.id",

@@ -495,6 +495,8 @@ class NewWorkflowSyncRecord:
     status: str = WorkflowSyncStatus.PENDING.value
     external_object_id: str | None = None
     last_error_summary: str | None = None
+    attempt_count: int = 0
+    last_attempt_step_id: int | None = None
     last_attempted_at: datetime | None = None
     completed_at: datetime | None = None
     supersedes_sync_record_id: int | None = None
@@ -506,6 +508,8 @@ class WorkflowSyncRecordPatch:
     status: str | None = None
     external_object_id: str | None = None
     last_error_summary: str | None = None
+    attempt_count: int | None = None
+    last_attempt_step_id: int | None = None
     last_attempted_at: datetime | None = None
     completed_at: datetime | None = None
     supersedes_sync_record_id: int | None = None
@@ -515,6 +519,8 @@ class WorkflowSyncRecordPatch:
 @dataclass(frozen=True, slots=True)
 class WorkflowSyncClaimPatch:
     status: str = WorkflowSyncStatus.IN_PROGRESS.value
+    attempt_count: int | None = None
+    last_attempt_step_id: int | None = None
     last_attempted_at: datetime | None = None
     last_error_summary: str | None = None
 
@@ -536,6 +542,19 @@ class WorkflowSyncFailedQuery:
     statuses: tuple[str, ...] = (
         WorkflowSyncStatus.FAILED_RETRYABLE.value,
         WorkflowSyncStatus.FAILED_TERMINAL.value,
+        WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSyncStepQuery:
+    run_id: int
+    step_name: str
+    max_attempt_number: int
+    statuses: tuple[str, ...] = (
+        WorkflowSyncStatus.PENDING.value,
+        WorkflowSyncStatus.IN_PROGRESS.value,
+        WorkflowSyncStatus.FAILED_RETRYABLE.value,
         WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
     )
 
@@ -771,7 +790,42 @@ class WorkflowSyncRecordRepository(Protocol):
 
     def list_failed(self, query: WorkflowSyncFailedQuery) -> list[WorkflowSyncRecordORM]: ...
 
-    def claim_next_pending(self, *, run_id: int, step_id: int) -> WorkflowSyncRecordORM | None: ...
+    def list_for_step_attempt(self, query: WorkflowSyncStepQuery) -> list[WorkflowSyncRecordORM]: ...
+
+    def claim_next_pending(
+        self,
+        *,
+        run_id: int,
+        step_id: int,
+        step_name: str,
+        step_attempt_number: int,
+    ) -> WorkflowSyncRecordORM | None: ...
+
+    def mark_attempt_started(
+        self,
+        sync_record_id: int,
+        *,
+        step_id: int,
+        attempted_at: datetime | None = None,
+    ) -> WorkflowSyncRecordORM | None: ...
+
+    def mark_succeeded(
+        self,
+        sync_record_id: int,
+        *,
+        external_object_id: str | None = None,
+        completed_at: datetime | None = None,
+    ) -> WorkflowSyncRecordORM | None: ...
+
+    def mark_failed(
+        self,
+        sync_record_id: int,
+        *,
+        status: str,
+        error_summary: str | None,
+        completed_at: datetime | None = None,
+        external_object_id: str | None = None,
+    ) -> WorkflowSyncRecordORM | None: ...
 
     def update(
         self,

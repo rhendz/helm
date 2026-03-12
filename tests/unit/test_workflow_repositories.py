@@ -34,6 +34,7 @@ from helm_storage.repositories import (
     WorkflowSyncRecordRepository,
     WorkflowSyncRemainingQuery,
     WorkflowSyncStatus,
+    WorkflowSyncStepQuery,
     WorkflowTargetSystem,
     WorkflowStepPatch,
     WorkflowStepRepository,
@@ -146,6 +147,8 @@ def test_workflow_schema_tables_include_specialist_dispatch_metadata() -> None:
         "payload_fingerprint",
         "external_object_id",
         "last_error_summary",
+        "attempt_count",
+        "last_attempt_step_id",
         "last_attempted_at",
         "completed_at",
         "supersedes_sync_record_id",
@@ -395,18 +398,22 @@ def test_workflow_sync_record_repository_queries_remaining_and_failed_items() ->
             )
         )
 
-        claimed = sync_repo.claim_next_pending(run_id=run.id, step_id=step.id)
+        claimed = sync_repo.claim_next_pending(
+            run_id=run.id,
+            step_id=step.id,
+            step_name=step.step_name,
+            step_attempt_number=step.attempt_number,
+        )
         assert claimed is not None
         assert claimed.id == pending.id
         assert claimed.status == WorkflowSyncStatus.IN_PROGRESS.value
+        assert claimed.attempt_count == 1
+        assert claimed.last_attempt_step_id == step.id
 
-        completed = sync_repo.update(
+        completed = sync_repo.mark_succeeded(
             claimed.id,
-            WorkflowSyncRecordPatch(
-                status=WorkflowSyncStatus.SUCCEEDED.value,
-                external_object_id="task-123",
-                completed_at=datetime.now(UTC),
-            ),
+            external_object_id="task-123",
+            completed_at=datetime.now(UTC),
         )
         assert completed is not None
         assert completed.external_object_id == "task-123"
@@ -415,6 +422,135 @@ def test_workflow_sync_record_repository_queries_remaining_and_failed_items() ->
         assert [record.id for record in remaining] == [failed.id]
         failed_items = sync_repo.list_failed(WorkflowSyncFailedQuery(run_id=run.id))
         assert [record.id for record in failed_items] == [failed.id]
+
+
+def test_workflow_sync_record_repository_retry_sync_items_by_step_attempt_lineage() -> None:
+    with _session() as session:
+        run_repo = SQLAlchemyWorkflowRunRepository(session)
+        step_repo = SQLAlchemyWorkflowStepRepository(session)
+        artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+
+        run = run_repo.create(
+            NewWorkflowRun(
+                workflow_type="weekly_scheduling",
+                status=WorkflowRunStatus.RUNNING.value,
+                current_step_name="apply_schedule",
+                current_step_attempt=2,
+                attempt_count=2,
+            )
+        )
+        first_attempt = step_repo.create(
+            NewWorkflowStep(
+                run_id=run.id,
+                step_name="apply_schedule",
+                status=WorkflowStepStatus.FAILED.value,
+                attempt_number=1,
+            )
+        )
+        second_attempt = step_repo.create(
+            NewWorkflowStep(
+                run_id=run.id,
+                step_name="apply_schedule",
+                status=WorkflowStepStatus.RUNNING.value,
+                attempt_number=2,
+            )
+        )
+        other_step = step_repo.create(
+            NewWorkflowStep(
+                run_id=run.id,
+                step_name="dispatch_calendar_agent",
+                status=WorkflowStepStatus.SUCCEEDED.value,
+                attempt_number=1,
+            )
+        )
+        proposal = artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run.id,
+                step_id=first_attempt.id,
+                artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                schema_version="2026-03-13",
+                producer_step_name="dispatch_calendar_agent",
+                payload=ScheduleProposalArtifactPayload(
+                    proposal_summary="Apply a reviewed weekly schedule.",
+                    calendar_id="primary",
+                    time_blocks=(),
+                    proposed_changes=(),
+                ).to_dict(),
+            )
+        )
+
+        retryable = sync_repo.create(
+            NewWorkflowSyncRecord(
+                run_id=run.id,
+                step_id=first_attempt.id,
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.TASK_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.TASK_UPSERT.value,
+                planned_item_key="task:retryable",
+                execution_order=1,
+                idempotency_key=f"wf-sync:{proposal.id}:task:retryable",
+                payload_fingerprint="sha256:retryable",
+                payload={"title": "Retryable"},
+                status=WorkflowSyncStatus.FAILED_RETRYABLE.value,
+            )
+        )
+        sync_repo.create(
+            NewWorkflowSyncRecord(
+                run_id=run.id,
+                step_id=first_attempt.id,
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
+                planned_item_key="calendar:uncertain",
+                execution_order=2,
+                idempotency_key=f"wf-sync:{proposal.id}:calendar:uncertain",
+                payload_fingerprint="sha256:uncertain",
+                payload={"title": "Uncertain"},
+                status=WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+            )
+        )
+        sync_repo.create(
+            NewWorkflowSyncRecord(
+                run_id=run.id,
+                step_id=other_step.id,
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
+                planned_item_key="calendar:other-step",
+                execution_order=3,
+                idempotency_key=f"wf-sync:{proposal.id}:calendar:other-step",
+                payload_fingerprint="sha256:other-step",
+                payload={"title": "Other step"},
+                status=WorkflowSyncStatus.FAILED_RETRYABLE.value,
+            )
+        )
+
+        scoped = sync_repo.list_for_step_attempt(
+            WorkflowSyncStepQuery(
+                run_id=run.id,
+                step_name="apply_schedule",
+                max_attempt_number=second_attempt.attempt_number,
+            )
+        )
+        assert [record.planned_item_key for record in scoped] == [
+            "task:retryable",
+            "calendar:uncertain",
+        ]
+
+        claimed = sync_repo.claim_next_pending(
+            run_id=run.id,
+            step_id=second_attempt.id,
+            step_name=second_attempt.step_name,
+            step_attempt_number=second_attempt.attempt_number,
+        )
+        assert claimed is not None
+        assert claimed.id == retryable.id
+        assert claimed.last_attempt_step_id == second_attempt.id
+        assert claimed.attempt_count == 1
 
 
 def test_workflow_specialist_invocation_and_schedule_proposal_lineage() -> None:

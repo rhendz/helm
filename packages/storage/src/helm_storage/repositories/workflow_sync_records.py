@@ -1,14 +1,16 @@
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime
 
-from helm_storage.models import WorkflowSyncRecordORM
+from sqlalchemy import select
+from sqlalchemy.orm import Session, aliased
+
+from helm_storage.models import WorkflowStepORM, WorkflowSyncRecordORM
 from helm_storage.repositories.contracts import (
     NewWorkflowSyncRecord,
-    WorkflowSyncClaimPatch,
     WorkflowSyncFailedQuery,
     WorkflowSyncRecordPatch,
     WorkflowSyncRemainingQuery,
     WorkflowSyncStatus,
+    WorkflowSyncStepQuery,
 )
 
 
@@ -32,6 +34,8 @@ class SQLAlchemyWorkflowSyncRecordRepository:
             payload=sync_record.payload,
             external_object_id=sync_record.external_object_id,
             last_error_summary=sync_record.last_error_summary,
+            attempt_count=sync_record.attempt_count,
+            last_attempt_step_id=sync_record.last_attempt_step_id,
             last_attempted_at=sync_record.last_attempted_at,
             completed_at=sync_record.completed_at,
             supersedes_sync_record_id=sync_record.supersedes_sync_record_id,
@@ -98,15 +102,98 @@ class SQLAlchemyWorkflowSyncRecordRepository:
         )
         return list(self._session.execute(stmt).scalars().all())
 
-    def claim_next_pending(self, *, run_id: int, step_id: int) -> WorkflowSyncRecordORM | None:
-        pending = self.list_remaining(WorkflowSyncRemainingQuery(run_id=run_id))
+    def list_for_step_attempt(self, query: WorkflowSyncStepQuery) -> list[WorkflowSyncRecordORM]:
+        source_step = aliased(WorkflowStepORM)
+        stmt = (
+            select(WorkflowSyncRecordORM)
+            .join(source_step, WorkflowSyncRecordORM.step_id == source_step.id)
+            .where(WorkflowSyncRecordORM.run_id == query.run_id)
+            .where(WorkflowSyncRecordORM.status.in_(query.statuses))
+            .where(source_step.step_name == query.step_name)
+            .where(source_step.attempt_number <= query.max_attempt_number)
+            .order_by(WorkflowSyncRecordORM.execution_order.asc(), WorkflowSyncRecordORM.id.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())
+
+    def claim_next_pending(
+        self,
+        *,
+        run_id: int,
+        step_id: int,
+        step_name: str,
+        step_attempt_number: int,
+    ) -> WorkflowSyncRecordORM | None:
+        pending = self.list_for_step_attempt(
+            WorkflowSyncStepQuery(
+                run_id=run_id,
+                step_name=step_name,
+                max_attempt_number=step_attempt_number,
+                statuses=(
+                    WorkflowSyncStatus.PENDING.value,
+                    WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                    WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+                ),
+            )
+        )
         if not pending:
             return None
-        next_record = pending[0]
-        return self._apply_claim(
-            next_record.id,
-            WorkflowSyncClaimPatch(status=WorkflowSyncStatus.IN_PROGRESS.value),
-            step_id=step_id,
+        return self.mark_attempt_started(pending[0].id, step_id=step_id)
+
+    def mark_attempt_started(
+        self,
+        sync_record_id: int,
+        *,
+        step_id: int,
+        attempted_at: datetime | None = None,
+    ) -> WorkflowSyncRecordORM | None:
+        record = self.get_by_id(sync_record_id)
+        if record is None:
+            return None
+        record.status = WorkflowSyncStatus.IN_PROGRESS.value
+        record.last_attempt_step_id = step_id
+        record.last_attempted_at = attempted_at or _now()
+        record.last_error_summary = None
+        record.completed_at = None
+        record.attempt_count = record.attempt_count + 1
+        self._session.add(record)
+        self._session.commit()
+        self._session.refresh(record)
+        return record
+
+    def mark_succeeded(
+        self,
+        sync_record_id: int,
+        *,
+        external_object_id: str | None = None,
+        completed_at: datetime | None = None,
+    ) -> WorkflowSyncRecordORM | None:
+        return self.update(
+            sync_record_id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.SUCCEEDED.value,
+                external_object_id=external_object_id,
+                last_error_summary=None,
+                completed_at=completed_at or _now(),
+            ),
+        )
+
+    def mark_failed(
+        self,
+        sync_record_id: int,
+        *,
+        status: str,
+        error_summary: str | None,
+        completed_at: datetime | None = None,
+        external_object_id: str | None = None,
+    ) -> WorkflowSyncRecordORM | None:
+        return self.update(
+            sync_record_id,
+            WorkflowSyncRecordPatch(
+                status=status,
+                external_object_id=external_object_id,
+                last_error_summary=error_summary,
+                completed_at=completed_at or _now(),
+            ),
         )
 
     def update(
@@ -126,21 +213,6 @@ class SQLAlchemyWorkflowSyncRecordRepository:
         self._session.refresh(record)
         return record
 
-    def _apply_claim(
-        self,
-        sync_record_id: int,
-        patch: WorkflowSyncClaimPatch,
-        *,
-        step_id: int,
-    ) -> WorkflowSyncRecordORM | None:
-        record = self.get_by_id(sync_record_id)
-        if record is None:
-            return None
-        record.step_id = step_id
-        record.status = patch.status
-        record.last_attempted_at = patch.last_attempted_at
-        record.last_error_summary = patch.last_error_summary
-        self._session.add(record)
-        self._session.commit()
-        self._session.refresh(record)
-        return record
+
+def _now() -> datetime:
+    return datetime.now(UTC)
