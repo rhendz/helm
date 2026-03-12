@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-12T22:24:13.962Z"
-last_activity: 2026-03-12 — Completed phase 3 plan 01 durable approved sync manifest
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-12T22:42:40.669Z"
+last_activity: 2026-03-12 — Completed phase 3 plan 02 idempotent sync execution and restart-safe recovery
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 7
-  percent: 64
+  completed_plans: 8
+  percent: 73
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 3 of 4 (Adapter Writes And Recovery Guarantees)
-Plan: 1 of 5 in current phase
+Plan: 2 of 5 in current phase
 Status: In progress
-Last activity: 2026-03-12 — Completed phase 3 plan 01 durable approved sync manifest
+Last activity: 2026-03-12 — Completed phase 3 plan 02 idempotent sync execution and restart-safe recovery
 
-Progress: [██████░░░░] 64%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
 **Velocity:**
 - Total plans completed: 7
-- Average duration: 10 min
-- Total execution time: 1.3 hours
+- Average duration: 11 min
+- Total execution time: 1.6 hours
 
 **By Phase:**
 
@@ -57,6 +57,7 @@ Progress: [██████░░░░] 64%
 | Phase 02-specialist-dispatch-and-approval-semantics P02 | 9 | 3 tasks | 23 files |
 | Phase 02-specialist-dispatch-and-approval-semantics P03 | 15 min | 3 tasks | 17 files |
 | Phase 03 P01 | 20 min | 3 tasks | 11 files |
+| Phase 03 P02 | 17 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Approved proposal execution now materializes deterministic task and calendar sync records before any adapter call path runs.
 - [Phase 03]: Sync identity is anchored to proposal artifact id, proposal version, target system, sync kind, and planned item key with relational uniqueness.
 - [Phase 03]: Adapter protocols return normalized request, outcome, and reconciliation envelopes while orchestration retains ordering and retry policy.
+- [Phase 03]: Sync retries and restarts rebuild remaining work from persisted sync records scoped to step lineage.
+- [Phase 03]: Orchestration owns sync ordering, retryability, and reconciliation while connectors expose only upsert and reconcile contracts.
+- [Phase 03]: Uncertain sync outcomes must reconcile durable identity before Helm issues another outbound write.
 
 ### Pending Todos
 
@@ -99,6 +103,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T22:24:13.960Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-12T22:42:40.669Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

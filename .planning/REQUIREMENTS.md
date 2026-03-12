@@ -43,14 +43,14 @@
 - [x] **SYNC-01**: Helm writes approved task updates through a task-system adapter rather than directly from workflow logic.
 - [x] **SYNC-02**: Helm writes approved calendar updates through a calendar adapter rather than directly from workflow logic.
 - [x] **SYNC-03**: Helm persists adapter sync records for each outbound write, including target system, attempt status, and external object ID when created or updated.
-- [ ] **SYNC-04**: Helm prevents duplicate downstream writes when a workflow step is retried after failure.
-- [ ] **SYNC-05**: Helm prevents duplicate downstream writes when a paused or interrupted workflow is resumed after restart or operator action.
-- [ ] **SYNC-06**: Helm uses persisted idempotency data or equivalent sync keys so downstream create, update, and delete actions can be reconciled safely across retry and resume paths.
+- [x] **SYNC-04**: Helm prevents duplicate downstream writes when a workflow step is retried after failure.
+- [x] **SYNC-05**: Helm prevents duplicate downstream writes when a paused or interrupted workflow is resumed after restart or operator action.
+- [x] **SYNC-06**: Helm uses persisted idempotency data or equivalent sync keys so downstream create, update, and delete actions can be reconciled safely across retry and resume paths.
 
 ### Recovery And Replay
 
-- [ ] **RCVR-01**: Helm can recover an in-flight workflow after worker or process restart without losing run lineage.
-- [ ] **RCVR-02**: Helm can retry a failed workflow step by re-attempting the same step within the same workflow run while preserving prior artifacts, failure records, and idempotency protections.
+- [x] **RCVR-01**: Helm can recover an in-flight workflow after worker or process restart without losing run lineage.
+- [x] **RCVR-02**: Helm can retry a failed workflow step by re-attempting the same step within the same workflow run while preserving prior artifacts, failure records, and idempotency protections.
 - [ ] **RCVR-03**: Helm can replay a workflow step or run as an intentional re-execution event with explicit lineage to the original failed or prior execution.
 - [ ] **RCVR-04**: Helm records enough workflow state to distinguish recoverable failures from terminal failures.
 
@@ -119,11 +119,11 @@
 | SYNC-01 | Phase 3 | Complete |
 | SYNC-02 | Phase 3 | Complete |
 | SYNC-03 | Phase 3 | Complete |
-| SYNC-04 | Phase 3 | Pending |
-| SYNC-05 | Phase 3 | Pending |
-| SYNC-06 | Phase 3 | Pending |
-| RCVR-01 | Phase 3 | Pending |
-| RCVR-02 | Phase 3 | Pending |
+| SYNC-04 | Phase 3 | Complete |
+| SYNC-05 | Phase 3 | Complete |
+| SYNC-06 | Phase 3 | Complete |
+| RCVR-01 | Phase 3 | Complete |
+| RCVR-02 | Phase 3 | Complete |
 | RCVR-03 | Phase 3 | Pending |
 | RCVR-04 | Phase 3 | Pending |
 | DEMO-01 | Phase 4 | Pending |
@@ -140,4 +140,4 @@
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-12 after completing Phase 2 plan 03*
+*Last updated: 2026-03-12 after completing Phase 3 plan 02*

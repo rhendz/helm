@@ -64,7 +64,7 @@ Plans:
 
 Plans:
 - [x] 03-01: Implement task-system and calendar adapter contracts with sync-record persistence.
-- [ ] 03-02: Add idempotency keys, duplicate-write prevention, and reconciliation behavior across retry and resume.
+- [x] 03-02: Add idempotency keys, duplicate-write prevention, and reconciliation behavior across retry and resume.
 - [ ] 03-03: Add retry vs replay semantics, recovery state tracking, and operator-safe failure handling.
 - [ ] 03-04: Expose recovery semantics through the shared workflow status projection.
 - [ ] 03-05: Wire replay and recovery entrypoints through API, worker, and Telegram surfaces.
@@ -93,5 +93,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
 | 2. Specialist Dispatch And Approval Semantics | 3/3 | Complete | 2026-03-12 |
-| 3. Adapter Writes And Recovery Guarantees | 1/5 | In Progress | - |
+| 3. Adapter Writes And Recovery Guarantees | 2/5 | In Progress | - |
 | 4. Representative Scheduling Workflow | 0/2 | Not started | - |
