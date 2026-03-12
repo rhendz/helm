@@ -19,6 +19,7 @@ from helm_storage.models import (
     WorkflowEventORM,
     WorkflowRunORM,
     WorkflowSpecialistInvocationORM,
+    WorkflowSyncRecordORM,
     WorkflowStepORM,
 )
 
@@ -135,6 +136,26 @@ class WorkflowArtifactType(StrEnum):
     FINAL_SUMMARY = "final_summary"
 
 
+class WorkflowSyncStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    SUCCEEDED = "succeeded"
+    FAILED_RETRYABLE = "failed_retryable"
+    FAILED_TERMINAL = "failed_terminal"
+    UNCERTAIN_NEEDS_RECONCILIATION = "uncertain_needs_reconciliation"
+    CANCELLED = "cancelled"
+
+
+class WorkflowTargetSystem(StrEnum):
+    TASK_SYSTEM = "task_system"
+    CALENDAR_SYSTEM = "calendar_system"
+
+
+class WorkflowSyncKind(StrEnum):
+    TASK_UPSERT = "task_upsert"
+    CALENDAR_BLOCK_UPSERT = "calendar_block_upsert"
+
+
 class WorkflowBlockedReason(StrEnum):
     VALIDATION_FAILED = "validation_failed"
     APPROVAL_REQUIRED = "approval_required"
@@ -208,6 +229,28 @@ class ScheduleProposalArtifactPayload:
             "time_blocks": list(self.time_blocks),
             "proposed_changes": list(self.proposed_changes),
             "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSyncPayload:
+    proposal_artifact_id: int
+    proposal_version_number: int
+    target_system: str
+    sync_kind: str
+    planned_item_key: str
+    payload: dict[str, Any]
+    payload_fingerprint: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "proposal_artifact_id": self.proposal_artifact_id,
+            "proposal_version_number": self.proposal_version_number,
+            "target_system": self.target_system,
+            "sync_kind": self.sync_kind,
+            "planned_item_key": self.planned_item_key,
+            "payload": self.payload,
+            "payload_fingerprint": self.payload_fingerprint,
         }
 
 
@@ -433,6 +476,68 @@ class WorkflowRunState:
     last_event: WorkflowEventORM | None
     approval_checkpoints: tuple[WorkflowApprovalCheckpointORM, ...]
     active_approval_checkpoint: WorkflowApprovalCheckpointORM | None
+    sync_records: tuple[WorkflowSyncRecordORM, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class NewWorkflowSyncRecord:
+    run_id: int
+    step_id: int
+    proposal_artifact_id: int
+    proposal_version_number: int
+    target_system: str
+    sync_kind: str
+    planned_item_key: str
+    execution_order: int
+    idempotency_key: str
+    payload_fingerprint: str
+    payload: dict[str, Any]
+    status: str = WorkflowSyncStatus.PENDING.value
+    external_object_id: str | None = None
+    last_error_summary: str | None = None
+    last_attempted_at: datetime | None = None
+    completed_at: datetime | None = None
+    supersedes_sync_record_id: int | None = None
+    replayed_from_sync_record_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSyncRecordPatch:
+    status: str | None = None
+    external_object_id: str | None = None
+    last_error_summary: str | None = None
+    last_attempted_at: datetime | None = None
+    completed_at: datetime | None = None
+    supersedes_sync_record_id: int | None = None
+    replayed_from_sync_record_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSyncClaimPatch:
+    status: str = WorkflowSyncStatus.IN_PROGRESS.value
+    last_attempted_at: datetime | None = None
+    last_error_summary: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSyncRemainingQuery:
+    run_id: int
+    statuses: tuple[str, ...] = (
+        WorkflowSyncStatus.PENDING.value,
+        WorkflowSyncStatus.IN_PROGRESS.value,
+        WorkflowSyncStatus.FAILED_RETRYABLE.value,
+        WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSyncFailedQuery:
+    run_id: int
+    statuses: tuple[str, ...] = (
+        WorkflowSyncStatus.FAILED_RETRYABLE.value,
+        WorkflowSyncStatus.FAILED_TERMINAL.value,
+        WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+    )
 
 
 @runtime_checkable
@@ -635,4 +740,35 @@ class WorkflowApprovalCheckpointRepository(Protocol):
 
     def list_for_run(self, run_id: int) -> list[WorkflowApprovalCheckpointORM]: ...
 
-    def list_for_run(self, run_id: int) -> list[WorkflowSpecialistInvocationORM]: ...
+
+@runtime_checkable
+class WorkflowSyncRecordRepository(Protocol):
+    def create(self, sync_record: NewWorkflowSyncRecord) -> WorkflowSyncRecordORM: ...
+
+    def get_by_id(self, sync_record_id: int) -> WorkflowSyncRecordORM | None: ...
+
+    def get_by_identity(
+        self,
+        *,
+        proposal_artifact_id: int,
+        proposal_version_number: int,
+        target_system: str,
+        sync_kind: str,
+        planned_item_key: str,
+    ) -> WorkflowSyncRecordORM | None: ...
+
+    def list_for_run(self, run_id: int) -> list[WorkflowSyncRecordORM]: ...
+
+    def list_for_proposal(self, proposal_artifact_id: int) -> list[WorkflowSyncRecordORM]: ...
+
+    def list_remaining(self, query: WorkflowSyncRemainingQuery) -> list[WorkflowSyncRecordORM]: ...
+
+    def list_failed(self, query: WorkflowSyncFailedQuery) -> list[WorkflowSyncRecordORM]: ...
+
+    def claim_next_pending(self, *, run_id: int, step_id: int) -> WorkflowSyncRecordORM | None: ...
+
+    def update(
+        self,
+        sync_record_id: int,
+        patch: WorkflowSyncRecordPatch,
+    ) -> WorkflowSyncRecordORM | None: ...

@@ -4,6 +4,7 @@ from helm_storage.db import Base
 from helm_storage.repositories import (
     ApprovalDecisionArtifactPayload,
     ApprovalRequestArtifactPayload,
+    NewWorkflowSyncRecord,
     NormalizedTaskArtifactPayload,
     NewWorkflowApprovalCheckpoint,
     RawRequestArtifactPayload,
@@ -13,6 +14,7 @@ from helm_storage.repositories import (
     SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowRunRepository,
     SQLAlchemyWorkflowSpecialistInvocationRepository,
+    SQLAlchemyWorkflowSyncRecordRepository,
     SQLAlchemyWorkflowStepRepository,
     ValidationArtifactPayload,
     WorkflowArtifactRepository,
@@ -21,11 +23,18 @@ from helm_storage.repositories import (
     WorkflowApprovalCheckpointRepository,
     WorkflowBlockedReason,
     WorkflowEventRepository,
-    WorkflowSpecialistInvocationRepository,
     WorkflowRunPatch,
     WorkflowRunRepository,
     WorkflowRunStatus,
+    WorkflowSpecialistInvocationRepository,
     WorkflowSpecialistInvocationPatch,
+    WorkflowSyncFailedQuery,
+    WorkflowSyncKind,
+    WorkflowSyncRecordPatch,
+    WorkflowSyncRecordRepository,
+    WorkflowSyncRemainingQuery,
+    WorkflowSyncStatus,
+    WorkflowTargetSystem,
     WorkflowStepPatch,
     WorkflowStepRepository,
     WorkflowStepStatus,
@@ -61,6 +70,7 @@ def test_workflow_schema_tables_include_specialist_dispatch_metadata() -> None:
         "workflow_events",
         "workflow_approval_checkpoints",
         "workflow_specialist_invocations",
+        "workflow_sync_records",
     }
 
     run_columns = {column["name"] for column in inspector.get_columns("workflow_runs")}
@@ -122,6 +132,25 @@ def test_workflow_schema_tables_include_specialist_dispatch_metadata() -> None:
         "completed_at",
         "error_summary",
     } <= invocation_columns
+
+    sync_columns = {column["name"] for column in inspector.get_columns("workflow_sync_records")}
+    assert {
+        "proposal_artifact_id",
+        "proposal_version_number",
+        "target_system",
+        "sync_kind",
+        "planned_item_key",
+        "execution_order",
+        "status",
+        "idempotency_key",
+        "payload_fingerprint",
+        "external_object_id",
+        "last_error_summary",
+        "last_attempted_at",
+        "completed_at",
+        "supersedes_sync_record_id",
+        "replayed_from_sync_record_id",
+    } <= sync_columns
 
 
 def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> None:
@@ -193,6 +222,199 @@ def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> No
         assert current_state.last_event is not None
         assert current_state.last_event.summary == "Normalization started"
         assert current_state.active_approval_checkpoint is None
+        assert current_state.sync_records == ()
+
+
+def test_workflow_sync_record_repository_enforces_durable_identity_and_lineage() -> None:
+    with _session() as session:
+        run_repo = SQLAlchemyWorkflowRunRepository(session)
+        step_repo = SQLAlchemyWorkflowStepRepository(session)
+        artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+
+        assert isinstance(sync_repo, WorkflowSyncRecordRepository)
+
+        run = run_repo.create(
+            NewWorkflowRun(
+                workflow_type="weekly_scheduling",
+                status=WorkflowRunStatus.PENDING.value,
+                current_step_name="apply_schedule",
+                current_step_attempt=1,
+                attempt_count=1,
+            )
+        )
+        step = step_repo.create(
+            NewWorkflowStep(
+                run_id=run.id,
+                step_name="apply_schedule",
+                status=WorkflowStepStatus.PENDING.value,
+                attempt_number=1,
+            )
+        )
+        proposal = artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run.id,
+                step_id=step.id,
+                artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                schema_version="2026-03-13",
+                producer_step_name="dispatch_calendar_agent",
+                payload=ScheduleProposalArtifactPayload(
+                    proposal_summary="Apply a reviewed weekly schedule.",
+                    calendar_id="primary",
+                    time_blocks=(
+                        {
+                            "title": "Inbox triage",
+                            "start": "2026-03-16T09:00:00Z",
+                            "end": "2026-03-16T09:30:00Z",
+                            "task_title": "Triage inbox",
+                        },
+                    ),
+                    proposed_changes=("Create one task write and one calendar block.",),
+                ).to_dict(),
+            )
+        )
+
+        task_sync = sync_repo.create(
+            NewWorkflowSyncRecord(
+                run_id=run.id,
+                step_id=step.id,
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.TASK_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.TASK_UPSERT.value,
+                planned_item_key="task:triage-inbox",
+                execution_order=1,
+                idempotency_key=f"wf-sync:{proposal.id}:task:triage-inbox",
+                payload_fingerprint="sha256:task-1",
+                payload={"title": "Triage inbox", "summary": "Clear pending email."},
+            )
+        )
+        calendar_sync = sync_repo.create(
+            NewWorkflowSyncRecord(
+                run_id=run.id,
+                step_id=step.id,
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
+                planned_item_key="calendar:focus-block-1",
+                execution_order=2,
+                idempotency_key=f"wf-sync:{proposal.id}:calendar:focus-block-1",
+                payload_fingerprint="sha256:cal-1",
+                payload={"title": "Inbox triage", "start": "2026-03-16T09:00:00Z"},
+                supersedes_sync_record_id=task_sync.id,
+            )
+        )
+
+        listed = sync_repo.list_for_run(run.id)
+        assert [record.planned_item_key for record in listed] == [
+            "task:triage-inbox",
+            "calendar:focus-block-1",
+        ]
+        assert sync_repo.get_by_identity(
+            proposal_artifact_id=proposal.id,
+            proposal_version_number=proposal.version_number,
+            target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
+            sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
+            planned_item_key="calendar:focus-block-1",
+        ) == calendar_sync
+        assert listed[1].supersedes_sync_record_id == task_sync.id
+        assert sync_repo.list_for_proposal(proposal.id)[0].proposal_version_number == proposal.version_number
+
+
+def test_workflow_sync_record_repository_queries_remaining_and_failed_items() -> None:
+    with _session() as session:
+        run_repo = SQLAlchemyWorkflowRunRepository(session)
+        step_repo = SQLAlchemyWorkflowStepRepository(session)
+        artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+
+        run = run_repo.create(
+            NewWorkflowRun(
+                workflow_type="weekly_scheduling",
+                status=WorkflowRunStatus.RUNNING.value,
+                current_step_name="apply_schedule",
+                current_step_attempt=1,
+                attempt_count=1,
+            )
+        )
+        step = step_repo.create(
+            NewWorkflowStep(
+                run_id=run.id,
+                step_name="apply_schedule",
+                status=WorkflowStepStatus.RUNNING.value,
+                attempt_number=1,
+            )
+        )
+        proposal = artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run.id,
+                step_id=step.id,
+                artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                schema_version="2026-03-13",
+                producer_step_name="dispatch_calendar_agent",
+                payload=ScheduleProposalArtifactPayload(
+                    proposal_summary="Apply a reviewed weekly schedule.",
+                    calendar_id="primary",
+                    time_blocks=(),
+                    proposed_changes=(),
+                ).to_dict(),
+            )
+        )
+
+        pending = sync_repo.create(
+            NewWorkflowSyncRecord(
+                run_id=run.id,
+                step_id=step.id,
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.TASK_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.TASK_UPSERT.value,
+                planned_item_key="task:triage-inbox",
+                execution_order=1,
+                idempotency_key=f"wf-sync:{proposal.id}:task:triage-inbox",
+                payload_fingerprint="sha256:task-1",
+                payload={"title": "Triage inbox"},
+            )
+        )
+        failed = sync_repo.create(
+            NewWorkflowSyncRecord(
+                run_id=run.id,
+                step_id=step.id,
+                proposal_artifact_id=proposal.id,
+                proposal_version_number=proposal.version_number,
+                target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
+                sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
+                planned_item_key="calendar:focus-block-1",
+                execution_order=2,
+                idempotency_key=f"wf-sync:{proposal.id}:calendar:focus-block-1",
+                payload_fingerprint="sha256:cal-1",
+                payload={"title": "Inbox triage"},
+                status=WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                last_error_summary="Calendar API timed out.",
+            )
+        )
+
+        claimed = sync_repo.claim_next_pending(run_id=run.id, step_id=step.id)
+        assert claimed is not None
+        assert claimed.id == pending.id
+        assert claimed.status == WorkflowSyncStatus.IN_PROGRESS.value
+
+        completed = sync_repo.update(
+            claimed.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.SUCCEEDED.value,
+                external_object_id="task-123",
+                completed_at=datetime.now(UTC),
+            ),
+        )
+        assert completed is not None
+        assert completed.external_object_id == "task-123"
+
+        remaining = sync_repo.list_remaining(WorkflowSyncRemainingQuery(run_id=run.id))
+        assert [record.id for record in remaining] == [failed.id]
+        failed_items = sync_repo.list_failed(WorkflowSyncFailedQuery(run_id=run.id))
+        assert [record.id for record in failed_items] == [failed.id]
 
 
 def test_workflow_specialist_invocation_and_schedule_proposal_lineage() -> None:

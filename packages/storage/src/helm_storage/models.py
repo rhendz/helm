@@ -156,6 +156,9 @@ class WorkflowRunORM(Base):
     specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
+    sync_records: Mapped[list["WorkflowSyncRecordORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
 
 
 class WorkflowStepORM(Base):
@@ -185,6 +188,7 @@ class WorkflowStepORM(Base):
     specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
         back_populates="step"
     )
+    sync_records: Mapped[list["WorkflowSyncRecordORM"]] = relationship(back_populates="step")
 
 
 class WorkflowArtifactORM(Base):
@@ -313,6 +317,66 @@ class WorkflowSpecialistInvocationORM(Base):
     output_artifact: Mapped["WorkflowArtifactORM | None"] = relationship(
         back_populates="output_from_invocations",
         foreign_keys=[output_artifact_id],
+    )
+
+
+class WorkflowSyncRecordORM(Base):
+    __tablename__ = "workflow_sync_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "proposal_artifact_id",
+            "proposal_version_number",
+            "target_system",
+            "sync_kind",
+            "planned_item_key",
+            name="uq_workflow_sync_record_identity",
+        ),
+        UniqueConstraint("idempotency_key", name="uq_workflow_sync_record_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int] = mapped_column(ForeignKey("workflow_steps.id", ondelete="CASCADE"))
+    proposal_artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    proposal_version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_system: Mapped[str] = mapped_column(String(64), nullable=False)
+    sync_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    planned_item_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    execution_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    external_object_id: Mapped[str | None] = mapped_column(String(255))
+    last_error_summary: Mapped[str | None] = mapped_column(Text())
+    last_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supersedes_sync_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_sync_records.id", ondelete="SET NULL")
+    )
+    replayed_from_sync_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_sync_records.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="sync_records")
+    step: Mapped["WorkflowStepORM"] = relationship(back_populates="sync_records")
+    proposal_artifact: Mapped["WorkflowArtifactORM"] = relationship(foreign_keys=[proposal_artifact_id])
+    supersedes_sync_record: Mapped["WorkflowSyncRecordORM | None"] = relationship(
+        remote_side="WorkflowSyncRecordORM.id",
+        foreign_keys=[supersedes_sync_record_id],
+    )
+    replayed_from_sync_record: Mapped["WorkflowSyncRecordORM | None"] = relationship(
+        remote_side="WorkflowSyncRecordORM.id",
+        foreign_keys=[replayed_from_sync_record_id],
     )
 
 

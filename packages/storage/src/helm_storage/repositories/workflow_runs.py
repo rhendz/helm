@@ -6,6 +6,7 @@ from helm_storage.models import (
     WorkflowArtifactORM,
     WorkflowEventORM,
     WorkflowRunORM,
+    WorkflowSyncRecordORM,
     WorkflowStepORM,
 )
 from helm_storage.repositories.contracts import WorkflowRunPatch, WorkflowRunState
@@ -65,6 +66,7 @@ class SQLAlchemyWorkflowRunRepository:
                 selectinload(WorkflowRunORM.artifacts),
                 selectinload(WorkflowRunORM.events),
                 selectinload(WorkflowRunORM.approval_checkpoints),
+                selectinload(WorkflowRunORM.sync_records),
             )
             .where(WorkflowRunORM.id == run_id)
         )
@@ -81,6 +83,7 @@ class SQLAlchemyWorkflowRunRepository:
                 selectinload(WorkflowRunORM.artifacts),
                 selectinload(WorkflowRunORM.events),
                 selectinload(WorkflowRunORM.approval_checkpoints),
+                selectinload(WorkflowRunORM.sync_records),
             )
             .where(WorkflowRunORM.needs_action.is_(True))
             .order_by(WorkflowRunORM.started_at.desc(), WorkflowRunORM.id.desc())
@@ -98,6 +101,7 @@ class SQLAlchemyWorkflowRunRepository:
                 selectinload(WorkflowRunORM.artifacts),
                 selectinload(WorkflowRunORM.events),
                 selectinload(WorkflowRunORM.approval_checkpoints),
+                selectinload(WorkflowRunORM.sync_records),
             )
             .where(WorkflowRunORM.needs_action.is_(False))
             .where(WorkflowRunORM.status.in_(("pending", "running")))
@@ -122,6 +126,7 @@ def _build_state(run: WorkflowRunORM) -> WorkflowRunState:
         last_event=last_event,
         approval_checkpoints=approval_checkpoints,
         active_approval_checkpoint=active_approval_checkpoint,
+        sync_records=tuple(sorted(run.sync_records, key=lambda sync_record: (sync_record.execution_order, sync_record.id))),
     )
 
 

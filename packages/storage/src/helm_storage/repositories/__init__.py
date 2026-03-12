@@ -41,6 +41,17 @@ from helm_storage.repositories.contracts import (
     WorkflowRunRepository,
     WorkflowRunState,
     WorkflowRunStatus,
+    WorkflowSyncFailedQuery,
+    WorkflowSyncKind,
+    WorkflowSyncPayload,
+    WorkflowSyncRecordPatch,
+    WorkflowSyncRecordRepository,
+    WorkflowSyncRemainingQuery,
+    WorkflowSyncStatus,
+    WorkflowSyncKind,
+    WorkflowSyncClaimPatch,
+    WorkflowTargetSystem,
+    NewWorkflowSyncRecord,
     WorkflowSpecialistInvocationPatch,
     WorkflowSpecialistInvocationRepository,
     WorkflowStepPatch,
@@ -74,6 +85,7 @@ from helm_storage.repositories.workflow_specialist_invocations import (
     SQLAlchemyWorkflowSpecialistInvocationRepository,
 )
 from helm_storage.repositories.workflow_steps import SQLAlchemyWorkflowStepRepository
+from helm_storage.repositories.workflow_sync_records import SQLAlchemyWorkflowSyncRecordRepository
 
 __all__ = [
     "ActionItemRepository",
@@ -137,10 +149,21 @@ __all__ = [
     "WorkflowRunRepository",
     "WorkflowRunState",
     "WorkflowRunStatus",
+    "WorkflowSyncClaimPatch",
+    "WorkflowSyncFailedQuery",
+    "WorkflowSyncKind",
+    "WorkflowSyncPayload",
+    "WorkflowSyncRecordPatch",
+    "WorkflowSyncRecordRepository",
+    "WorkflowSyncRemainingQuery",
+    "WorkflowSyncStatus",
+    "WorkflowTargetSystem",
+    "NewWorkflowSyncRecord",
     "WorkflowSpecialistInvocationPatch",
     "WorkflowSpecialistInvocationRepository",
     "WorkflowStepPatch",
     "WorkflowStepRepository",
     "WorkflowStepStatus",
     "WorkflowSummaryArtifactPayload",
+    "SQLAlchemyWorkflowSyncRecordRepository",
 ]
