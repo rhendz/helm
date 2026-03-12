@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-03-12T23:06:23.066Z"
-last_activity: 2026-03-12 — Completed phase 3 plan 04 shared workflow status projection for sync recovery semantics
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-03-12T23:26:02.351Z"
+last_activity: 2026-03-12 — Completed phase 3 plan 05 replay and recovery entrypoints for API, worker, and Telegram
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
-  percent: 91
+  completed_plans: 11
+  percent: 100
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Helm can execute multi-step, approval-gated workflows reliably enough that workflow state, artifacts, and side effects remain durable and inspectable across restarts and failures.
-**Current focus:** Phase 3 - Adapter Writes And Recovery Guarantees
+**Current focus:** Phase 4 - Representative Scheduling Workflow
 
 ## Current Position
 
-Phase: 3 of 4 (Adapter Writes And Recovery Guarantees)
-Plan: 4 of 5 in current phase
+Phase: 4 of 4 (Representative Scheduling Workflow)
+Plan: 0 of 2 in current phase
 Status: In progress
-Last activity: 2026-03-12 — Completed phase 3 plan 04 shared workflow status projection for sync recovery semantics
+Last activity: 2026-03-12 — Completed phase 3 plan 05 replay and recovery entrypoints for API, worker, and Telegram
 
-Progress: [█████████░] 91%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 11 min
-- Total execution time: 1.9 hours
+- Total execution time: 2.3 hours
 
 **By Phase:**
 
@@ -45,10 +45,10 @@ Progress: [█████████░] 91%
 |-------|-------|-------|----------|
 | 1 | 3 | 30 min | 10 min |
 | 2 | 3 | 30 min | 10 min |
-| 3 | 4 | 56 min | 14 min |
+| 3 | 5 | 80 min | 16 min |
 
 **Recent Trend:**
-- Last 5 plans: 6 min, 20 min, 17 min, 10 min, 9 min
+- Last 5 plans: 20 min, 17 min, 10 min, 9 min, 24 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -61,6 +61,7 @@ Progress: [█████████░] 91%
 | Phase 03 P02 | 17 min | 3 tasks | 14 files |
 | Phase 03 P03 | 10 min | 3 tasks | 11 files |
 | Phase 03 P04 | 9 min | 3 tasks | 2 files |
+| Phase 03 P05 | 24 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Workflow status projection reads sync counts, recovery class, and replay lineage directly from workflow_sync_records so operator surfaces do not parse workflow events.
 - [Phase 03]: Effect summaries stay compact and stable: total writes plus task/calendar counts before execution begins.
 - [Phase 03]: Terminal partial-sync state takes precedence over stale adapter error text when projecting operator-facing recovery summaries.
+- [Phase 03]: Explicit replay requests now gate on safe_next_actions from the shared workflow status projection.
+- [Phase 03]: Worker replay jobs now delegate workflow replay execution to the shared replay service.
+- [Phase 03]: Telegram workflow summaries now merge safe_next_actions with operator actions so replay remains distinct from retry.
 
 ### Pending Todos
 
@@ -112,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T23:06:23.064Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-03-12T23:25:46.337Z
+Stopped at: Completed 03-05-PLAN.md
 Resume file: None

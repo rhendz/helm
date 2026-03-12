@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Durable Workflow Foundation** - Establish the kernel's durable run, step, artifact, and validation model.
 - [x] **Phase 2: Specialist Dispatch And Approval Semantics** - Add typed specialist invocation plus first-class approval, revision, and resume behavior.
-- [ ] **Phase 3: Adapter Writes And Recovery Guarantees** - Make downstream side effects safe, idempotent, and recoverable across retry and resume.
+- [x] **Phase 3: Adapter Writes And Recovery Guarantees** - Make downstream side effects safe, idempotent, and recoverable across retry and resume.
 - [ ] **Phase 4: Representative Scheduling Workflow** - Prove the kernel with the fixed weekly task-to-calendar workflow from request through approved side effects.
 
 ## Phase Details
@@ -67,7 +67,7 @@ Plans:
 - [x] 03-02: Add idempotency keys, duplicate-write prevention, and reconciliation behavior across retry and resume.
 - [x] 03-03: Add retry vs replay semantics, recovery state tracking, and operator-safe failure handling.
 - [x] 03-04: Expose recovery semantics through the shared workflow status projection.
-- [ ] 03-05: Wire replay and recovery entrypoints through API, worker, and Telegram surfaces.
+- [x] 03-05: Wire replay and recovery entrypoints through API, worker, and Telegram surfaces.
 
 ### Phase 4: Representative Scheduling Workflow
 **Goal**: Helm proves the kernel with the weekly scheduling workflow from raw user request through approved downstream writes.
@@ -93,5 +93,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
 | 2. Specialist Dispatch And Approval Semantics | 3/3 | Complete | 2026-03-12 |
-| 3. Adapter Writes And Recovery Guarantees | 4/5 | In Progress | - |
+| 3. Adapter Writes And Recovery Guarantees | 5/5 | Complete | 2026-03-12 |
 | 4. Representative Scheduling Workflow | 0/2 | Not started | - |
