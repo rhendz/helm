@@ -51,8 +51,8 @@
 
 - [x] **RCVR-01**: Helm can recover an in-flight workflow after worker or process restart without losing run lineage.
 - [x] **RCVR-02**: Helm can retry a failed workflow step by re-attempting the same step within the same workflow run while preserving prior artifacts, failure records, and idempotency protections.
-- [ ] **RCVR-03**: Helm can replay a workflow step or run as an intentional re-execution event with explicit lineage to the original failed or prior execution.
-- [ ] **RCVR-04**: Helm records enough workflow state to distinguish recoverable failures from terminal failures.
+- [x] **RCVR-03**: Helm can replay a workflow step or run as an intentional re-execution event with explicit lineage to the original failed or prior execution.
+- [x] **RCVR-04**: Helm records enough workflow state to distinguish recoverable failures from terminal failures.
 
 ### Representative Workflow
 
@@ -124,8 +124,8 @@
 | SYNC-06 | Phase 3 | Complete |
 | RCVR-01 | Phase 3 | Complete |
 | RCVR-02 | Phase 3 | Complete |
-| RCVR-03 | Phase 3 | Pending |
-| RCVR-04 | Phase 3 | Pending |
+| RCVR-03 | Phase 3 | Complete |
+| RCVR-04 | Phase 3 | Complete |
 | DEMO-01 | Phase 4 | Pending |
 | DEMO-02 | Phase 2 | Complete |
 | DEMO-03 | Phase 2 | Complete |
@@ -140,4 +140,4 @@
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-12 after completing Phase 3 plan 02*
+*Last updated: 2026-03-12 after completing Phase 3 plan 03*

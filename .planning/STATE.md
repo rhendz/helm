@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-12T22:42:40.669Z"
-last_activity: 2026-03-12 — Completed phase 3 plan 02 idempotent sync execution and restart-safe recovery
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-12T22:54:48.170Z"
+last_activity: 2026-03-12 — Completed phase 3 plan 03 replay lineage and terminate-safe recovery semantics
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 82
 ---
 
 # Project State
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 3 of 4 (Adapter Writes And Recovery Guarantees)
-Plan: 2 of 5 in current phase
+Plan: 3 of 5 in current phase
 Status: In progress
-Last activity: 2026-03-12 — Completed phase 3 plan 02 idempotent sync execution and restart-safe recovery
+Last activity: 2026-03-12 — Completed phase 3 plan 03 replay lineage and terminate-safe recovery semantics
 
-Progress: [███████░░░] 73%
+Progress: [████████░░] 82%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 9
 - Average duration: 11 min
-- Total execution time: 1.6 hours
+- Total execution time: 1.8 hours
 
 **By Phase:**
 
@@ -45,9 +45,10 @@ Progress: [███████░░░] 73%
 |-------|-------|-------|----------|
 | 1 | 3 | 30 min | 10 min |
 | 2 | 3 | 30 min | 10 min |
+| 3 | 3 | 47 min | 16 min |
 
 **Recent Trend:**
-- Last 5 plans: 15 min, 9 min, 6 min, 12 min, 6 min
+- Last 5 plans: 12 min, 6 min, 20 min, 17 min, 10 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -58,6 +59,7 @@ Progress: [███████░░░] 73%
 | Phase 02-specialist-dispatch-and-approval-semantics P03 | 15 min | 3 tasks | 17 files |
 | Phase 03 P01 | 20 min | 3 tasks | 11 files |
 | Phase 03 P02 | 17 min | 3 tasks | 14 files |
+| Phase 03 P03 | 10 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -91,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Sync retries and restarts rebuild remaining work from persisted sync records scoped to step lineage.
 - [Phase 03]: Orchestration owns sync ordering, retryability, and reconciliation while connectors expose only upsert and reconcile contracts.
 - [Phase 03]: Uncertain sync outcomes must reconcile durable identity before Helm issues another outbound write.
+- [Phase 03]: Replay creates a new sync-row lineage generation for the same planned item so prior execution history stays queryable.
+- [Phase 03]: Termination after partial success cancels remaining sync work and records partial counts instead of rewriting succeeded rows.
+- [Phase 03]: Recovery classification lives on durable sync rows plus workflow events so app-layer projections do not infer semantics from free-form error text.
 
 ### Pending Todos
 
@@ -103,6 +108,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T22:42:40.669Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-12T22:54:48.165Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
