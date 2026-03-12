@@ -64,17 +64,17 @@ async def test_approve_usage_message_when_id_missing(monkeypatch: pytest.MonkeyP
 
     await approve.handle(update, _Context(args=[]))
 
-    assert update.message.replies == ["Usage: /approve <run_id>"]
+    assert update.message.replies == ["Usage: /approve <run_id> <proposal_artifact_id>"]
 
 
 @pytest.mark.asyncio
 async def test_approve_parses_id_and_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def __init__(self) -> None:
-            self.seen_id: int | None = None
+            self.seen: tuple[int, int] | None = None
 
-        def approve_run(self, run_id: int, *, actor: str) -> dict[str, object]:
-            self.seen_id = run_id
+        def approve_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
+            self.seen = (run_id, target_artifact_id)
             assert actor == "telegram:1"
             return {
                 "id": run_id,
@@ -84,6 +84,7 @@ async def test_approve_parses_id_and_calls_service(monkeypatch: pytest.MonkeyPat
                 "last_event_summary": "Approval granted and workflow resumed.",
                 "needs_action": False,
                 "available_actions": [],
+                "latest_proposal_version": {"version_number": 1, "artifact_id": target_artifact_id},
             }
 
     async def _allow(_update: _Update, _context: _Context) -> bool:
@@ -94,21 +95,22 @@ async def test_approve_parses_id_and_calls_service(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(approve, "_service", service)
     update = _Update()
 
-    await approve.handle(update, _Context(args=["7"]))
+    await approve.handle(update, _Context(args=["7", "41"]))
 
-    assert service.seen_id == 7
+    assert service.seen == (7, 41)
     assert update.message.replies == [
         "Run 7 [pending] step=apply_schedule paused=active\n"
         "Last: Approval granted and workflow resumed.\n"
-        "Needs action: no | Next: none"
+        "Needs action: no | Next: none\n"
+        "Latest proposal: v1 artifact=41"
     ]
 
 
 @pytest.mark.asyncio
 async def test_approve_unauthorized_short_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
-        def approve_run(self, run_id: int, *, actor: str) -> dict[str, object]:
-            raise AssertionError(f"service should not be called: {run_id} {actor}")
+        def approve_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
+            raise AssertionError(f"service should not be called: {run_id} {actor} {target_artifact_id}")
 
     async def _deny(_update: _Update, _context: _Context) -> bool:
         return True
@@ -117,7 +119,7 @@ async def test_approve_unauthorized_short_circuit(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(approve, "_service", _Service())
     update = _Update()
 
-    await approve.handle(update, _Context(args=["9"]))
+    await approve.handle(update, _Context(args=["9", "2"]))
 
     assert update.message.replies == []
 
@@ -132,17 +134,24 @@ async def test_reject_usage_message_when_id_missing(monkeypatch: pytest.MonkeyPa
 
     await approve.reject(update, _Context(args=[]))
 
-    assert update.message.replies == ["Usage: /reject <run_id>"]
+    assert update.message.replies == ["Usage: /reject <run_id> <proposal_artifact_id>"]
 
 
 @pytest.mark.asyncio
 async def test_request_revision_calls_service_with_feedback(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def __init__(self) -> None:
-            self.seen: tuple[int, str, str] | None = None
+            self.seen: tuple[int, int, str, str] | None = None
 
-        def request_revision(self, run_id: int, *, actor: str, feedback: str) -> dict[str, object]:
-            self.seen = (run_id, actor, feedback)
+        def request_revision(
+            self,
+            run_id: int,
+            *,
+            actor: str,
+            target_artifact_id: int,
+            feedback: str,
+        ) -> dict[str, object]:
+            self.seen = (run_id, target_artifact_id, actor, feedback)
             return {
                 "id": run_id,
                 "status": "pending",
@@ -154,9 +163,11 @@ async def test_request_revision_calls_service_with_feedback(monkeypatch: pytest.
                 "latest_decision": {
                     "decision": "request_revision",
                     "actor": actor,
+                    "target_artifact_id": target_artifact_id,
                     "decision_at": "2026-03-13T10:00:00Z",
                     "revision_feedback": feedback,
                 },
+                "latest_proposal_version": {"version_number": 2, "artifact_id": 15},
             }
 
     async def _allow(_update: _Update, _context: _Context) -> bool:
@@ -167,14 +178,15 @@ async def test_request_revision_calls_service_with_feedback(monkeypatch: pytest.
     monkeypatch.setattr(approve, "_service", service)
     update = _Update()
 
-    await approve.request_revision(update, _Context(args=["11", "Keep", "Friday", "free"]))
+    await approve.request_revision(update, _Context(args=["11", "15", "Keep", "Friday", "free"]))
 
-    assert service.seen == (11, "telegram:1", "Keep Friday free")
+    assert service.seen == (11, 15, "telegram:1", "Keep Friday free")
     assert update.message.replies == [
         "Run 11 [pending] step=dispatch_calendar_agent paused=active\n"
         "Last: Revision requested and workflow resumed at proposal generation.\n"
         "Needs action: no | Next: none\n"
-        "Latest decision: request_revision by telegram:1"
+        "Latest proposal: v2 artifact=15\n"
+        "Latest decision: request_revision by telegram:1 on artifact 15"
     ]
 
 
@@ -396,10 +408,15 @@ async def test_workflow_lists_needs_action_runs(monkeypatch: pytest.MonkeyPatch)
                     "approval_checkpoint": {
                         "checkpoint_id": 3,
                         "target_artifact_id": 17,
+                        "target_version_number": 2,
                         "proposal_summary": "Hold deep work blocks and review windows this week.",
                         "pause_reason": "Awaiting operator approval before downstream changes.",
                         "allowed_actions": ["approve", "reject", "request_revision"],
                     },
+                    "proposal_versions": [
+                        {"version_number": 2, "artifact_id": 17},
+                        {"version_number": 1, "artifact_id": 12, "superseded": True},
+                    ],
                 }
             ]
 
@@ -416,8 +433,10 @@ async def test_workflow_lists_needs_action_runs(monkeypatch: pytest.MonkeyPatch)
         "Run 9 [blocked] step=await_schedule_approval paused=awaiting_approval\n"
         "Last: Awaiting approval for schedule proposal.\n"
         "Needs action: yes | Next: approve, reject, request_revision\n"
+        "Latest proposal: v2 artifact=17\n"
         "Proposal: Hold deep work blocks and review windows this week.\n"
-        "Actions: approve continues, reject closes, request_revision regenerates."
+        "Actions: approve/reject/request_revision must name this artifact id.\n"
+        "History: v2:current, v1:superseded"
     ]
 
 

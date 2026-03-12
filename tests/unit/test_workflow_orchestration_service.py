@@ -247,6 +247,8 @@ def _calendar_agent_step(*, valid_output: bool = True) -> WorkflowSpecialistStep
     def _build_input(state) -> PreparedSpecialistInput:  # type: ignore[no-untyped-def]
         normalized_artifact = state.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value]
         request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
+        revision_request_artifact = state.latest_artifacts.get(WorkflowArtifactType.REVISION_REQUEST.value)
+        prior_proposal_artifact = state.latest_artifacts.get(WorkflowArtifactType.SCHEDULE_PROPOSAL.value)
         normalized = NormalizedTaskArtifact.model_validate(normalized_artifact.payload)
         request = CalendarAgentInput(
             workflow_type=state.run.workflow_type,
@@ -258,6 +260,16 @@ def _calendar_agent_step(*, valid_output: bool = True) -> WorkflowSpecialistStep
             source_context={"chat_id": request_artifact.payload["metadata"]["chat_id"]},
             request_text=request_artifact.payload["request_text"],
             warnings=normalized.warnings,
+            revision_request_artifact_id=(
+                revision_request_artifact.id if revision_request_artifact is not None else None
+            ),
+            revision_feedback=(
+                revision_request_artifact.payload["feedback"] if revision_request_artifact is not None else None
+            ),
+            prior_proposal_artifact_id=prior_proposal_artifact.id if prior_proposal_artifact is not None else None,
+            prior_proposal_version=(
+                prior_proposal_artifact.version_number if prior_proposal_artifact is not None else None
+            ),
         )
         return PreparedSpecialistInput(
             input_artifact_id=normalized_artifact.id,
@@ -618,10 +630,15 @@ def test_approval_decision_approve_resumes_next_persisted_step() -> None:
             workflow_service=service,
             specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
         ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
 
         resumed = service.submit_approval_decision(
             blocked.run.id,
-            decision=ApprovalDecision(action=ApprovalAction.APPROVE, actor="telegram:1"),
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
         )
 
         assert resumed.run.status == WorkflowRunStatus.PENDING.value
@@ -647,10 +664,15 @@ def test_approval_decision_reject_closes_run_cleanly() -> None:
             workflow_service=service,
             specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
         ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
 
         terminated = service.submit_approval_decision(
             blocked.run.id,
-            decision=ApprovalDecision(action=ApprovalAction.REJECT, actor="telegram:1"),
+            decision=ApprovalDecision(
+                action=ApprovalAction.REJECT,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
         )
 
         assert terminated.run.status == WorkflowRunStatus.TERMINATED.value
@@ -674,12 +696,14 @@ def test_approval_decision_request_revision_returns_to_proposal_step() -> None:
             workflow_service=service,
             specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
         ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
 
         revised = service.submit_approval_decision(
             blocked.run.id,
             decision=ApprovalDecision(
                 action=ApprovalAction.REQUEST_REVISION,
                 actor="telegram:1",
+                target_artifact_id=target_artifact_id,
                 revision_feedback="Keep Friday afternoon open.",
             ),
         )
@@ -690,6 +714,43 @@ def test_approval_decision_request_revision_returns_to_proposal_step() -> None:
         assert revised.latest_artifacts[WorkflowArtifactType.REVISION_REQUEST.value].payload["feedback"] == (
             "Keep Friday afternoon open."
         )
+
+
+def test_revision_request_creates_new_schedule_proposal_version_with_lineage() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        )
+        blocked = resume_service.resume_run(created.run.id)
+        original_proposal = blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value]
+        revised = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.REQUEST_REVISION,
+                actor="telegram:1",
+                target_artifact_id=original_proposal.id,
+                revision_feedback="Keep Friday afternoon open.",
+            ),
+        )
+
+        reblocked = resume_service.resume_run(revised.run.id)
+        latest_proposal = reblocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value]
+        revision_request = reblocked.latest_artifacts[WorkflowArtifactType.REVISION_REQUEST.value]
+
+        assert latest_proposal.id != original_proposal.id
+        assert latest_proposal.version_number == original_proposal.version_number + 1
+        assert latest_proposal.supersedes_artifact_id == original_proposal.id
+        assert latest_proposal.lineage_parent_id == revision_request.id
+        assert revision_request.payload["target_artifact_id"] == original_proposal.id
 
 
 def test_specialist_resume_service_records_handler_exceptions_as_failed_runs() -> None:

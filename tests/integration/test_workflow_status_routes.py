@@ -261,10 +261,16 @@ def test_workflow_routes_cover_operator_states() -> None:
             "reject",
             "request_revision",
         ]
+        target_artifact_id = approval_blocked.json()["approval_checkpoint"]["target_artifact_id"]
+        assert approval_blocked.json()["approval_checkpoint"]["target_version_number"] == 1
+
+        proposal_versions = client.get(f"/v1/workflow-runs/{seeded['approval_blocked']}/proposal-versions")
+        assert proposal_versions.status_code == 200
+        assert proposal_versions.json()[0]["artifact_id"] == target_artifact_id
 
         approve = client.post(
             f"/v1/workflow-runs/{seeded['approval_blocked']}/approve",
-            json={"actor": "api:test"},
+            json={"actor": "api:test", "target_artifact_id": target_artifact_id},
         )
         assert approve.status_code == 200
         assert approve.json()["status"] == WorkflowRunStatus.PENDING.value
@@ -283,17 +289,25 @@ def test_workflow_routes_cover_operator_states() -> None:
         assert failed.json()["lineage"]["validation_artifacts"] == []
 
         rejection_seed = _seed_states(session)["approval_blocked"]
+        rejection_detail = client.get(f"/v1/workflow-runs/{rejection_seed}")
+        rejection_target = rejection_detail.json()["approval_checkpoint"]["target_artifact_id"]
         reject = client.post(
             f"/v1/workflow-runs/{rejection_seed}/reject",
-            json={"actor": "api:test"},
+            json={"actor": "api:test", "target_artifact_id": rejection_target},
         )
         assert reject.status_code == 200
         assert reject.json()["status"] == WorkflowRunStatus.TERMINATED.value
 
         revision_seed = _seed_states(session)["approval_blocked"]
+        revision_detail = client.get(f"/v1/workflow-runs/{revision_seed}")
+        revision_target = revision_detail.json()["approval_checkpoint"]["target_artifact_id"]
         revision = client.post(
             f"/v1/workflow-runs/{revision_seed}/request-revision",
-            json={"actor": "api:test", "feedback": "Keep Friday afternoon open."},
+            json={
+                "actor": "api:test",
+                "target_artifact_id": revision_target,
+                "feedback": "Keep Friday afternoon open.",
+            },
         )
         assert revision.status_code == 200
         assert revision.json()["status"] == WorkflowRunStatus.PENDING.value

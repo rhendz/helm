@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 
 from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
 from helm_orchestration import (
+    ApprovalAction,
+    ApprovalDecision,
     ScheduleProposalValidator,
     ValidationOutcome,
     ExecutionFailurePayload,
@@ -157,6 +159,7 @@ def test_approval_blocked_run_summary_projects_checkpoint_state() -> None:
         assert summary["approval_checkpoint"]["proposal_summary"] == (
             "Hold deep work blocks and review windows this week."
         )
+        assert summary["approval_checkpoint"]["target_version_number"] == 1
         assert summary["approval_checkpoint"]["allowed_actions"] == [
             "approve",
             "reject",
@@ -169,6 +172,85 @@ def test_approval_blocked_run_summary_projects_checkpoint_state() -> None:
         ]
         assert summary["latest_validation_outcome"] == ValidationOutcome.PASSED.value
         assert summary["latest_decision"] is None
+        assert summary["latest_proposal_version"]["artifact_id"] == summary["approval_checkpoint"]["target_artifact_id"]
+        assert summary["proposal_versions"][0]["is_actionable"] is True
+
+
+def test_run_detail_projects_latest_first_proposal_versions_and_decision_lineage() -> None:
+    with _session() as session:
+        orchestration = _orchestration(session)
+        created = orchestration.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_calendar_agent",
+            request_payload={
+                "request_text": "Plan my week around deep work.",
+                "submitted_by": "telegram:user",
+                "channel": "telegram",
+                "metadata": {"chat_id": "123"},
+            },
+        )
+        first_blocked = orchestration.complete_current_step(
+            created.run.id,
+            artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+            artifact_payload={
+                "proposal_summary": "Hold deep work blocks and review windows this week.",
+                "calendar_id": "primary",
+                "time_blocks": [
+                    {
+                        "title": "Deep work",
+                        "start": "2026-03-16T09:00:00Z",
+                        "end": "2026-03-16T11:00:00Z",
+                    }
+                ],
+                "proposed_changes": ["Reserve Monday and Tuesday mornings for deep work."],
+            },
+            next_step_name="apply_schedule",
+        )
+        target_artifact_id = first_blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        orchestration.submit_approval_decision(
+            first_blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.REQUEST_REVISION,
+                actor="telegram:user",
+                target_artifact_id=target_artifact_id,
+                revision_feedback="Keep Friday afternoon open.",
+            ),
+        )
+        second_blocked = orchestration.complete_current_step(
+            created.run.id,
+            artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+            artifact_payload={
+                "proposal_summary": "Keep Friday afternoon open and focus mornings on deep work.",
+                "calendar_id": "primary",
+                "time_blocks": [
+                    {
+                        "title": "Deep work",
+                        "start": "2026-03-16T09:00:00Z",
+                        "end": "2026-03-16T11:00:00Z",
+                    }
+                ],
+                "proposed_changes": ["Keep Friday afternoon open.", "Reserve Monday and Tuesday mornings for deep work."],
+            },
+            next_step_name="apply_schedule",
+        )
+        latest_artifact_id = second_blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        orchestration.submit_approval_decision(
+            second_blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:user",
+                target_artifact_id=latest_artifact_id,
+            ),
+        )
+
+        detail = WorkflowStatusService(session).get_run_detail(created.run.id)
+
+        assert detail is not None
+        assert [item["version_number"] for item in detail["proposal_versions"]] == [2, 1]
+        assert detail["proposal_versions"][0]["approved"] is True
+        assert detail["proposal_versions"][0]["latest_decision"]["target_artifact_id"] == latest_artifact_id
+        assert detail["proposal_versions"][1]["superseded"] is True
+        assert detail["proposal_versions"][1]["revision_feedback_summary"] == "Keep Friday afternoon open."
 
 
 def test_failed_run_detail_exposes_lineage_without_validation_artifact() -> None:
