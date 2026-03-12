@@ -12,7 +12,15 @@ from helm_orchestration.schemas import (
     ApprovalDecisionResult,
     ApprovalRequest,
     ApprovedSyncItem,
+    CalendarSyncRequest,
+    CalendarSyncResult,
     ExecutionFailurePayload,
+    SyncLookupRequest,
+    SyncLookupResult,
+    SyncOutcomeStatus,
+    SyncRetryDisposition,
+    TaskSyncRequest,
+    TaskSyncResult,
     RetryState,
     SCHEMA_VERSION,
     ScheduleProposalArtifact,
@@ -22,7 +30,12 @@ from helm_orchestration.schemas import (
     ValidationReport,
     WorkflowSummaryArtifact,
 )
-from helm_orchestration.contracts import WorkflowSpecialistStep, WorkflowStepExecutionError
+from helm_orchestration.contracts import (
+    CalendarSystemAdapter,
+    TaskSystemAdapter,
+    WorkflowSpecialistStep,
+    WorkflowStepExecutionError,
+)
 from helm_orchestration.validators import ValidatorRegistry
 from helm_storage.repositories import (
     ApprovalDecisionArtifactPayload,
@@ -49,6 +62,8 @@ from helm_storage.repositories import (
     WorkflowRunStatus,
     WorkflowSyncKind,
     WorkflowSyncPayload,
+    WorkflowSyncStatus,
+    WorkflowSyncStepQuery,
     WorkflowTargetSystem,
     NewWorkflowSyncRecord,
     WorkflowSpecialistInvocationPatch,
@@ -64,6 +79,8 @@ class WorkflowOrchestrationService:
         session: Session,
         *,
         validator_registry: ValidatorRegistry | None = None,
+        task_system_adapter: TaskSystemAdapter | None = None,
+        calendar_system_adapter: CalendarSystemAdapter | None = None,
     ) -> None:
         self._session = session
         self._run_repo = SQLAlchemyWorkflowRunRepository(session)
@@ -74,6 +91,8 @@ class WorkflowOrchestrationService:
         self._invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
         self._sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
         self._validator_registry = validator_registry or ValidatorRegistry()
+        self._task_system_adapter = task_system_adapter
+        self._calendar_system_adapter = calendar_system_adapter
 
     def create_run(self, *, workflow_type: str, first_step_name: str, request_payload: object) -> WorkflowRunState:
         run = self._run_repo.create(
@@ -885,6 +904,119 @@ class WorkflowOrchestrationService:
         )
         return persisted_records
 
+    def execute_pending_sync_step(self, run_id: int) -> WorkflowRunState:
+        state = self.start_current_step(run_id)
+        step = self._require_current_step(state)
+        if step.step_name != "apply_schedule":
+            raise ValueError(f"Workflow run {run_id} is not at a sync execution step.")
+
+        while True:
+            next_records = self._sync_repo.list_for_step_attempt(
+                WorkflowSyncStepQuery(
+                    run_id=run_id,
+                    step_name=step.step_name,
+                    max_attempt_number=step.attempt_number,
+                    statuses=(
+                        WorkflowSyncStatus.PENDING.value,
+                        WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                        WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+                    ),
+                )
+            )
+            if not next_records:
+                return self._complete_sync_execution(run_id, step=step)
+
+            sync_record = next_records[0]
+            prior_status = sync_record.status
+            claimed = self._sync_repo.mark_attempt_started(sync_record.id, step_id=step.id)
+            if claimed is None:
+                raise ValueError(f"Workflow sync record {sync_record.id} no longer exists.")
+
+            if prior_status == WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value:
+                reconciliation = self._reconcile_sync_record(claimed)
+                if reconciliation.found or reconciliation.payload_fingerprint_matches:
+                    self._sync_repo.mark_succeeded(
+                        claimed.id,
+                        external_object_id=reconciliation.external_object_id or claimed.external_object_id,
+                    )
+                    self._event_repo.create(
+                        NewWorkflowEvent(
+                            run_id=run_id,
+                            step_id=step.id,
+                            event_type="sync_record_reconciled",
+                            run_status=WorkflowRunStatus.RUNNING.value,
+                            step_status=WorkflowStepStatus.RUNNING.value,
+                            summary=f"Reconciled sync record {claimed.planned_item_key}.",
+                            details={
+                                "sync_record_id": claimed.id,
+                                "planned_item_key": claimed.planned_item_key,
+                                "external_object_id": reconciliation.external_object_id,
+                                "provider_state": reconciliation.provider_state,
+                            },
+                        )
+                    )
+                    continue
+
+            result = self._dispatch_sync_record(claimed)
+            if result.status is SyncOutcomeStatus.SUCCEEDED:
+                self._sync_repo.mark_succeeded(
+                    claimed.id,
+                    external_object_id=result.external_object_id or claimed.external_object_id,
+                )
+                continue
+
+            if result.status is SyncOutcomeStatus.RECONCILIATION_REQUIRED:
+                self._sync_repo.mark_failed(
+                    claimed.id,
+                    status=WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+                    error_summary=result.error_summary,
+                    external_object_id=result.external_object_id or claimed.external_object_id,
+                )
+                return self._fail_started_step(
+                    run_id,
+                    step=step,
+                    failure=ExecutionFailurePayload(
+                        error_type="sync_write_outcome_uncertain",
+                        message=result.error_summary or "Sync write outcome is uncertain and requires reconciliation.",
+                        retry_state=RetryState.RETRYABLE,
+                        retryable=True,
+                        details={
+                            "sync_record_id": claimed.id,
+                            "planned_item_key": claimed.planned_item_key,
+                            "target_system": claimed.target_system,
+                        },
+                    ),
+                )
+
+            failure_status = (
+                WorkflowSyncStatus.FAILED_RETRYABLE.value
+                if result.status is SyncOutcomeStatus.RETRYABLE_FAILURE
+                else WorkflowSyncStatus.FAILED_TERMINAL.value
+            )
+            retryable = result.status is SyncOutcomeStatus.RETRYABLE_FAILURE
+            retry_state = RetryState.RETRYABLE if retryable else RetryState.TERMINAL
+            self._sync_repo.mark_failed(
+                claimed.id,
+                status=failure_status,
+                error_summary=result.error_summary,
+                external_object_id=result.external_object_id or claimed.external_object_id,
+            )
+            return self._fail_started_step(
+                run_id,
+                step=step,
+                failure=ExecutionFailurePayload(
+                    error_type="sync_execution_failed",
+                    message=result.error_summary or f"Sync execution failed for {claimed.planned_item_key}.",
+                    retry_state=retry_state,
+                    retryable=retryable,
+                    details={
+                        "sync_record_id": claimed.id,
+                        "planned_item_key": claimed.planned_item_key,
+                        "target_system": claimed.target_system,
+                    },
+                ),
+            )
+
     def _reject_after_approval(
         self,
         run_id: int,
@@ -1078,6 +1210,98 @@ class WorkflowOrchestrationService:
 
         return tuple(sync_items)
 
+    def _complete_sync_execution(self, run_id: int, *, step) -> WorkflowRunState:
+        sync_records = self._sync_repo.list_for_run(run_id)
+        self._step_repo.update(
+            step.id,
+            WorkflowStepPatch(
+                status=WorkflowStepStatus.SUCCEEDED.value,
+                completed_at=_now(),
+            ),
+        )
+        self._run_repo.update(
+            run_id,
+            WorkflowRunPatch(
+                status=WorkflowRunStatus.COMPLETED.value,
+                current_step_name=step.step_name,
+                current_step_attempt=step.attempt_number,
+                needs_action=False,
+                execution_error_summary=None,
+                blocked_reason=None,
+                failure_class=None,
+                retry_state=None,
+                resume_step_name=None,
+                resume_step_attempt=None,
+                last_event_summary=f"Completed step {step.step_name}",
+                completed_at=_now(),
+            ),
+        )
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=step.id,
+                event_type="run_completed",
+                run_status=WorkflowRunStatus.COMPLETED.value,
+                step_status=WorkflowStepStatus.SUCCEEDED.value,
+                summary=f"Completed step {step.step_name}",
+                details={
+                    "sync_record_ids": [record.id for record in sync_records],
+                    "succeeded_sync_record_ids": [
+                        record.id
+                        for record in sync_records
+                        if record.status == WorkflowSyncStatus.SUCCEEDED.value
+                    ],
+                },
+            )
+        )
+        return self.get_run_state(run_id)
+
+    def _sync_item_from_record(self, sync_record) -> ApprovedSyncItem:
+        return ApprovedSyncItem(
+            proposal_artifact_id=sync_record.proposal_artifact_id,
+            proposal_version_number=sync_record.proposal_version_number,
+            target_system=SyncTargetSystem(sync_record.target_system),
+            operation=_sync_operation_for_kind(sync_record.sync_kind),
+            planned_item_key=sync_record.planned_item_key,
+            execution_order=sync_record.execution_order,
+            payload_fingerprint=sync_record.payload_fingerprint,
+            payload=sync_record.payload["payload"],
+        )
+
+    def _dispatch_sync_record(self, sync_record) -> TaskSyncResult | CalendarSyncResult:
+        sync_item = self._sync_item_from_record(sync_record)
+        if sync_item.target_system is SyncTargetSystem.TASK_SYSTEM:
+            adapter = self._require_task_system_adapter()
+            return adapter.upsert_task(TaskSyncRequest(item=sync_item))
+        adapter = self._require_calendar_system_adapter()
+        return adapter.upsert_calendar_block(CalendarSyncRequest(item=sync_item))
+
+    def _reconcile_sync_record(self, sync_record) -> SyncLookupResult:
+        lookup = SyncLookupRequest(
+            proposal_artifact_id=sync_record.proposal_artifact_id,
+            proposal_version_number=sync_record.proposal_version_number,
+            target_system=SyncTargetSystem(sync_record.target_system),
+            operation=_sync_operation_for_kind(sync_record.sync_kind),
+            planned_item_key=sync_record.planned_item_key,
+            payload_fingerprint=sync_record.payload_fingerprint,
+            external_object_id=sync_record.external_object_id,
+        )
+        if lookup.target_system is SyncTargetSystem.TASK_SYSTEM:
+            adapter = self._require_task_system_adapter()
+            return adapter.reconcile_task(lookup)
+        adapter = self._require_calendar_system_adapter()
+        return adapter.reconcile_calendar_block(lookup)
+
+    def _require_task_system_adapter(self) -> TaskSystemAdapter:
+        if self._task_system_adapter is None:
+            raise ValueError("Task system adapter is not configured.")
+        return self._task_system_adapter
+
+    def _require_calendar_system_adapter(self) -> CalendarSystemAdapter:
+        if self._calendar_system_adapter is None:
+            raise ValueError("Calendar system adapter is not configured.")
+        return self._calendar_system_adapter
+
     def _artifact_lineage_kwargs(self, *, run_id: int, step_name: str, artifact_type: str) -> dict[str, int | None]:
         if artifact_type != WorkflowArtifactType.SCHEDULE_PROPOSAL.value:
             return {"lineage_parent_id": None, "supersedes_artifact_id": None}
@@ -1201,6 +1425,12 @@ def _sync_kind_for_operation(operation: SyncOperation) -> WorkflowSyncKind:
     if operation is SyncOperation.TASK_UPSERT:
         return WorkflowSyncKind.TASK_UPSERT
     return WorkflowSyncKind.CALENDAR_BLOCK_UPSERT
+
+
+def _sync_operation_for_kind(sync_kind: str) -> SyncOperation:
+    if sync_kind == WorkflowSyncKind.TASK_UPSERT.value:
+        return SyncOperation.TASK_UPSERT
+    return SyncOperation.CALENDAR_BLOCK_UPSERT
 
 
 def _slugify(value: str) -> str:

@@ -1,3 +1,4 @@
+from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -48,6 +49,8 @@ from helm_storage.repositories import (
     WorkflowArtifactType,
     WorkflowBlockedReason,
     WorkflowRunStatus,
+    WorkflowSyncRecordPatch,
+    WorkflowSyncStatus,
     WorkflowStepStatus,
 )
 from sqlalchemy import create_engine
@@ -239,6 +242,87 @@ def test_adapter_protocols_use_normalized_sync_contracts() -> None:
     assert lookup.provider_state == "missing"
 
 
+class RecordingTaskAdapter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._records: dict[str, tuple[str, str]] = {}
+
+    def upsert_task(self, request: TaskSyncRequest) -> TaskSyncResult:
+        self.calls.append(("upsert", request.item.planned_item_key))
+        external_object_id = request.item.planned_item_key.replace("task:", "task-")
+        self._records[request.item.planned_item_key] = (
+            external_object_id,
+            request.item.payload_fingerprint,
+        )
+        return TaskSyncResult(
+            status=SyncOutcomeStatus.SUCCEEDED,
+            retry_disposition=SyncRetryDisposition.TERMINAL,
+            external_object_id=external_object_id,
+        )
+
+    def reconcile_task(self, request: SyncLookupRequest) -> SyncLookupResult:
+        self.calls.append(("reconcile", request.planned_item_key))
+        record = self._records.get(request.planned_item_key)
+        if record is None:
+            return SyncLookupResult(found=False, provider_state="missing")
+        return SyncLookupResult(
+            found=True,
+            external_object_id=record[0],
+            payload_fingerprint_matches=record[1] == request.payload_fingerprint,
+            provider_state="present",
+        )
+
+
+class RecordingCalendarAdapter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._records: dict[str, tuple[str, str]] = {}
+        self._upsert_outcomes: dict[str, CalendarSyncResult] = {}
+        self._reconcile_outcomes: dict[str, SyncLookupResult] = {}
+
+    def set_upsert_outcome(self, planned_item_key: str, result: CalendarSyncResult) -> None:
+        self._upsert_outcomes[planned_item_key] = result
+
+    def set_reconcile_outcome(self, planned_item_key: str, result: SyncLookupResult) -> None:
+        self._reconcile_outcomes[planned_item_key] = result
+
+    def upsert_calendar_block(self, request: CalendarSyncRequest) -> CalendarSyncResult:
+        self.calls.append(("upsert", request.item.planned_item_key))
+        configured = self._upsert_outcomes.get(request.item.planned_item_key)
+        if configured is not None:
+            if configured.status is SyncOutcomeStatus.SUCCEEDED:
+                self._records[request.item.planned_item_key] = (
+                    configured.external_object_id or request.item.planned_item_key.replace("calendar:", "calendar-"),
+                    request.item.payload_fingerprint,
+                )
+            return configured
+        external_object_id = request.item.planned_item_key.replace("calendar:", "calendar-")
+        self._records[request.item.planned_item_key] = (
+            external_object_id,
+            request.item.payload_fingerprint,
+        )
+        return CalendarSyncResult(
+            status=SyncOutcomeStatus.SUCCEEDED,
+            retry_disposition=SyncRetryDisposition.TERMINAL,
+            external_object_id=external_object_id,
+        )
+
+    def reconcile_calendar_block(self, request: SyncLookupRequest) -> SyncLookupResult:
+        self.calls.append(("reconcile", request.planned_item_key))
+        configured = self._reconcile_outcomes.get(request.planned_item_key)
+        if configured is not None:
+            return configured
+        record = self._records.get(request.planned_item_key)
+        if record is None:
+            return SyncLookupResult(found=False, provider_state="missing")
+        return SyncLookupResult(
+            found=True,
+            external_object_id=record[0],
+            payload_fingerprint_matches=record[1] == request.payload_fingerprint,
+            provider_state="present",
+        )
+
+
 def _session() -> Session:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -269,7 +353,12 @@ def _normalized_task(*, priority: str | None = "high") -> NormalizedTaskArtifact
     )
 
 
-def _service(session: Session) -> WorkflowOrchestrationService:
+def _service(
+    session: Session,
+    *,
+    task_system_adapter: TaskSystemAdapter | None = None,
+    calendar_system_adapter: CalendarSystemAdapter | None = None,
+) -> WorkflowOrchestrationService:
     registry = ValidatorRegistry(
         [
             RegisteredValidator(
@@ -295,7 +384,12 @@ def _service(session: Session) -> WorkflowOrchestrationService:
             ),
         ]
     )
-    return WorkflowOrchestrationService(session, validator_registry=registry)
+    return WorkflowOrchestrationService(
+        session,
+        validator_registry=registry,
+        task_system_adapter=task_system_adapter or StubTaskSystemAdapter(),
+        calendar_system_adapter=calendar_system_adapter or StubCalendarSystemAdapter(),
+    )
 
 
 def _task_agent_step() -> WorkflowSpecialistStep:
@@ -838,6 +932,154 @@ def test_prepare_approved_sync_plan_is_idempotent_for_same_proposal_version() ->
 
         assert [record.id for record in first_records] == [record.id for record in second_records]
         assert len(sync_repo.list_for_run(resumed.run.id)) == 2
+
+
+def test_sync_execution_processes_records_in_deterministic_task_then_calendar_order() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+
+        completed = service.execute_pending_sync_step(approved.run.id)
+        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(completed.run.id)
+
+        assert completed.run.status == WorkflowRunStatus.COMPLETED.value
+        assert [record.status for record in sync_records] == [
+            WorkflowSyncStatus.SUCCEEDED.value,
+            WorkflowSyncStatus.SUCCEEDED.value,
+        ]
+        assert task_adapter.calls == [("upsert", "task:triage-inbox")]
+        assert calendar_adapter.calls == [("upsert", "calendar:inbox-triage:1")]
+
+
+def test_sync_reconciliation_runs_before_retrying_uncertain_write() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        calendar_record = sync_repo.list_for_run(approved.run.id)[1]
+        sync_repo.update(
+            calendar_record.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+                external_object_id="calendar-existing",
+            ),
+        )
+        calendar_adapter.set_reconcile_outcome(
+            calendar_record.planned_item_key,
+            SyncLookupResult(
+                found=True,
+                external_object_id="calendar-existing",
+                payload_fingerprint_matches=True,
+                provider_state="present",
+            ),
+        )
+
+        completed = service.execute_pending_sync_step(approved.run.id)
+        refreshed = sync_repo.get_by_id(calendar_record.id)
+
+        assert completed.run.status == WorkflowRunStatus.COMPLETED.value
+        assert refreshed is not None
+        assert refreshed.status == WorkflowSyncStatus.SUCCEEDED.value
+        assert calendar_adapter.calls == [("reconcile", calendar_record.planned_item_key)]
+
+
+def test_sync_retryable_failure_stops_step_and_preserves_partial_lineage() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        calendar_adapter.set_upsert_outcome(
+            "calendar:inbox-triage:1",
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.RETRYABLE_FAILURE,
+                retry_disposition=SyncRetryDisposition.RETRYABLE,
+                error_summary="Calendar API timed out.",
+            ),
+        )
+
+        failed = service.execute_pending_sync_step(approved.run.id)
+        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(failed.run.id)
+
+        assert failed.run.status == WorkflowRunStatus.FAILED.value
+        assert failed.run.needs_action is True
+        assert [record.status for record in sync_records] == [
+            WorkflowSyncStatus.SUCCEEDED.value,
+            WorkflowSyncStatus.FAILED_RETRYABLE.value,
+        ]
 
 
 def test_approval_decision_reject_closes_run_cleanly() -> None:

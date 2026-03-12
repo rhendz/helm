@@ -183,6 +183,7 @@ class SyncLookupResult(BaseModel):
 
     found: bool
     external_object_id: str | None = None
+    payload_fingerprint_matches: bool | None = None
     provider_state: str | None = None
     details: dict[str, Any] = Field(default_factory=dict)
 
