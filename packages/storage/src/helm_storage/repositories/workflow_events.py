@@ -31,3 +31,14 @@ class SQLAlchemyWorkflowEventRepository:
             .order_by(WorkflowEventORM.id.asc())
         )
         return list(self._session.execute(stmt).scalars().all())
+
+    def list_for_run_by_type(self, run_id: int, *, event_type: str) -> list[WorkflowEventORM]:
+        stmt = (
+            select(WorkflowEventORM)
+            .where(
+                WorkflowEventORM.run_id == run_id,
+                WorkflowEventORM.event_type == event_type,
+            )
+            .order_by(WorkflowEventORM.id.asc())
+        )
+        return list(self._session.execute(stmt).scalars().all())

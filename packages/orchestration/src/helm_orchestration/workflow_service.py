@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,9 +11,13 @@ from helm_orchestration.schemas import (
     ApprovalDecision,
     ApprovalDecisionResult,
     ApprovalRequest,
+    ApprovedSyncItem,
     ExecutionFailurePayload,
     RetryState,
     SCHEMA_VERSION,
+    ScheduleProposalArtifact,
+    SyncOperation,
+    SyncTargetSystem,
     ValidationOutcome,
     ValidationReport,
     WorkflowSummaryArtifact,
@@ -33,6 +39,7 @@ from helm_storage.repositories import (
     SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowRunRepository,
     SQLAlchemyWorkflowSpecialistInvocationRepository,
+    SQLAlchemyWorkflowSyncRecordRepository,
     SQLAlchemyWorkflowStepRepository,
     WorkflowArtifactType,
     WorkflowBlockedReason,
@@ -40,6 +47,10 @@ from helm_storage.repositories import (
     WorkflowRunPatch,
     WorkflowRunState,
     WorkflowRunStatus,
+    WorkflowSyncKind,
+    WorkflowSyncPayload,
+    WorkflowTargetSystem,
+    NewWorkflowSyncRecord,
     WorkflowSpecialistInvocationPatch,
     WorkflowStepPatch,
     WorkflowStepStatus,
@@ -61,6 +72,7 @@ class WorkflowOrchestrationService:
         self._approval_repo = SQLAlchemyWorkflowApprovalCheckpointRepository(session)
         self._event_repo = SQLAlchemyWorkflowEventRepository(session)
         self._invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
+        self._sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
         self._validator_registry = validator_registry or ValidatorRegistry()
 
     def create_run(self, *, workflow_type: str, first_step_name: str, request_payload: object) -> WorkflowRunState:
@@ -767,6 +779,11 @@ class WorkflowOrchestrationService:
                 attempt_number=checkpoint.resume_step_attempt,
             )
         )
+        sync_records = self.prepare_approved_sync_plan(
+            run_id,
+            proposal_artifact_id=checkpoint.target_artifact_id,
+            step_id=next_step.id,
+        )
         self._run_repo.update(
             run_id,
             WorkflowRunPatch(
@@ -797,6 +814,76 @@ class WorkflowOrchestrationService:
             )
         )
         return self.get_run_state(run_id)
+
+    def prepare_approved_sync_plan(
+        self,
+        run_id: int,
+        *,
+        proposal_artifact_id: int,
+        step_id: int,
+    ) -> tuple[object, ...]:
+        proposal_artifact = self._require_artifact(proposal_artifact_id)
+        existing_records = tuple(self._sync_repo.list_for_proposal(proposal_artifact_id))
+        if existing_records:
+            return existing_records
+
+        sync_items = self._build_approved_sync_items(proposal_artifact_id=proposal_artifact_id)
+        persisted_records = tuple(
+            self._sync_repo.create(
+                NewWorkflowSyncRecord(
+                    run_id=run_id,
+                    step_id=step_id,
+                    proposal_artifact_id=item.proposal_artifact_id,
+                    proposal_version_number=item.proposal_version_number,
+                    target_system=item.target_system.value,
+                    sync_kind=_sync_kind_for_operation(item.operation).value,
+                    planned_item_key=item.planned_item_key,
+                    execution_order=item.execution_order,
+                    idempotency_key=_sync_idempotency_key(item),
+                    payload_fingerprint=item.payload_fingerprint,
+                    payload=WorkflowSyncPayload(
+                        proposal_artifact_id=item.proposal_artifact_id,
+                        proposal_version_number=item.proposal_version_number,
+                        target_system=item.target_system.value,
+                        sync_kind=_sync_kind_for_operation(item.operation).value,
+                        planned_item_key=item.planned_item_key,
+                        payload=item.payload,
+                        payload_fingerprint=item.payload_fingerprint,
+                    ).to_dict(),
+                )
+            )
+            for item in sync_items
+        )
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=step_id,
+                event_type="approved_sync_manifest_created",
+                run_status=WorkflowRunStatus.PENDING.value,
+                step_status=WorkflowStepStatus.PENDING.value,
+                summary="Prepared approved sync manifest from the approved proposal.",
+                details={
+                    "proposal_artifact_id": proposal_artifact_id,
+                    "proposal_version_number": proposal_artifact.version_number,
+                    "sync_record_ids": [record.id for record in persisted_records],
+                    "task_sync_count": len(
+                        [
+                            record
+                            for record in persisted_records
+                            if record.target_system == WorkflowTargetSystem.TASK_SYSTEM.value
+                        ]
+                    ),
+                    "calendar_sync_count": len(
+                        [
+                            record
+                            for record in persisted_records
+                            if record.target_system == WorkflowTargetSystem.CALENDAR_SYSTEM.value
+                        ]
+                    ),
+                },
+            )
+        )
+        return persisted_records
 
     def _reject_after_approval(
         self,
@@ -939,6 +1026,58 @@ class WorkflowOrchestrationService:
             final_summary_text=final_summary_text,
         )
 
+    def _build_approved_sync_items(self, *, proposal_artifact_id: int) -> tuple[ApprovedSyncItem, ...]:
+        proposal_artifact = self._require_artifact(proposal_artifact_id)
+        proposal = ScheduleProposalArtifact.model_validate(proposal_artifact.payload)
+        sync_items: list[ApprovedSyncItem] = []
+        execution_order = 1
+
+        seen_task_keys: set[str] = set()
+        for block in proposal.time_blocks:
+            task_title = block.task_title or block.title
+            task_key = f"task:{_slugify(task_title)}"
+            if task_key in seen_task_keys:
+                continue
+            seen_task_keys.add(task_key)
+            task_payload = {"title": task_title, "proposal_artifact_id": proposal_artifact.id}
+            sync_items.append(
+                ApprovedSyncItem(
+                    proposal_artifact_id=proposal_artifact.id,
+                    proposal_version_number=proposal_artifact.version_number,
+                    target_system=SyncTargetSystem.TASK_SYSTEM,
+                    operation=SyncOperation.TASK_UPSERT,
+                    planned_item_key=task_key,
+                    execution_order=execution_order,
+                    payload_fingerprint=_payload_fingerprint(task_payload),
+                    payload=task_payload,
+                )
+            )
+            execution_order += 1
+
+        for index, block in enumerate(proposal.time_blocks, start=1):
+            calendar_payload = {
+                "title": block.title,
+                "start": block.start,
+                "end": block.end,
+                "task_title": block.task_title,
+                "calendar_id": proposal.calendar_id,
+            }
+            sync_items.append(
+                ApprovedSyncItem(
+                    proposal_artifact_id=proposal_artifact.id,
+                    proposal_version_number=proposal_artifact.version_number,
+                    target_system=SyncTargetSystem.CALENDAR_SYSTEM,
+                    operation=SyncOperation.CALENDAR_BLOCK_UPSERT,
+                    planned_item_key=f"calendar:{_slugify(block.title)}:{index}",
+                    execution_order=execution_order,
+                    payload_fingerprint=_payload_fingerprint(calendar_payload),
+                    payload=calendar_payload,
+                )
+            )
+            execution_order += 1
+
+        return tuple(sync_items)
+
     def _artifact_lineage_kwargs(self, *, run_id: int, step_name: str, artifact_type: str) -> dict[str, int | None]:
         if artifact_type != WorkflowArtifactType.SCHEDULE_PROPOSAL.value:
             return {"lineage_parent_id": None, "supersedes_artifact_id": None}
@@ -1038,3 +1177,33 @@ def _payload_dict(payload: object) -> dict[str, Any]:
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _payload_fingerprint(payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return f"sha256:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
+
+
+def _sync_idempotency_key(item: ApprovedSyncItem) -> str:
+    return ":".join(
+        (
+            "workflow-sync",
+            str(item.proposal_artifact_id),
+            str(item.proposal_version_number),
+            item.target_system.value,
+            item.operation.value,
+            item.planned_item_key,
+        )
+    )
+
+
+def _sync_kind_for_operation(operation: SyncOperation) -> WorkflowSyncKind:
+    if operation is SyncOperation.TASK_UPSERT:
+        return WorkflowSyncKind.TASK_UPSERT
+    return WorkflowSyncKind.CALENDAR_BLOCK_UPSERT
+
+
+def _slugify(value: str) -> str:
+    slug = "".join(character.lower() if character.isalnum() else "-" for character in value).strip("-")
+    collapsed = "-".join(part for part in slug.split("-") if part)
+    return collapsed or "item"

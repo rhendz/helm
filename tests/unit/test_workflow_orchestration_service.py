@@ -42,7 +42,9 @@ from helm_orchestration import (
 )
 from helm_storage.db import Base
 from helm_storage.repositories import (
+    SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowSpecialistInvocationRepository,
+    SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
     WorkflowBlockedReason,
     WorkflowRunStatus,
@@ -750,6 +752,92 @@ def test_approval_decision_approve_resumes_next_persisted_step() -> None:
         assert resumed.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].payload["decision"] == (
             ApprovalAction.APPROVE.value
         )
+
+
+def test_approval_decision_approve_persists_sync_manifest_before_execution() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+
+        resumed = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        sync_records = sync_repo.list_for_run(resumed.run.id)
+
+        assert resumed.current_step is not None
+        assert resumed.current_step.step_name == "apply_schedule"
+        assert len(sync_records) == 2
+        assert [record.execution_order for record in sync_records] == [1, 2]
+        assert {record.target_system for record in sync_records} == {"task_system", "calendar_system"}
+        assert {record.proposal_artifact_id for record in sync_records} == {target_artifact_id}
+        assert {record.proposal_version_number for record in sync_records} == {
+            blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].version_number
+        }
+        manifest_events = SQLAlchemyWorkflowEventRepository(session).list_for_run_by_type(
+            resumed.run.id,
+            event_type="approved_sync_manifest_created",
+        )
+        assert len(manifest_events) == 1
+        assert manifest_events[0].details["sync_record_ids"] == [record.id for record in sync_records]
+
+
+def test_prepare_approved_sync_plan_is_idempotent_for_same_proposal_version() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+
+        resumed = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+        assert resumed.current_step is not None
+
+        first_records = service.prepare_approved_sync_plan(
+            resumed.run.id,
+            proposal_artifact_id=target_artifact_id,
+            step_id=resumed.current_step.id,
+        )
+        second_records = service.prepare_approved_sync_plan(
+            resumed.run.id,
+            proposal_artifact_id=target_artifact_id,
+            step_id=resumed.current_step.id,
+        )
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+
+        assert [record.id for record in first_records] == [record.id for record in second_records]
+        assert len(sync_repo.list_for_run(resumed.run.id)) == 2
 
 
 def test_approval_decision_reject_closes_run_cleanly() -> None:

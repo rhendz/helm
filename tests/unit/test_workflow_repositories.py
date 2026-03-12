@@ -691,6 +691,7 @@ def test_workflow_approval_checkpoint_persists_pending_and_resolved_decisions() 
                 payload=ApprovalRequestArtifactPayload(
                     checkpoint_id=checkpoint.id,
                     target_artifact_id=proposal_artifact.id,
+                    target_version_number=proposal_artifact.version_number,
                     allowed_actions=("approve", "reject", "request_revision"),
                     pause_reason="Awaiting operator approval before downstream changes.",
                 ).to_dict(),
@@ -742,6 +743,7 @@ def test_workflow_approval_checkpoint_persists_pending_and_resolved_decisions() 
                 payload=ApprovalDecisionArtifactPayload(
                     checkpoint_id=checkpoint.id,
                     target_artifact_id=proposal_artifact.id,
+                    target_version_number=proposal_artifact.version_number,
                     decision="request_revision",
                     actor="telegram:1",
                     decision_at=resolved.decision_at,
