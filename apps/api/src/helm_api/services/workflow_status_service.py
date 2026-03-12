@@ -9,9 +9,13 @@ from helm_storage.repositories import (
     RawRequestArtifactPayload,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowRunRepository,
+    SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
     WorkflowRunState,
     WorkflowRunStatus,
+    WorkflowSyncRecoveryClassification,
+    WorkflowSyncStatus,
+    WorkflowTargetSystem,
     WorkflowStepStatus,
 )
 from sqlalchemy import select
@@ -33,6 +37,7 @@ class WorkflowStatusService:
         self._session = session
         self._run_repo = SQLAlchemyWorkflowRunRepository(session)
         self._artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
+        self._sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
         self._orchestration = WorkflowOrchestrationService(session)
 
     def create_run(self, payload: WorkflowRunCreateInput) -> dict[str, object]:
@@ -138,6 +143,7 @@ class WorkflowStatusService:
 
     def _build_summary(self, state: WorkflowRunState) -> dict[str, object]:
         failed_step = self._latest_failed_step(state)
+        sync_projection = self._sync_projection(state.run.id)
         latest_validation_artifact = state.latest_artifacts.get(WorkflowArtifactType.VALIDATION_RESULT.value)
         approval_projection = self._approval_projection(state)
         proposal_versions = self._build_proposal_versions(state.run)
@@ -148,8 +154,8 @@ class WorkflowStatusService:
             latest_validation_outcome = state.run.validation_outcome_summary
 
         paused_state, pause_reason = self._paused_state(state, failed_step)
-        failure_kind = self._failure_kind(state, failed_step)
-        failure_summary = self._failure_summary(state, failed_step)
+        failure_kind = self._failure_kind(state, failed_step, sync_projection)
+        failure_summary = self._failure_summary(state, failed_step, sync_projection)
         return {
             "id": state.run.id,
             "workflow_type": state.run.workflow_type,
@@ -163,14 +169,21 @@ class WorkflowStatusService:
             "last_event_summary": state.run.last_event_summary or (state.last_event.summary if state.last_event else None),
             "failure_summary": failure_summary,
             "failure_kind": failure_kind,
+            "recovery_class": sync_projection["recovery_class"],
             "latest_validation_outcome": latest_validation_outcome,
-            "retry_state": failed_step.retry_state if failed_step is not None else state.run.retry_state,
-            "retryable": bool(failed_step.retryable) if failed_step is not None else False,
+            "retry_state": (
+                sync_projection["retry_state"]
+                or (failed_step.retry_state if failed_step is not None else state.run.retry_state)
+            ),
+            "retryable": bool(sync_projection["retryable"] or (failed_step.retryable if failed_step is not None else False)),
             "available_actions": self._available_actions(state, failed_step),
+            "safe_next_actions": sync_projection["safe_next_actions"],
             "approval_checkpoint": approval_projection["checkpoint"],
             "latest_decision": approval_projection["latest_decision"],
             "latest_proposal_version": proposal_versions[0] if proposal_versions else None,
             "proposal_versions": proposal_versions,
+            "effect_summary": sync_projection["effect_summary"],
+            "sync": sync_projection["sync"],
             "started_at": state.run.started_at,
             "updated_at": state.run.updated_at,
             "completed_at": state.run.completed_at,
@@ -265,7 +278,10 @@ class WorkflowStatusService:
             return "awaiting_retry", state.run.execution_error_summary or state.run.last_event_summary
         return None, None
 
-    def _failure_kind(self, state: WorkflowRunState, failed_step) -> str | None:  # noqa: ANN001
+    def _failure_kind(self, state: WorkflowRunState, failed_step, sync_projection: dict[str, object]) -> str | None:  # noqa: ANN001
+        sync_recovery_class = sync_projection["recovery_class"]
+        if isinstance(sync_recovery_class, str):
+            return sync_recovery_class
         if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
             return "approval_required"
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
@@ -276,7 +292,10 @@ class WorkflowStatusService:
             return "blocked_validation"
         return None
 
-    def _failure_summary(self, state: WorkflowRunState, failed_step) -> str | None:  # noqa: ANN001
+    def _failure_summary(self, state: WorkflowRunState, failed_step, sync_projection: dict[str, object]) -> str | None:  # noqa: ANN001
+        sync_failure_summary = sync_projection["failure_summary"]
+        if isinstance(sync_failure_summary, str):
+            return sync_failure_summary
         if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
             return "Awaiting operator approval before downstream changes."
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
@@ -329,6 +348,174 @@ class WorkflowStatusService:
                 "revision_feedback": latest_decision.payload.get("revision_feedback"),
             }
         return {"checkpoint": checkpoint_payload, "latest_decision": decision_payload}
+
+    def _sync_projection(self, run_id: int) -> dict[str, object]:
+        sync_records = self._sync_repo.list_for_run(run_id)
+        if not sync_records:
+            return {
+                "effect_summary": None,
+                "failure_summary": None,
+                "recovery_class": None,
+                "retry_state": None,
+                "retryable": False,
+                "safe_next_actions": [],
+                "sync": {
+                    "counts_by_state": {},
+                    "counts_by_target": {},
+                    "last_failed_or_unresolved": None,
+                    "replay_lineage": None,
+                },
+            }
+
+        counts_by_state: dict[str, int] = {}
+        counts_by_target = {
+            WorkflowTargetSystem.TASK_SYSTEM.value: 0,
+            WorkflowTargetSystem.CALENDAR_SYSTEM.value: 0,
+        }
+        for record in sync_records:
+            counts_by_state[record.status] = counts_by_state.get(record.status, 0) + 1
+            counts_by_target[record.target_system] = counts_by_target.get(record.target_system, 0) + 1
+
+        unresolved_statuses = {
+            WorkflowSyncStatus.PENDING.value,
+            WorkflowSyncStatus.IN_PROGRESS.value,
+            WorkflowSyncStatus.FAILED_RETRYABLE.value,
+            WorkflowSyncStatus.FAILED_TERMINAL.value,
+            WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+            WorkflowSyncStatus.CANCELLED.value,
+        }
+        last_failed_or_unresolved = [
+            record for record in sync_records if record.status in unresolved_statuses
+        ]
+        last_failed_record = max(
+            last_failed_or_unresolved,
+            key=lambda record: (
+                record.last_attempted_at or record.completed_at or record.updated_at,
+                record.id,
+            ),
+            default=None,
+        )
+        recovery_record = max(
+            [record for record in sync_records if record.recovery_classification],
+            key=lambda record: (record.recovery_updated_at or record.updated_at, record.id),
+            default=None,
+        )
+        replay_records = [
+            record
+            for record in sync_records
+            if record.replayed_from_sync_record_id is not None or record.replay_requested_at is not None
+        ]
+        replay_lineage = None
+        if replay_records:
+            latest_replay = max(
+                replay_records,
+                key=lambda record: (record.replay_requested_at or record.updated_at, record.id),
+            )
+            replay_lineage = {
+                "active": True,
+                "latest_generation": max(record.lineage_generation for record in replay_records),
+                "latest_replay_requested_at": latest_replay.replay_requested_at,
+                "latest_replay_requested_by": latest_replay.replay_requested_by,
+                "source_sync_record_ids": sorted(
+                    {
+                        record.replayed_from_sync_record_id
+                        for record in replay_records
+                        if record.replayed_from_sync_record_id is not None
+                    }
+                ),
+                "replay_sync_record_ids": [record.id for record in replay_records],
+            }
+
+        total_writes = len(sync_records)
+        pending_execution = counts_by_state.get(WorkflowSyncStatus.PENDING.value, 0) == total_writes
+        effect_summary = {
+            "pending_execution": pending_execution,
+            "total_writes": total_writes,
+            "task_writes": counts_by_target.get(WorkflowTargetSystem.TASK_SYSTEM.value, 0),
+            "calendar_writes": counts_by_target.get(WorkflowTargetSystem.CALENDAR_SYSTEM.value, 0),
+        }
+
+        recovery_class = recovery_record.recovery_classification if recovery_record is not None else None
+        retryable = recovery_class in {
+            WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
+            WorkflowSyncRecoveryClassification.RETRY_REQUESTED.value,
+            WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value,
+        }
+        retry_state = "retryable" if retryable else None
+        safe_next_actions = self._safe_next_actions(recovery_class=recovery_class, last_record=last_failed_record)
+
+        return {
+            "effect_summary": effect_summary,
+            "failure_summary": self._sync_failure_summary(last_failed_record, recovery_class),
+            "recovery_class": recovery_class,
+            "retry_state": retry_state,
+            "retryable": retryable,
+            "safe_next_actions": safe_next_actions,
+            "sync": {
+                "counts_by_state": counts_by_state,
+                "counts_by_target": counts_by_target,
+                "last_failed_or_unresolved": self._sync_record_summary(last_failed_record),
+                "replay_lineage": replay_lineage,
+            },
+        }
+
+    def _sync_failure_summary(self, sync_record, recovery_class: str | None) -> str | None:  # noqa: ANN001
+        if sync_record is None:
+            return None
+        if sync_record.last_error_summary:
+            return sync_record.last_error_summary
+        if recovery_class == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value:
+            return "Remaining approved writes were cancelled after partial sync success."
+        if recovery_class == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value:
+            return "Replay requested for downstream sync lineage."
+        if sync_record.status == WorkflowSyncStatus.PENDING.value:
+            return "Approved writes are queued and ready for execution."
+        return None
+
+    def _sync_record_summary(self, sync_record) -> dict[str, object] | None:  # noqa: ANN001
+        if sync_record is None:
+            return None
+        return {
+            "sync_record_id": sync_record.id,
+            "target_system": sync_record.target_system,
+            "sync_kind": sync_record.sync_kind,
+            "planned_item_key": sync_record.planned_item_key,
+            "status": sync_record.status,
+            "recovery_class": sync_record.recovery_classification,
+            "retryable": sync_record.status in {
+                WorkflowSyncStatus.PENDING.value,
+                WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+            },
+            "external_object_id": sync_record.external_object_id,
+            "last_error_summary": sync_record.last_error_summary,
+            "lineage_generation": sync_record.lineage_generation,
+            "replayed_from_sync_record_id": sync_record.replayed_from_sync_record_id,
+            "supersedes_sync_record_id": sync_record.supersedes_sync_record_id,
+            "last_attempted_at": sync_record.last_attempted_at,
+            "completed_at": sync_record.completed_at,
+        }
+
+    def _safe_next_actions(self, *, recovery_class: str | None, last_record) -> list[dict[str, str]]:  # noqa: ANN001
+        if last_record is None:
+            return []
+        if recovery_class == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value:
+            return [{"action": "request_replay", "label": "Request replay for cancelled writes"}]
+        if recovery_class == WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value:
+            return [{"action": "request_replay", "label": "Request explicit replay after adapter fix"}]
+        if recovery_class in {
+            WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
+            WorkflowSyncRecoveryClassification.RETRY_REQUESTED.value,
+        }:
+            return [
+                {"action": "retry", "label": "Retry unresolved writes"},
+                {"action": "terminate", "label": "Terminate remaining writes"},
+            ]
+        if recovery_class == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value:
+            return [{"action": "await_replay", "label": "Await replay processing"}]
+        if last_record.status == WorkflowSyncStatus.PENDING.value:
+            return [{"action": "await_execution", "label": "Await approved write execution"}]
+        return []
 
     def _submit_approval(self, run_id: int, decision: ApprovalDecision) -> dict[str, object]:
         return self._build_summary(self._orchestration.submit_approval_decision(run_id, decision=decision))

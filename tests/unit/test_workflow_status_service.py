@@ -4,7 +4,20 @@ from helm_api.services.workflow_status_service import WorkflowRunCreateInput, Wo
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
+    CalendarAgentInput,
+    CalendarAgentOutput,
+    CalendarSyncResult,
+    NormalizedTaskArtifact,
+    PreparedSpecialistInput,
+    ScheduleBlock,
+    SyncOutcomeStatus,
+    SyncRetryDisposition,
     ScheduleProposalValidator,
+    SpecialistName,
+    TaskAgentInput,
+    TaskAgentOutput,
+    TaskArtifact,
+    TaskSyncResult,
     ValidationOutcome,
     ExecutionFailurePayload,
     NormalizedTaskValidator,
@@ -13,13 +26,20 @@ from helm_orchestration import (
     ValidationTargetKind,
     ValidatorRegistry,
     ValidatorTarget,
+    WorkflowArtifactKind,
     WorkflowOrchestrationService,
+    WorkflowResumeService,
+    WorkflowSpecialistStep,
 )
 from helm_storage.db import Base
 from helm_storage.repositories import (
     NewWorkflowArtifact,
     SQLAlchemyWorkflowArtifactRepository,
+    SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
+    WorkflowSyncRecoveryClassification,
+    WorkflowSyncRecordPatch,
+    WorkflowSyncStatus,
     WorkflowRunStatus,
     WorkflowStepStatus,
 )
@@ -47,25 +67,68 @@ def _create_input() -> WorkflowRunCreateInput:
 def _orchestration(session: Session) -> WorkflowOrchestrationService:
     return WorkflowOrchestrationService(
         session,
-        validator_registry=ValidatorRegistry(
-            [
-                RegisteredValidator(
-                    target=ValidatorTarget(
-                        kind=ValidationTargetKind.STEP_NAME,
-                        value="normalize_request",
-                    ),
-                    validator=NormalizedTaskValidator(),
-                ),
-                RegisteredValidator(
-                    target=ValidatorTarget(
-                        kind=ValidationTargetKind.ARTIFACT_TYPE,
-                        value=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
-                    ),
-                    validator=ScheduleProposalValidator(),
-                ),
-            ]
-        ),
+        validator_registry=_validator_registry(),
     )
+
+
+def _validator_registry() -> ValidatorRegistry:
+    return ValidatorRegistry(
+        [
+            RegisteredValidator(
+                target=ValidatorTarget(
+                    kind=ValidationTargetKind.STEP_NAME,
+                    value="normalize_request",
+                ),
+                validator=NormalizedTaskValidator(),
+            ),
+            RegisteredValidator(
+                target=ValidatorTarget(
+                    kind=ValidationTargetKind.ARTIFACT_TYPE,
+                    value=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                ),
+                validator=ScheduleProposalValidator(),
+            ),
+        ]
+    )
+
+
+class _RecordingTaskAdapter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def upsert_task(self, request):  # noqa: ANN001
+        self.calls.append(("upsert", request.idempotency_key))
+        return TaskSyncResult(
+            status=SyncOutcomeStatus.SUCCEEDED,
+            external_task_id=f"task-{request.planned_item_key}",
+            retry_disposition=SyncRetryDisposition.TERMINAL,
+        )
+
+    def reconcile_task(self, request):  # noqa: ANN001
+        raise AssertionError("Task reconcile not expected in workflow status tests.")
+
+
+class _RecordingCalendarAdapter:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._outcomes: dict[str, CalendarSyncResult] = {}
+
+    def set_upsert_outcome(self, planned_item_key: str, outcome: CalendarSyncResult) -> None:
+        self._outcomes[planned_item_key] = outcome
+
+    def upsert_calendar_block(self, request):  # noqa: ANN001
+        self.calls.append(("upsert", request.idempotency_key))
+        return self._outcomes.get(
+            request.planned_item_key,
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.SUCCEEDED,
+                external_event_id=f"event-{request.planned_item_key}",
+                retry_disposition=SyncRetryDisposition.TERMINAL,
+            ),
+        )
+
+    def reconcile_calendar_block(self, request):  # noqa: ANN001
+        raise AssertionError("Calendar reconcile not expected in workflow status tests.")
 
 
 def _create_approval_blocked_run(session: Session) -> int:
@@ -99,6 +162,139 @@ def _create_approval_blocked_run(session: Session) -> int:
     )
     assert blocked.run.status == WorkflowRunStatus.BLOCKED.value
     return blocked.run.id
+
+
+def _task_agent_step() -> WorkflowSpecialistStep:
+    def _build_input(state) -> PreparedSpecialistInput:  # type: ignore[no-untyped-def]
+        request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
+        request = TaskAgentInput(
+            workflow_type=state.run.workflow_type,
+            run_id=state.run.id,
+            step_name="dispatch_task_agent",
+            request_artifact_id=request_artifact.id,
+            request_text=request_artifact.payload["request_text"],
+            submitted_by=request_artifact.payload["submitted_by"],
+            channel=request_artifact.payload["channel"],
+            metadata=request_artifact.payload["metadata"],
+            constraints=(),
+        )
+        return PreparedSpecialistInput(input_artifact_id=request_artifact.id, payload=request)
+
+    def _handler(payload: object) -> TaskAgentOutput:
+        request = TaskAgentInput.model_validate(payload)
+        return TaskAgentOutput(
+            title="Weekly planning",
+            summary=f"Normalize request: {request.request_text}",
+            tasks=(
+                TaskArtifact(
+                    title="Triage inbox",
+                    summary="Clear pending email and categorize follow-ups.",
+                    priority="high",
+                    estimated_minutes=30,
+                ),
+            ),
+            warnings=(),
+        )
+
+    return WorkflowSpecialistStep(
+        workflow_type="weekly_scheduling",
+        step_name="dispatch_task_agent",
+        specialist=SpecialistName.TASK_AGENT,
+        input_builder=_build_input,
+        handler=_handler,
+        artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
+        next_step_name="dispatch_calendar_agent",
+    )
+
+
+def _calendar_agent_step() -> WorkflowSpecialistStep:
+    def _build_input(state) -> PreparedSpecialistInput:  # type: ignore[no-untyped-def]
+        normalized_artifact = state.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value]
+        request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
+        normalized = NormalizedTaskArtifact.model_validate(normalized_artifact.payload)
+        request = CalendarAgentInput(
+            workflow_type=state.run.workflow_type,
+            run_id=state.run.id,
+            step_name="dispatch_calendar_agent",
+            normalized_task_artifact_id=normalized_artifact.id,
+            tasks=normalized.tasks,
+            scheduling_constraints=("Protect deep work mornings.",),
+            source_context={"chat_id": request_artifact.payload["metadata"]["chat_id"]},
+            request_text=request_artifact.payload["request_text"],
+            warnings=normalized.warnings,
+            revision_request_artifact_id=None,
+            revision_feedback=None,
+            prior_proposal_artifact_id=None,
+            prior_proposal_version=None,
+        )
+        return PreparedSpecialistInput(input_artifact_id=normalized_artifact.id, payload=request)
+
+    def _handler(payload: object) -> CalendarAgentOutput:
+        CalendarAgentInput.model_validate(payload)
+        return CalendarAgentOutput(
+            proposal_summary="Draft a focused weekly schedule from validated tasks.",
+            calendar_id="primary",
+            time_blocks=(
+                ScheduleBlock(
+                    title="Inbox triage",
+                    task_title="Triage inbox",
+                    start="2026-03-16T09:00:00Z",
+                    end="2026-03-16T09:30:00Z",
+                ),
+            ),
+            proposed_changes=(
+                "Create a Monday morning triage block.",
+                "Reserve one review slot for drafting priorities.",
+            ),
+            warnings=(),
+        )
+
+    return WorkflowSpecialistStep(
+        workflow_type="weekly_scheduling",
+        step_name="dispatch_calendar_agent",
+        specialist=SpecialistName.CALENDAR_AGENT,
+        input_builder=_build_input,
+        handler=_handler,
+        artifact_type=WorkflowArtifactKind.SCHEDULE_PROPOSAL,
+        next_step_name="apply_schedule",
+    )
+
+
+def _approved_sync_run(session: Session) -> tuple[int, WorkflowOrchestrationService, _RecordingCalendarAdapter]:
+    task_adapter = _RecordingTaskAdapter()
+    calendar_adapter = _RecordingCalendarAdapter()
+    service = WorkflowOrchestrationService(
+        session,
+        validator_registry=_validator_registry(),
+        task_system_adapter=task_adapter,
+        calendar_system_adapter=calendar_adapter,
+    )
+    created = service.create_run(
+        workflow_type="weekly_scheduling",
+        first_step_name="dispatch_task_agent",
+        request_payload={
+            "request_text": "Plan my week around deep work.",
+            "submitted_by": "telegram:user",
+            "channel": "telegram",
+            "metadata": {"chat_id": "123"},
+        },
+    )
+    service.execute_specialist_step(created.run.id, _task_agent_step())
+    blocked = WorkflowResumeService(
+        session,
+        workflow_service=service,
+        specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+    ).resume_run(created.run.id)
+    target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+    approved = service.submit_approval_decision(
+        blocked.run.id,
+        decision=ApprovalDecision(
+            action=ApprovalAction.APPROVE,
+            actor="telegram:user",
+            target_artifact_id=target_artifact_id,
+        ),
+    )
+    return approved.run.id, service, calendar_adapter
 
 
 def test_create_run_summary_answers_operator_triage_question() -> None:
@@ -174,6 +370,64 @@ def test_approval_blocked_run_summary_projects_checkpoint_state() -> None:
         assert summary["latest_decision"] is None
         assert summary["latest_proposal_version"]["artifact_id"] == summary["approval_checkpoint"]["target_artifact_id"]
         assert summary["proposal_versions"][0]["is_actionable"] is True
+
+
+def test_effect_summary_projects_pending_approved_write_counts_before_execution() -> None:
+    with _session() as session:
+        run_id, _service, _calendar_adapter = _approved_sync_run(session)
+
+        summary = WorkflowStatusService(session).get_run_detail(run_id)
+
+        assert summary is not None
+        assert summary["effect_summary"] == {
+            "pending_execution": True,
+            "total_writes": 2,
+            "task_writes": 1,
+            "calendar_writes": 1,
+        }
+        assert summary["sync"]["counts_by_state"] == {WorkflowSyncStatus.PENDING.value: 2}
+        assert summary["sync"]["counts_by_target"] == {
+            "task_system": 1,
+            "calendar_system": 1,
+        }
+        assert summary["failure_summary"] == "Approved writes are queued and ready for execution."
+        assert summary["safe_next_actions"] == [
+            {"action": "await_execution", "label": "Await approved write execution"}
+        ]
+
+
+def test_sync_summary_projects_recoverable_failure_and_replay_lineage() -> None:
+    with _session() as session:
+        run_id, orchestration, _calendar_adapter = _approved_sync_run(session)
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        failed_record = sync_repo.list_for_run(run_id)[1]
+        sync_repo.update(
+            failed_record.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.FAILED_RETRYABLE.value,
+                last_error_summary="Calendar API timed out.",
+                recovery_classification=WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
+            ),
+        )
+        replay_state = orchestration.request_sync_replay(
+            run_id,
+            actor="telegram:user",
+            sync_record_ids=(failed_record.id,),
+            reason="Replay after adapter timeout.",
+        )
+
+        summary = WorkflowStatusService(session).get_run_detail(replay_state.run.id)
+
+        assert summary is not None
+        assert summary["failure_kind"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        assert summary["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        assert summary["retryable"] is True
+        assert summary["sync"]["last_failed_or_unresolved"]["planned_item_key"] == "calendar:inbox-triage:1"
+        assert summary["sync"]["replay_lineage"]["source_sync_record_ids"] == [failed_record.id]
+        assert summary["sync"]["replay_lineage"]["latest_generation"] == 1
+        assert summary["safe_next_actions"] == [
+            {"action": "await_replay", "label": "Await replay processing"}
+        ]
 
 
 def test_run_detail_projects_latest_first_proposal_versions_and_decision_lineage() -> None:
