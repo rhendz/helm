@@ -26,6 +26,10 @@ class TelegramWorkflowStatusService:
         with SessionLocal() as session:
             return WorkflowStatusService(session).list_runs(needs_action=True, limit=limit)
 
+    def get_run_detail(self, run_id: int) -> dict[str, object] | None:
+        with SessionLocal() as session:
+            return WorkflowStatusService(session).get_run_detail(run_id)
+
     def retry_run(self, run_id: int, *, reason: str) -> dict[str, object]:
         with SessionLocal() as session:
             return WorkflowStatusService(session).retry_run(run_id, reason=reason)
@@ -34,14 +38,34 @@ class TelegramWorkflowStatusService:
         with SessionLocal() as session:
             return WorkflowStatusService(session).terminate_run(run_id, reason=reason)
 
-    def approve_run(self, run_id: int, *, actor: str) -> dict[str, object]:
+    def approve_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
         with SessionLocal() as session:
-            return WorkflowStatusService(session).approve_run(run_id, actor=actor)
+            return WorkflowStatusService(session).approve_run(
+                run_id,
+                actor=actor,
+                target_artifact_id=target_artifact_id,
+            )
 
-    def reject_run(self, run_id: int, *, actor: str) -> dict[str, object]:
+    def reject_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
         with SessionLocal() as session:
-            return WorkflowStatusService(session).reject_run(run_id, actor=actor)
+            return WorkflowStatusService(session).reject_run(
+                run_id,
+                actor=actor,
+                target_artifact_id=target_artifact_id,
+            )
 
-    def request_revision(self, run_id: int, *, actor: str, feedback: str) -> dict[str, object]:
+    def request_revision(
+        self,
+        run_id: int,
+        *,
+        actor: str,
+        target_artifact_id: int,
+        feedback: str,
+    ) -> dict[str, object]:
         with SessionLocal() as session:
-            return WorkflowStatusService(session).request_revision(run_id, actor=actor, feedback=feedback)
+            return WorkflowStatusService(session).request_revision(
+                run_id,
+                actor=actor,
+                target_artifact_id=target_artifact_id,
+                feedback=feedback,
+            )

@@ -7,6 +7,7 @@ from helm_api.schemas import (
     WorkflowRunActionRequest,
     WorkflowRunCreateRequest,
     WorkflowRunDetailResponse,
+    WorkflowProposalVersionResponse,
     WorkflowRunSummaryResponse,
 )
 from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
@@ -55,6 +56,18 @@ def get_workflow_run_detail(
     return WorkflowRunDetailResponse(**detail)
 
 
+@router.get("/{run_id}/proposal-versions", response_model=list[WorkflowProposalVersionResponse])
+def list_workflow_run_proposal_versions(
+    run_id: int,
+    db: Session = Depends(get_db),
+) -> list[WorkflowProposalVersionResponse]:
+    service = WorkflowStatusService(db)
+    try:
+        return [WorkflowProposalVersionResponse(**item) for item in service.list_proposal_versions(run_id)]
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/{run_id}/retry", response_model=WorkflowRunSummaryResponse)
 def retry_workflow_run(
     run_id: int,
@@ -91,7 +104,11 @@ def approve_workflow_run(
 ) -> WorkflowRunSummaryResponse:
     service = WorkflowStatusService(db)
     try:
-        result = service.approve_run(run_id, actor=payload.actor)
+        result = service.approve_run(
+            run_id,
+            actor=payload.actor,
+            target_artifact_id=payload.target_artifact_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return WorkflowRunSummaryResponse(**result)
@@ -105,7 +122,11 @@ def reject_workflow_run(
 ) -> WorkflowRunSummaryResponse:
     service = WorkflowStatusService(db)
     try:
-        result = service.reject_run(run_id, actor=payload.actor)
+        result = service.reject_run(
+            run_id,
+            actor=payload.actor,
+            target_artifact_id=payload.target_artifact_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return WorkflowRunSummaryResponse(**result)
@@ -119,7 +140,12 @@ def request_workflow_revision(
 ) -> WorkflowRunSummaryResponse:
     service = WorkflowStatusService(db)
     try:
-        result = service.request_revision(run_id, actor=payload.actor, feedback=payload.feedback or "")
+        result = service.request_revision(
+            run_id,
+            actor=payload.actor,
+            target_artifact_id=payload.target_artifact_id,
+            feedback=payload.feedback or "",
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return WorkflowRunSummaryResponse(**result)

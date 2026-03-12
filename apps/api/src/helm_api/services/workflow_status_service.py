@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from helm_orchestration import ApprovalAction, ApprovalDecision, WorkflowOrchestrationService
 from helm_storage.models import WorkflowArtifactORM, WorkflowRunORM
@@ -64,24 +65,52 @@ class WorkflowStatusService:
         detail["lineage"] = self._build_lineage(run)
         return detail
 
+    def list_proposal_versions(self, run_id: int) -> list[dict[str, object]]:
+        run = self._session.execute(self._run_query(run_id=run_id)).scalars().first()
+        if run is None:
+            raise ValueError(f"Workflow run {run_id} does not exist.")
+        return self._build_proposal_versions(run)
+
     def retry_run(self, run_id: int, *, reason: str) -> dict[str, object]:
         return self._build_summary(self._orchestration.retry_current_step(run_id, reason=reason))
 
     def terminate_run(self, run_id: int, *, reason: str) -> dict[str, object]:
         return self._build_summary(self._orchestration.terminate_run(run_id, reason=reason))
 
-    def approve_run(self, run_id: int, *, actor: str) -> dict[str, object]:
-        return self._submit_approval(run_id, ApprovalDecision(action=ApprovalAction.APPROVE, actor=actor))
+    def approve_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
+        return self._submit_approval(
+            run_id,
+            ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor=actor,
+                target_artifact_id=target_artifact_id,
+            ),
+        )
 
-    def reject_run(self, run_id: int, *, actor: str) -> dict[str, object]:
-        return self._submit_approval(run_id, ApprovalDecision(action=ApprovalAction.REJECT, actor=actor))
+    def reject_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
+        return self._submit_approval(
+            run_id,
+            ApprovalDecision(
+                action=ApprovalAction.REJECT,
+                actor=actor,
+                target_artifact_id=target_artifact_id,
+            ),
+        )
 
-    def request_revision(self, run_id: int, *, actor: str, feedback: str) -> dict[str, object]:
+    def request_revision(
+        self,
+        run_id: int,
+        *,
+        actor: str,
+        target_artifact_id: int,
+        feedback: str,
+    ) -> dict[str, object]:
         return self._submit_approval(
             run_id,
             ApprovalDecision(
                 action=ApprovalAction.REQUEST_REVISION,
                 actor=actor,
+                target_artifact_id=target_artifact_id,
                 revision_feedback=feedback,
             ),
         )
@@ -99,6 +128,7 @@ class WorkflowStatusService:
                 selectinload(WorkflowRunORM.steps),
                 selectinload(WorkflowRunORM.artifacts),
                 selectinload(WorkflowRunORM.events),
+                selectinload(WorkflowRunORM.approval_checkpoints),
             )
             .order_by(WorkflowRunORM.started_at.desc(), WorkflowRunORM.id.desc())
         )
@@ -110,6 +140,7 @@ class WorkflowStatusService:
         failed_step = self._latest_failed_step(state)
         latest_validation_artifact = state.latest_artifacts.get(WorkflowArtifactType.VALIDATION_RESULT.value)
         approval_projection = self._approval_projection(state)
+        proposal_versions = self._build_proposal_versions(state.run)
         latest_validation_outcome = None
         if latest_validation_artifact is not None:
             latest_validation_outcome = str(latest_validation_artifact.payload.get("outcome"))
@@ -138,6 +169,8 @@ class WorkflowStatusService:
             "available_actions": self._available_actions(state, failed_step),
             "approval_checkpoint": approval_projection["checkpoint"],
             "latest_decision": approval_projection["latest_decision"],
+            "latest_proposal_version": proposal_versions[0] if proposal_versions else None,
+            "proposal_versions": proposal_versions,
             "started_at": state.run.started_at,
             "updated_at": state.run.updated_at,
             "completed_at": state.run.completed_at,
@@ -272,11 +305,15 @@ class WorkflowStatusService:
         checkpoint = state.active_approval_checkpoint
         checkpoint_payload = None
         if checkpoint is not None:
+            checkpoint_proposal = self._artifact_repo.get_by_id(checkpoint.target_artifact_id)
             checkpoint_payload = {
                 "checkpoint_id": checkpoint.id,
                 "target_artifact_id": checkpoint.target_artifact_id,
+                "target_version_number": checkpoint_proposal.version_number if checkpoint_proposal is not None else 0,
                 "proposal_summary": (
-                    schedule_proposal.payload.get("proposal_summary") if schedule_proposal is not None else None
+                    checkpoint_proposal.payload.get("proposal_summary")
+                    if checkpoint_proposal is not None
+                    else (schedule_proposal.payload.get("proposal_summary") if schedule_proposal is not None else None)
                 ),
                 "pause_reason": "Awaiting operator approval before downstream changes.",
                 "allowed_actions": list(checkpoint.allowed_actions),
@@ -286,6 +323,8 @@ class WorkflowStatusService:
             decision_payload = {
                 "decision": latest_decision.payload.get("decision"),
                 "actor": latest_decision.payload.get("actor"),
+                "target_artifact_id": latest_decision.payload.get("target_artifact_id"),
+                "target_version_number": latest_decision.payload.get("target_version_number"),
                 "decision_at": latest_decision.payload.get("decision_at"),
                 "revision_feedback": latest_decision.payload.get("revision_feedback"),
             }
@@ -293,6 +332,68 @@ class WorkflowStatusService:
 
     def _submit_approval(self, run_id: int, decision: ApprovalDecision) -> dict[str, object]:
         return self._build_summary(self._orchestration.submit_approval_decision(run_id, decision=decision))
+
+    def _build_proposal_versions(self, run: WorkflowRunORM) -> list[dict[str, object]]:
+        proposals = [
+            artifact
+            for artifact in run.artifacts
+            if artifact.artifact_type == WorkflowArtifactType.SCHEDULE_PROPOSAL.value
+        ]
+        if not proposals:
+            return []
+        proposals = sorted(proposals, key=lambda artifact: (artifact.version_number, artifact.id), reverse=True)
+        active_checkpoint = next(
+            (
+                checkpoint
+                for checkpoint in sorted(run.approval_checkpoints, key=lambda row: row.id, reverse=True)
+                if checkpoint.status == "pending"
+            ),
+            None,
+        )
+        decision_by_artifact_id: dict[int, dict[str, Any]] = {}
+        revision_feedback_by_artifact_id: dict[int, str] = {}
+        for artifact in sorted(run.artifacts, key=lambda row: row.id):
+            if artifact.artifact_type == WorkflowArtifactType.APPROVAL_DECISION.value:
+                target_artifact_id = artifact.payload.get("target_artifact_id")
+                if isinstance(target_artifact_id, int):
+                    decision_by_artifact_id[target_artifact_id] = {
+                        "decision": artifact.payload.get("decision"),
+                        "actor": artifact.payload.get("actor"),
+                        "target_artifact_id": target_artifact_id,
+                        "target_version_number": artifact.payload.get("target_version_number"),
+                        "decision_at": artifact.payload.get("decision_at"),
+                        "revision_feedback": artifact.payload.get("revision_feedback"),
+                    }
+            if artifact.artifact_type == WorkflowArtifactType.REVISION_REQUEST.value:
+                target_artifact_id = artifact.payload.get("target_artifact_id")
+                feedback = artifact.payload.get("feedback")
+                if isinstance(target_artifact_id, int) and isinstance(feedback, str) and feedback:
+                    revision_feedback_by_artifact_id[target_artifact_id] = feedback
+
+        latest_proposal_id = proposals[0].id
+        superseded_ids = {
+            artifact.supersedes_artifact_id
+            for artifact in proposals
+            if artifact.supersedes_artifact_id is not None
+        }
+        return [
+            {
+                "artifact_id": artifact.id,
+                "version_number": artifact.version_number,
+                "proposal_summary": artifact.payload.get("proposal_summary"),
+                "created_at": artifact.created_at,
+                "producer_step_name": artifact.producer_step_name,
+                "is_latest": artifact.id == latest_proposal_id,
+                "is_actionable": active_checkpoint is not None and active_checkpoint.target_artifact_id == artifact.id,
+                "superseded": artifact.id in superseded_ids,
+                "approved": decision_by_artifact_id.get(artifact.id, {}).get("decision") == "approve",
+                "rejected": decision_by_artifact_id.get(artifact.id, {}).get("decision") == "reject",
+                "latest_decision": decision_by_artifact_id.get(artifact.id),
+                "revision_feedback_summary": revision_feedback_by_artifact_id.get(artifact.id),
+                "supersedes_artifact_id": artifact.supersedes_artifact_id,
+            }
+            for artifact in proposals
+        ]
 
     def _artifact_payload(self, artifact: WorkflowArtifactORM) -> dict[str, object]:
         return {

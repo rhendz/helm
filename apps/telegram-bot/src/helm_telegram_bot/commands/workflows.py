@@ -21,16 +21,42 @@ def _format_run(run: dict[str, object]) -> str:
     approval_checkpoint = run.get("approval_checkpoint")
     if isinstance(approval_checkpoint, dict):
         proposal_summary = approval_checkpoint.get("proposal_summary") or "Proposal summary unavailable."
+        target_artifact_id = approval_checkpoint.get("target_artifact_id")
+        target_version_number = approval_checkpoint.get("target_version_number")
         lines.append(
+            f"Latest proposal: v{target_version_number} artifact={target_artifact_id}\n"
             "Proposal: "
             f"{proposal_summary}\n"
-            "Actions: approve continues, reject closes, request_revision regenerates."
+            "Actions: approve/reject/request_revision must name this artifact id."
+        )
+    latest_proposal = run.get("latest_proposal_version")
+    if isinstance(latest_proposal, dict) and approval_checkpoint is None:
+        lines.append(
+            f"Latest proposal: v{latest_proposal.get('version_number')} "
+            f"artifact={latest_proposal.get('artifact_id')}"
         )
     latest_decision = run.get("latest_decision")
     if isinstance(latest_decision, dict):
         decision = latest_decision.get("decision")
         actor = latest_decision.get("actor")
-        lines.append(f"Latest decision: {decision} by {actor}")
+        target = latest_decision.get("target_artifact_id")
+        lines.append(f"Latest decision: {decision} by {actor} on artifact {target}")
+    proposal_versions = run.get("proposal_versions")
+    if isinstance(proposal_versions, list) and len(proposal_versions) > 1:
+        version_labels = []
+        for item in proposal_versions[:3]:
+            if not isinstance(item, dict):
+                continue
+            status = "current"
+            if item.get("approved"):
+                status = "approved"
+            elif item.get("rejected"):
+                status = "rejected"
+            elif item.get("superseded"):
+                status = "superseded"
+            version_labels.append(f"v{item.get('version_number')}:{status}")
+        if version_labels:
+            lines.append(f"History: {', '.join(version_labels)}")
     return "\n".join(lines)
 
 
@@ -101,3 +127,39 @@ async def terminate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     result = _service.terminate_run(run_id, reason=reason)
     await update.message.reply_text(_format_run(result))
+
+
+async def versions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if await reject_if_unauthorized(update, context):
+        return
+    if not update.message:
+        return
+    run_id = parse_single_id_arg(context.args[:1])
+    if run_id is None:
+        await update.message.reply_text("Usage: /workflow_versions <run_id>")
+        return
+    detail = _service.get_run_detail(run_id)
+    if detail is None:
+        await update.message.reply_text(f"Workflow run {run_id} not found.")
+        return
+    proposal_versions = detail.get("proposal_versions", [])
+    if not proposal_versions:
+        await update.message.reply_text(f"Run {run_id} has no schedule proposal versions.")
+        return
+    lines = [f"Run {run_id} proposal versions:"]
+    for item in proposal_versions:
+        if not isinstance(item, dict):
+            continue
+        status = "current"
+        if item.get("approved"):
+            status = "approved"
+        elif item.get("rejected"):
+            status = "rejected"
+        elif item.get("superseded"):
+            status = "superseded"
+        feedback = item.get("revision_feedback_summary")
+        line = f"v{item.get('version_number')} artifact={item.get('artifact_id')} {status}"
+        if feedback:
+            line += f" | feedback: {feedback}"
+        lines.append(line)
+    await update.message.reply_text("\n".join(lines))

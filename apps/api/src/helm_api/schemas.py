@@ -185,6 +185,7 @@ class WorkflowRunActionRequest(BaseModel):
 
 class WorkflowApprovalDecisionRequest(BaseModel):
     actor: str
+    target_artifact_id: int = Field(gt=0)
     feedback: str | None = None
 
 
@@ -196,6 +197,7 @@ class WorkflowAvailableActionResponse(BaseModel):
 class WorkflowApprovalCheckpointResponse(BaseModel):
     checkpoint_id: int
     target_artifact_id: int
+    target_version_number: int
     proposal_summary: str | None = None
     pause_reason: str
     allowed_actions: list[str] = Field(default_factory=list)
@@ -204,8 +206,26 @@ class WorkflowApprovalCheckpointResponse(BaseModel):
 class WorkflowApprovalDecisionResponse(BaseModel):
     decision: str
     actor: str
+    target_artifact_id: int
+    target_version_number: int | None = None
     decision_at: str
     revision_feedback: str | None = None
+
+
+class WorkflowProposalVersionResponse(BaseModel):
+    artifact_id: int
+    version_number: int
+    proposal_summary: str | None = None
+    created_at: datetime
+    producer_step_name: str | None = None
+    is_latest: bool = False
+    is_actionable: bool = False
+    superseded: bool = False
+    approved: bool = False
+    rejected: bool = False
+    latest_decision: WorkflowApprovalDecisionResponse | None = None
+    revision_feedback_summary: str | None = None
+    supersedes_artifact_id: int | None = None
 
 
 class WorkflowRunSummaryResponse(BaseModel):
@@ -227,6 +247,8 @@ class WorkflowRunSummaryResponse(BaseModel):
     available_actions: list[WorkflowAvailableActionResponse] = Field(default_factory=list)
     approval_checkpoint: WorkflowApprovalCheckpointResponse | None = None
     latest_decision: WorkflowApprovalDecisionResponse | None = None
+    latest_proposal_version: WorkflowProposalVersionResponse | None = None
+    proposal_versions: list[WorkflowProposalVersionResponse] = Field(default_factory=list)
     started_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None
