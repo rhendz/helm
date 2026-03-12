@@ -499,6 +499,57 @@ def test_partial_sync_summary_stays_visible_after_termination() -> None:
         )
 
 
+def test_status_projection_contract_stays_stable_after_replay_on_terminated_run() -> None:
+    with _session() as session:
+        run_id, orchestration, calendar_adapter = _approved_sync_run(session)
+        calendar_adapter.set_upsert_outcome(
+            "calendar:inbox-triage:1",
+            CalendarSyncResult(
+                status=SyncOutcomeStatus.RETRYABLE_FAILURE,
+                retry_disposition=SyncRetryDisposition.RETRYABLE,
+                error_summary="Calendar API timed out.",
+            ),
+        )
+        failed = orchestration.execute_pending_sync_step(run_id)
+        terminated = orchestration.terminate_run(
+            failed.run.id,
+            reason="Operator froze remaining writes after partial sync.",
+        )
+        cancelled_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(terminated.run.id)[1]
+        replay_state = orchestration.request_sync_replay(
+            terminated.run.id,
+            actor="telegram:user",
+            sync_record_ids=(cancelled_record.id,),
+            reason="Replay cancelled calendar write with preserved lineage.",
+        )
+
+        summary = WorkflowStatusService(session).get_run_detail(replay_state.run.id)
+
+        assert summary is not None
+        assert set(summary["sync"]) == {
+            "counts_by_state",
+            "counts_by_target",
+            "last_failed_or_unresolved",
+            "replay_lineage",
+        }
+        assert set(summary["effect_summary"]) == {
+            "pending_execution",
+            "total_writes",
+            "task_writes",
+            "calendar_writes",
+        }
+        assert summary["sync"]["counts_by_state"] == {
+            WorkflowSyncStatus.SUCCEEDED.value: 1,
+            WorkflowSyncStatus.CANCELLED.value: 1,
+            WorkflowSyncStatus.PENDING.value: 1,
+        }
+        assert summary["sync"]["replay_lineage"]["latest_generation"] == 1
+        assert summary["sync"]["replay_lineage"]["source_sync_record_ids"] == [cancelled_record.id]
+        assert summary["safe_next_actions"] == [
+            {"action": "await_replay", "label": "Await replay processing"}
+        ]
+
+
 def test_run_detail_projects_latest_first_proposal_versions_and_decision_lineage() -> None:
     with _session() as session:
         orchestration = _orchestration(session)

@@ -173,9 +173,14 @@ class WorkflowStatusService:
             "latest_validation_outcome": latest_validation_outcome,
             "retry_state": (
                 sync_projection["retry_state"]
-                or (failed_step.retry_state if failed_step is not None else state.run.retry_state)
+                if sync_projection["has_sync_records"]
+                else (failed_step.retry_state if failed_step is not None else state.run.retry_state)
             ),
-            "retryable": bool(sync_projection["retryable"] or (failed_step.retryable if failed_step is not None else False)),
+            "retryable": (
+                bool(sync_projection["retryable"])
+                if sync_projection["has_sync_records"]
+                else bool(failed_step.retryable if failed_step is not None else False)
+            ),
             "available_actions": self._available_actions(state, failed_step),
             "safe_next_actions": sync_projection["safe_next_actions"],
             "approval_checkpoint": approval_projection["checkpoint"],
@@ -353,6 +358,7 @@ class WorkflowStatusService:
         sync_records = self._sync_repo.list_for_run(run_id)
         if not sync_records:
             return {
+                "has_sync_records": False,
                 "effect_summary": None,
                 "failure_summary": None,
                 "recovery_class": None,
@@ -445,6 +451,7 @@ class WorkflowStatusService:
         safe_next_actions = self._safe_next_actions(recovery_class=recovery_class, last_record=last_failed_record)
 
         return {
+            "has_sync_records": True,
             "effect_summary": effect_summary,
             "failure_summary": self._sync_failure_summary(last_failed_record, recovery_class),
             "recovery_class": recovery_class,
@@ -462,12 +469,12 @@ class WorkflowStatusService:
     def _sync_failure_summary(self, sync_record, recovery_class: str | None) -> str | None:  # noqa: ANN001
         if sync_record is None:
             return None
-        if sync_record.last_error_summary:
-            return sync_record.last_error_summary
         if recovery_class == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value:
             return "Remaining approved writes were cancelled after partial sync success."
         if recovery_class == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value:
             return "Replay requested for downstream sync lineage."
+        if sync_record.last_error_summary:
+            return sync_record.last_error_summary
         if sync_record.status == WorkflowSyncStatus.PENDING.value:
             return "Approved writes are queued and ready for execution."
         return None
