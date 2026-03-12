@@ -31,10 +31,10 @@
 
 ### Approval And Resume
 
-- [ ] **APRV-01**: Helm pauses a workflow before any downstream create, update, or delete side effect against a task system or calendar system.
-- [ ] **APRV-02**: User can approve, reject, or request revision for a pending approval checkpoint.
-- [ ] **APRV-03**: Helm persists the approval request, the allowed actions, the final decision, and the decision timestamp.
-- [ ] **APRV-04**: Helm resumes a paused workflow from the correct step after an approval, rejection, or revision decision.
+- [x] **APRV-01**: Helm pauses a workflow before any downstream create, update, or delete side effect against a task system or calendar system.
+- [x] **APRV-02**: User can approve, reject, or request revision for a pending approval checkpoint.
+- [x] **APRV-03**: Helm persists the approval request, the allowed actions, the final decision, and the decision timestamp.
+- [x] **APRV-04**: Helm resumes a paused workflow from the correct step after an approval, rejection, or revision decision.
 - [ ] **APRV-05**: Helm persists revised proposals as new artifact versions rather than overwriting prior proposal artifacts.
 - [ ] **APRV-06**: User can inspect which proposal version was approved, rejected, or superseded by a revision.
 
@@ -110,10 +110,10 @@
 | ARTF-03 | Phase 1 | Complete |
 | ARTF-04 | Phase 2 | Complete |
 | ARTF-05 | Phase 1 | Complete |
-| APRV-01 | Phase 2 | Pending |
-| APRV-02 | Phase 2 | Pending |
-| APRV-03 | Phase 2 | Pending |
-| APRV-04 | Phase 2 | Pending |
+| APRV-01 | Phase 2 | Complete |
+| APRV-02 | Phase 2 | Complete |
+| APRV-03 | Phase 2 | Complete |
+| APRV-04 | Phase 2 | Complete |
 | APRV-05 | Phase 2 | Pending |
 | APRV-06 | Phase 2 | Pending |
 | SYNC-01 | Phase 3 | Pending |
@@ -140,4 +140,4 @@
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-13 after completing Phase 1 plan 03*
+*Last updated: 2026-03-13 after completing Phase 2 plan 02*

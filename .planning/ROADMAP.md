@@ -48,7 +48,7 @@ Plans:
 
 Plans:
 - [x] 02-01: Implement specialist step execution contracts and invocation recording inside the orchestration kernel.
-- [ ] 02-02: Implement approval request storage, decision handling, and pause/resume transitions.
+- [x] 02-02: Implement approval request storage, decision handling, and pause/resume transitions.
 - [ ] 02-03: Add proposal revision/versioning flow for approval-driven rework.
 
 ### Phase 3: Adapter Writes And Recovery Guarantees
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
-| 2. Specialist Dispatch And Approval Semantics | 1/3 | In Progress | - |
+| 2. Specialist Dispatch And Approval Semantics | 2/3 | In Progress | - |
 | 3. Adapter Writes And Recovery Guarantees | 0/3 | Not started | - |
 | 4. Representative Scheduling Workflow | 0/2 | Not started | - |
