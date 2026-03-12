@@ -13,7 +13,7 @@ This roadmap turns the current Helm codebase into a reusable orchestration kerne
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Durable Workflow Foundation** - Establish the kernel's durable run, step, artifact, and validation model.
-- [ ] **Phase 2: Specialist Dispatch And Approval Semantics** - Add typed specialist invocation plus first-class approval, revision, and resume behavior.
+- [x] **Phase 2: Specialist Dispatch And Approval Semantics** - Add typed specialist invocation plus first-class approval, revision, and resume behavior.
 - [ ] **Phase 3: Adapter Writes And Recovery Guarantees** - Make downstream side effects safe, idempotent, and recoverable across retry and resume.
 - [ ] **Phase 4: Representative Scheduling Workflow** - Prove the kernel with the fixed weekly task-to-calendar workflow from request through approved side effects.
 
@@ -49,7 +49,7 @@ Plans:
 Plans:
 - [x] 02-01: Implement specialist step execution contracts and invocation recording inside the orchestration kernel.
 - [x] 02-02: Implement approval request storage, decision handling, and pause/resume transitions.
-- [ ] 02-03: Add proposal revision/versioning flow for approval-driven rework.
+- [x] 02-03: Add proposal revision/versioning flow for approval-driven rework.
 
 ### Phase 3: Adapter Writes And Recovery Guarantees
 **Goal**: Approved workflows can write through adapters safely with strong idempotency, retry, replay, and sync lineage guarantees.
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
-| 2. Specialist Dispatch And Approval Semantics | 2/3 | In Progress | - |
+| 2. Specialist Dispatch And Approval Semantics | 3/3 | Complete | 2026-03-12 |
 | 3. Adapter Writes And Recovery Guarantees | 0/3 | Not started | - |
 | 4. Representative Scheduling Workflow | 0/2 | Not started | - |

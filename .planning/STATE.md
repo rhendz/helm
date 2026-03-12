@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-specialist-dispatch-and-approval-semantics-02-PLAN.md
-last_updated: "2026-03-13T10:05:59Z"
-last_activity: 2026-03-13 — Completed phase 2 plan 02 approval semantics
+stopped_at: Completed 02-specialist-dispatch-and-approval-semantics-03-PLAN.md
+last_updated: "2026-03-12T10:19:54Z"
+last_activity: 2026-03-12 — Completed phase 2 plan 03 proposal versioning
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_phases: 2
+  total_plans: 11
+  completed_plans: 6
+  percent: 55
 ---
 
 # Project State
@@ -21,33 +21,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Helm can execute multi-step, approval-gated workflows reliably enough that workflow state, artifacts, and side effects remain durable and inspectable across restarts and failures.
-**Current focus:** Phase 2 - Specialist Dispatch And Approval Semantics
+**Current focus:** Phase 3 - Adapter Writes And Recovery Guarantees
 
 ## Current Position
 
-Phase: 2 of 4 (Specialist Dispatch And Approval Semantics)
-Plan: 2 of 3 in current phase
+Phase: 3 of 4 (Adapter Writes And Recovery Guarantees)
+Plan: 0 of 3 in current phase
 Status: In progress
-Last activity: 2026-03-13 — Completed phase 2 plan 02 approval semantics
+Last activity: 2026-03-12 — Completed phase 2 plan 03 proposal versioning
 
-Progress: [████████░░] 83%
+Progress: [██████░░░░] 55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 9 min
-- Total execution time: 0.8 hours
+- Total plans completed: 6
+- Average duration: 10 min
+- Total execution time: 1.0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 3 | 30 min | 10 min |
-| 2 | 2 | 15 min | 8 min |
+| 2 | 3 | 30 min | 10 min |
 
 **Recent Trend:**
-- Last 5 plans: 9 min, 6 min, 12 min, 6 min, 12 min
+- Last 5 plans: 15 min, 9 min, 6 min, 12 min, 6 min
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -55,6 +55,7 @@ Progress: [████████░░] 83%
 | Phase 01 P03 | 12 min | 3 tasks | 11 files |
 | Phase 02-specialist-dispatch-and-approval-semantics P01 | 6 min | 3 tasks | 15 files |
 | Phase 02-specialist-dispatch-and-approval-semantics P02 | 9 | 3 tasks | 23 files |
+| Phase 02-specialist-dispatch-and-approval-semantics P03 | 15 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Recent decisions affecting current work:
 - [Phase 02-specialist-dispatch-and-approval-semantics]: Approval checkpoints live in a dedicated workflow_approval_checkpoints table linked to approval request and decision artifacts.
 - [Phase 02-specialist-dispatch-and-approval-semantics]: Schedule proposals pause at an explicit await_schedule_approval step so approval waits stay distinct from validation and execution failures.
 - [Phase 02-specialist-dispatch-and-approval-semantics]: API and Telegram approval actions must consume one shared checkpoint-aware workflow status projection and delegate all decision semantics to the kernel.
+- [Phase 02-specialist-dispatch-and-approval-semantics]: Approval actions must target a concrete proposal artifact id so later revisions cannot change which version gets resolved.
+- [Phase 02-specialist-dispatch-and-approval-semantics]: Revision requests persist as artifacts and the next schedule proposal supersedes the prior proposal within the same run.
 
 ### Pending Todos
 
@@ -92,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T10:05:59Z
-Stopped at: Completed 02-specialist-dispatch-and-approval-semantics-02-PLAN.md
-Resume file: .planning/phases/02-specialist-dispatch-and-approval-semantics/02-03-PLAN.md
+Last session: 2026-03-12T10:19:54Z
+Stopped at: Completed 02-specialist-dispatch-and-approval-semantics-03-PLAN.md
+Resume file: .planning/phases/03-adapter-writes-and-recovery-guarantees/03-01-PLAN.md

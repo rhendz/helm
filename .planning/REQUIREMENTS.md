@@ -35,8 +35,8 @@
 - [x] **APRV-02**: User can approve, reject, or request revision for a pending approval checkpoint.
 - [x] **APRV-03**: Helm persists the approval request, the allowed actions, the final decision, and the decision timestamp.
 - [x] **APRV-04**: Helm resumes a paused workflow from the correct step after an approval, rejection, or revision decision.
-- [ ] **APRV-05**: Helm persists revised proposals as new artifact versions rather than overwriting prior proposal artifacts.
-- [ ] **APRV-06**: User can inspect which proposal version was approved, rejected, or superseded by a revision.
+- [x] **APRV-05**: Helm persists revised proposals as new artifact versions rather than overwriting prior proposal artifacts.
+- [x] **APRV-06**: User can inspect which proposal version was approved, rejected, or superseded by a revision.
 
 ### Adapters And Sync
 
@@ -114,8 +114,8 @@
 | APRV-02 | Phase 2 | Complete |
 | APRV-03 | Phase 2 | Complete |
 | APRV-04 | Phase 2 | Complete |
-| APRV-05 | Phase 2 | Pending |
-| APRV-06 | Phase 2 | Pending |
+| APRV-05 | Phase 2 | Complete |
+| APRV-06 | Phase 2 | Complete |
 | SYNC-01 | Phase 3 | Pending |
 | SYNC-02 | Phase 3 | Pending |
 | SYNC-03 | Phase 3 | Pending |
@@ -140,4 +140,4 @@
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-13 after completing Phase 2 plan 02*
+*Last updated: 2026-03-12 after completing Phase 2 plan 03*
