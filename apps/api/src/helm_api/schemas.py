@@ -121,6 +121,21 @@ class ReplayReprocessResponse(BaseModel):
     reason: str | None = None
 
 
+class WorkflowReplayRequest(BaseModel):
+    actor: str
+    reason: str = Field(min_length=1)
+
+
+class WorkflowReplayResponse(BaseModel):
+    status: str
+    run_id: int
+    source_sync_record_ids: list[int] = Field(default_factory=list)
+    replay_sync_record_ids: list[int] = Field(default_factory=list)
+    replay_queue_source_ids: list[str] = Field(default_factory=list)
+    run: dict[str, object] = Field(default_factory=dict)
+    reason: str | None = None
+
+
 class JobControlResponse(BaseModel):
     job_name: str
     paused: bool

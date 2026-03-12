@@ -1,8 +1,12 @@
 from datetime import datetime, timedelta
 
+from helm_api.services.workflow_status_service import WorkflowStatusService
+from helm_orchestration import WorkflowOrchestrationService
 from helm_storage.db import SessionLocal
 from helm_storage.repositories.agent_runs import AgentRunStatus, SQLAlchemyAgentRunRepository
 from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
+from helm_storage.repositories.workflow_sync_records import SQLAlchemyWorkflowSyncRecordRepository
+from helm_storage.repositories.contracts import WorkflowSyncRecoveryClassification, WorkflowSyncStatus
 from sqlalchemy.exc import SQLAlchemyError
 
 
@@ -117,3 +121,82 @@ def reprocess_failed_runs(
             "skipped_count": 0,
             "reason": "storage_unavailable",
         }
+
+
+def request_workflow_run_replay(*, run_id: int, actor: str, reason: str) -> dict[str, object]:
+    try:
+        with SessionLocal() as session:
+            status_service = WorkflowStatusService(session)
+            detail = status_service.get_run_detail(run_id)
+            if detail is None:
+                raise ValueError(f"Workflow run {run_id} does not exist.")
+
+            safe_next_actions = detail.get("safe_next_actions", [])
+            if not isinstance(safe_next_actions, list) or "request_replay" not in {
+                item.get("action") for item in safe_next_actions if isinstance(item, dict)
+            }:
+                raise ValueError(f"Workflow run {run_id} does not allow explicit replay.")
+
+            sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+            source_sync_record_ids = _select_replayable_sync_record_ids(sync_repo.list_for_run(run_id))
+            if not source_sync_record_ids:
+                raise ValueError(f"Workflow run {run_id} has no replayable sync records.")
+
+            WorkflowOrchestrationService(session).request_sync_replay(
+                run_id,
+                actor=actor,
+                sync_record_ids=tuple(source_sync_record_ids),
+                reason=reason,
+            )
+
+            refreshed = status_service.get_run_detail(run_id)
+            if refreshed is None:
+                raise ValueError(f"Workflow run {run_id} could not be refreshed after replay request.")
+
+            replay_requested_at = None
+            replay_requested_by = None
+            replay_sync_record_ids: list[int] = []
+            replay_queue_source_ids: list[str] = []
+            for record in sync_repo.list_for_run(run_id):
+                if record.replay_requested_at is None:
+                    continue
+                if record.replayed_from_sync_record_id not in source_sync_record_ids:
+                    continue
+                replay_requested_at = replay_requested_at or record.replay_requested_at
+                replay_requested_by = replay_requested_by or record.replay_requested_by
+                if (
+                    record.replayed_from_sync_record_id is not None
+                    and record.replay_requested_by == actor
+                    and record.id not in replay_sync_record_ids
+                ):
+                    replay_sync_record_ids.append(record.id)
+                    replay_queue_source_ids.append(f"{run_id}:{record.replayed_from_sync_record_id}")
+
+            return {
+                "status": "accepted",
+                "run_id": run_id,
+                "source_sync_record_ids": source_sync_record_ids,
+                "replay_sync_record_ids": replay_sync_record_ids,
+                "replay_queue_source_ids": replay_queue_source_ids,
+                "run": refreshed,
+                "reason": None if replay_requested_at is not None and replay_requested_by == actor else None,
+            }
+    except SQLAlchemyError as exc:
+        raise ValueError("Replay is unavailable because workflow storage is unavailable.") from exc
+
+
+def _select_replayable_sync_record_ids(sync_records: list[object]) -> list[int]:
+    replayable: list[int] = []
+    for record in sync_records:
+        if record.replayed_from_sync_record_id is not None:
+            continue
+        if record.recovery_classification == WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value and (
+            record.status == WorkflowSyncStatus.FAILED_TERMINAL.value
+        ):
+            replayable.append(record.id)
+            continue
+        if record.recovery_classification == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value and (
+            record.status == WorkflowSyncStatus.CANCELLED.value
+        ):
+            replayable.append(record.id)
+    return replayable
