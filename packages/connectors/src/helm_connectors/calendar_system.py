@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from helm_orchestration import (
-    CalendarSyncRequest,
-    CalendarSyncResult,
-    SyncLookupRequest,
-    SyncLookupResult,
-    SyncOutcomeStatus,
-    SyncRetryDisposition,
-)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from helm_orchestration.schemas import (
+        CalendarSyncRequest,
+        CalendarSyncResult,
+        SyncLookupRequest,
+        SyncLookupResult,
+    )
 
 
 class StubCalendarSystemAdapter:
@@ -15,6 +16,12 @@ class StubCalendarSystemAdapter:
         self._records: dict[str, dict[str, str]] = {}
 
     def upsert_calendar_block(self, request: CalendarSyncRequest) -> CalendarSyncResult:
+        from helm_orchestration.schemas import (
+            CalendarSyncResult,
+            SyncOutcomeStatus,
+            SyncRetryDisposition,
+        )
+
         external_object_id = self._ensure_external_object_id(request.item.planned_item_key)
         self._records[request.item.planned_item_key] = {
             "external_object_id": external_object_id,
@@ -27,6 +34,8 @@ class StubCalendarSystemAdapter:
         )
 
     def reconcile_calendar_block(self, request: SyncLookupRequest) -> SyncLookupResult:
+        from helm_orchestration.schemas import SyncLookupResult
+
         record = self._records.get(request.planned_item_key)
         if record is None:
             return SyncLookupResult(found=False, provider_state="missing")

@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from helm_orchestration import (
-    SyncLookupRequest,
-    SyncLookupResult,
-    SyncOutcomeStatus,
-    SyncRetryDisposition,
-    TaskSyncRequest,
-    TaskSyncResult,
-)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from helm_orchestration.schemas import SyncLookupRequest, SyncLookupResult, TaskSyncRequest, TaskSyncResult
 
 
 class StubTaskSystemAdapter:
@@ -15,6 +11,8 @@ class StubTaskSystemAdapter:
         self._records: dict[str, dict[str, str]] = {}
 
     def upsert_task(self, request: TaskSyncRequest) -> TaskSyncResult:
+        from helm_orchestration.schemas import SyncOutcomeStatus, SyncRetryDisposition, TaskSyncResult
+
         external_object_id = self._ensure_external_object_id(request.item.planned_item_key)
         self._records[request.item.planned_item_key] = {
             "external_object_id": external_object_id,
@@ -27,6 +25,8 @@ class StubTaskSystemAdapter:
         )
 
     def reconcile_task(self, request: SyncLookupRequest) -> SyncLookupResult:
+        from helm_orchestration.schemas import SyncLookupResult
+
         record = self._records.get(request.planned_item_key)
         if record is None:
             return SyncLookupResult(found=False, provider_state="missing")
