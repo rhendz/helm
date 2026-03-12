@@ -32,6 +32,29 @@ class ApprovalCheckpointStatus(StrEnum):
     RESOLVED = "resolved"
 
 
+class SyncTargetSystem(StrEnum):
+    TASK_SYSTEM = "task_system"
+    CALENDAR_SYSTEM = "calendar_system"
+
+
+class SyncOperation(StrEnum):
+    TASK_UPSERT = "task_upsert"
+    CALENDAR_BLOCK_UPSERT = "calendar_block_upsert"
+
+
+class SyncOutcomeStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    RETRYABLE_FAILURE = "retryable_failure"
+    TERMINAL_FAILURE = "terminal_failure"
+    RECONCILIATION_REQUIRED = "reconciliation_required"
+
+
+class SyncRetryDisposition(StrEnum):
+    RETRYABLE = "retryable"
+    TERMINAL = "terminal"
+    RECONCILE = "reconcile"
+
+
 class ValidationIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -128,6 +151,72 @@ class ScheduleProposalArtifact(BaseModel):
 
 class CalendarAgentOutput(ScheduleProposalArtifact):
     model_config = ConfigDict(extra="forbid")
+
+
+class ApprovedSyncItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_artifact_id: int
+    proposal_version_number: int
+    target_system: SyncTargetSystem
+    operation: SyncOperation
+    planned_item_key: str
+    execution_order: int
+    payload_fingerprint: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class SyncLookupRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_artifact_id: int
+    proposal_version_number: int
+    target_system: SyncTargetSystem
+    operation: SyncOperation
+    planned_item_key: str
+    payload_fingerprint: str
+    external_object_id: str | None = None
+
+
+class SyncLookupResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    found: bool
+    external_object_id: str | None = None
+    provider_state: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskSyncRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: ApprovedSyncItem
+
+
+class TaskSyncResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: SyncOutcomeStatus
+    retry_disposition: SyncRetryDisposition
+    external_object_id: str | None = None
+    error_summary: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class CalendarSyncRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    item: ApprovedSyncItem
+
+
+class CalendarSyncResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: SyncOutcomeStatus
+    retry_disposition: SyncRetryDisposition
+    external_object_id: str | None = None
+    error_summary: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApprovalRequest(BaseModel):

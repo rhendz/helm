@@ -4,7 +4,17 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from helm_orchestration.schemas import ExecutionFailurePayload, ValidationReport
+from helm_orchestration.schemas import (
+    ApprovedSyncItem,
+    CalendarSyncRequest,
+    CalendarSyncResult,
+    ExecutionFailurePayload,
+    SyncLookupRequest,
+    SyncLookupResult,
+    TaskSyncRequest,
+    TaskSyncResult,
+    ValidationReport,
+)
 from helm_storage.repositories import WorkflowRunState
 
 
@@ -77,3 +87,22 @@ class WorkflowStepExecutionError(RuntimeError):
     def __init__(self, failure: ExecutionFailurePayload) -> None:
         super().__init__(failure.message)
         self.failure = failure
+
+
+class TaskSystemAdapter(Protocol):
+    def upsert_task(self, request: TaskSyncRequest) -> TaskSyncResult: ...
+
+    def reconcile_task(self, request: SyncLookupRequest) -> SyncLookupResult: ...
+
+
+class CalendarSystemAdapter(Protocol):
+    def upsert_calendar_block(self, request: CalendarSyncRequest) -> CalendarSyncResult: ...
+
+    def reconcile_calendar_block(self, request: SyncLookupRequest) -> SyncLookupResult: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovedSyncPlan:
+    proposal_artifact_id: int
+    proposal_version_number: int
+    items: tuple[ApprovedSyncItem, ...]

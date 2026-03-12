@@ -1,6 +1,10 @@
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
+    ApprovedSyncItem,
+    CalendarSyncRequest,
+    CalendarSyncResult,
+    CalendarSystemAdapter,
     CalendarAgentInput,
     CalendarAgentOutput,
     ExecutionFailurePayload,
@@ -12,7 +16,16 @@ from helm_orchestration import (
     ScheduleBlock,
     ScheduleProposalArtifact,
     ScheduleProposalValidator,
+    SyncLookupRequest,
+    SyncLookupResult,
+    SyncOperation,
+    SyncOutcomeStatus,
+    SyncRetryDisposition,
+    SyncTargetSystem,
     SpecialistName,
+    TaskSyncRequest,
+    TaskSyncResult,
+    TaskSystemAdapter,
     TaskAgentInput,
     TaskAgentOutput,
     TaskArtifact,
@@ -133,6 +146,95 @@ def test_workflow_summary_schema_keeps_phase_one_optional_linkage_fields() -> No
     assert payload["downstream_sync_status"] is None
     assert payload["downstream_sync_artifact_ids"] == []
     assert payload["downstream_sync_reference_ids"] == []
+
+
+def test_approved_sync_item_schema_preserves_proposal_version_anchor() -> None:
+    item = ApprovedSyncItem(
+        proposal_artifact_id=12,
+        proposal_version_number=3,
+        target_system=SyncTargetSystem.CALENDAR_SYSTEM,
+        operation=SyncOperation.CALENDAR_BLOCK_UPSERT,
+        planned_item_key="calendar:focus-block-1",
+        execution_order=2,
+        payload_fingerprint="sha256:abc123",
+        payload={"title": "Inbox triage", "start": "2026-03-16T09:00:00Z"},
+    )
+
+    payload = item.model_dump(mode="json")
+
+    assert payload["proposal_artifact_id"] == 12
+    assert payload["proposal_version_number"] == 3
+    assert payload["target_system"] == SyncTargetSystem.CALENDAR_SYSTEM.value
+    assert payload["operation"] == SyncOperation.CALENDAR_BLOCK_UPSERT.value
+    assert payload["planned_item_key"] == "calendar:focus-block-1"
+
+
+def test_adapter_protocols_use_normalized_sync_contracts() -> None:
+    class StubTaskAdapter:
+        def upsert_task(self, request: TaskSyncRequest) -> TaskSyncResult:
+            assert request.item.target_system is SyncTargetSystem.TASK_SYSTEM
+            return TaskSyncResult(
+                status=SyncOutcomeStatus.SUCCEEDED,
+                retry_disposition=SyncRetryDisposition.TERMINAL,
+                external_object_id="task-123",
+            )
+
+        def reconcile_task(self, request: SyncLookupRequest) -> SyncLookupResult:
+            assert request.operation is SyncOperation.TASK_UPSERT
+            return SyncLookupResult(found=True, external_object_id="task-123")
+
+    class StubCalendarAdapter:
+        def upsert_calendar_block(self, request: CalendarSyncRequest) -> CalendarSyncResult:
+            assert request.item.target_system is SyncTargetSystem.CALENDAR_SYSTEM
+            return CalendarSyncResult(
+                status=SyncOutcomeStatus.RECONCILIATION_REQUIRED,
+                retry_disposition=SyncRetryDisposition.RECONCILE,
+                error_summary="Provider timed out after request dispatch.",
+            )
+
+        def reconcile_calendar_block(self, request: SyncLookupRequest) -> SyncLookupResult:
+            assert request.operation is SyncOperation.CALENDAR_BLOCK_UPSERT
+            return SyncLookupResult(found=False, provider_state="missing")
+
+    task_adapter: TaskSystemAdapter = StubTaskAdapter()
+    calendar_adapter: CalendarSystemAdapter = StubCalendarAdapter()
+    task_item = ApprovedSyncItem(
+        proposal_artifact_id=4,
+        proposal_version_number=2,
+        target_system=SyncTargetSystem.TASK_SYSTEM,
+        operation=SyncOperation.TASK_UPSERT,
+        planned_item_key="task:triage-inbox",
+        execution_order=1,
+        payload_fingerprint="sha256:task",
+        payload={"title": "Triage inbox"},
+    )
+    calendar_item = ApprovedSyncItem(
+        proposal_artifact_id=4,
+        proposal_version_number=2,
+        target_system=SyncTargetSystem.CALENDAR_SYSTEM,
+        operation=SyncOperation.CALENDAR_BLOCK_UPSERT,
+        planned_item_key="calendar:focus-block-1",
+        execution_order=2,
+        payload_fingerprint="sha256:cal",
+        payload={"title": "Inbox triage"},
+    )
+
+    task_result = task_adapter.upsert_task(TaskSyncRequest(item=task_item))
+    calendar_result = calendar_adapter.upsert_calendar_block(CalendarSyncRequest(item=calendar_item))
+    lookup = calendar_adapter.reconcile_calendar_block(
+        SyncLookupRequest(
+            proposal_artifact_id=4,
+            proposal_version_number=2,
+            target_system=SyncTargetSystem.CALENDAR_SYSTEM,
+            operation=SyncOperation.CALENDAR_BLOCK_UPSERT,
+            planned_item_key="calendar:focus-block-1",
+            payload_fingerprint="sha256:cal",
+        )
+    )
+
+    assert task_result.external_object_id == "task-123"
+    assert calendar_result.retry_disposition is SyncRetryDisposition.RECONCILE
+    assert lookup.provider_state == "missing"
 
 
 def _session() -> Session:
