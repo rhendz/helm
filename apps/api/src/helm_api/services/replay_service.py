@@ -200,3 +200,34 @@ def _select_replayable_sync_record_ids(sync_records: list[object]) -> list[int]:
         ):
             replayable.append(record.id)
     return replayable
+
+
+def execute_workflow_sync_replay(*, source_id: str) -> dict[str, object]:
+    run_id, sync_record_id = _parse_workflow_sync_replay_source_id(source_id)
+    try:
+        with SessionLocal() as session:
+            sync_record = SQLAlchemyWorkflowSyncRecordRepository(session).get_by_id(sync_record_id)
+            if sync_record is None or sync_record.run_id != run_id:
+                raise ValueError(
+                    f"Workflow sync replay source {source_id} does not resolve to run {run_id}."
+                )
+            WorkflowOrchestrationService(session).execute_pending_sync_step(run_id)
+            return {
+                "status": "accepted",
+                "run_id": run_id,
+                "sync_record_id": sync_record_id,
+                "source_id": source_id,
+            }
+    except SQLAlchemyError as exc:
+        raise ValueError("Replay execution is unavailable because workflow storage is unavailable.") from exc
+
+
+def _parse_workflow_sync_replay_source_id(source_id: str) -> tuple[int, int]:
+    parts = source_id.split(":", maxsplit=1)
+    if len(parts) != 2:
+        raise ValueError(f"Workflow sync replay source id '{source_id}' is invalid.")
+    run_id, sync_record_id = parts
+    try:
+        return int(run_id), int(sync_record_id)
+    except ValueError as exc:
+        raise ValueError(f"Workflow sync replay source id '{source_id}' is invalid.") from exc

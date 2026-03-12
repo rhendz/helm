@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from helm_api.main import app
 from helm_api.services import replay_service
+from helm_observability import agent_runs as agent_run_observability
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -25,6 +26,7 @@ from helm_orchestration import (
     NormalizedTaskValidator,
 )
 from helm_storage.db import Base
+from helm_storage.models import AgentRunORM, ReplayQueueORM
 from helm_storage.repositories import (
     SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
@@ -35,6 +37,8 @@ from helm_storage.repositories import (
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy import select
+from helm_worker.jobs import replay as replay_job
 
 
 def _session_factory():
@@ -248,3 +252,52 @@ def test_api_workflow_replay_endpoint_rejects_retryable_sync_failures(monkeypatc
 
     assert response.status_code == 400
     assert response.json()["detail"] == f"Workflow run {run_id} does not allow explicit replay."
+
+
+def test_worker_replay_job_hands_workflow_sync_replays_to_shared_service(monkeypatch) -> None:  # noqa: ANN001
+    _engine, session_local = _session_factory()
+    monkeypatch.setattr(replay_service, "SessionLocal", session_local)
+    monkeypatch.setattr(replay_job, "SessionLocal", session_local)
+    monkeypatch.setattr(agent_run_observability, "SessionLocal", session_local)
+
+    seen: list[str] = []
+
+    def _execute(*, source_id: str) -> dict[str, object]:
+        seen.append(source_id)
+        return {"status": "accepted", "source_id": source_id}
+
+    monkeypatch.setattr(replay_job, "execute_workflow_sync_replay", _execute)
+
+    with session_local() as session:
+        run_id = _approved_sync_run(session)
+        sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
+        failed_record = sync_repo.list_for_run(run_id)[1]
+        sync_repo.update(
+            failed_record.id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.FAILED_TERMINAL.value,
+                recovery_classification=WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value,
+            ),
+        )
+        replay_service.request_workflow_run_replay(
+            run_id=run_id,
+            actor="api:operator",
+            reason="Replay after adapter fix.",
+        )
+        replay_item = session.execute(
+            select(ReplayQueueORM).where(ReplayQueueORM.source_type == "workflow_sync_replay")
+        ).scalar_one()
+
+    replay_job.run()
+
+    with session_local() as session:
+        replay_row = session.execute(
+            select(ReplayQueueORM).where(ReplayQueueORM.id == replay_item.id)
+        ).scalar_one()
+        agent_runs = list(session.execute(select(AgentRunORM)).scalars().all())
+
+    assert seen == [f"{run_id}:{failed_record.id}"]
+    assert replay_row.status == "completed"
+    assert replay_row.attempts == 1
+    assert len(agent_runs) == 1
+    assert agent_runs[0].status == "succeeded"

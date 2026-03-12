@@ -1,3 +1,4 @@
+from helm_api.services.replay_service import execute_workflow_sync_replay
 from helm_observability.agent_runs import record_agent_run
 from helm_observability.logging import get_logger
 from helm_storage.db import SessionLocal
@@ -60,4 +61,7 @@ def _process_replay_item(*, item_id: int) -> None:
 
 def _execute_replay(*, source_type: str, source_id: str | None) -> None:
     logger.info("replay_item_received", source_type=source_type, source_id=source_id)
+    if source_type == "workflow_sync_replay" and source_id is not None:
+        execute_workflow_sync_replay(source_id=source_id)
+        return
     raise NotImplementedError("replay execution scaffold only; handler not implemented yet")
