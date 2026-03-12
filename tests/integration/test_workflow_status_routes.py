@@ -8,6 +8,7 @@ from helm_orchestration import (
     NormalizedTaskValidator,
     RegisteredValidator,
     RetryState,
+    ScheduleProposalValidator,
     ValidationTargetKind,
     ValidatorRegistry,
     ValidatorTarget,
@@ -36,7 +37,14 @@ def _service(session: Session) -> WorkflowOrchestrationService:
                         value="normalize_request",
                     ),
                     validator=NormalizedTaskValidator(),
-                )
+                ),
+                RegisteredValidator(
+                    target=ValidatorTarget(
+                        kind=ValidationTargetKind.ARTIFACT_TYPE,
+                        value=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                    ),
+                    validator=ScheduleProposalValidator(),
+                ),
             ]
         ),
     )
@@ -85,6 +93,29 @@ def _seed_states(session: Session) -> dict[str, int]:
         artifact_type=WorkflowArtifactType.NORMALIZED_TASK.value,
         artifact_payload={"title": "Weekly planning", "summary": "", "tasks": []},
         next_step_name="summarize",
+    )
+
+    approval_blocked = orchestration.create_run(
+        workflow_type="weekly_scheduling",
+        first_step_name="dispatch_calendar_agent",
+        request_payload=_request_payload(),
+    )
+    approval_blocked = orchestration.complete_current_step(
+        approval_blocked.run.id,
+        artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+        artifact_payload={
+            "proposal_summary": "Hold deep work blocks and review windows this week.",
+            "calendar_id": "primary",
+            "time_blocks": [
+                {
+                    "title": "Deep work",
+                    "start": "2026-03-16T09:00:00Z",
+                    "end": "2026-03-16T11:00:00Z",
+                }
+            ],
+            "proposed_changes": ["Reserve Monday and Tuesday mornings for deep work."],
+        },
+        next_step_name="apply_schedule",
     )
 
     failed = orchestration.create_run(
@@ -151,6 +182,7 @@ def _seed_states(session: Session) -> dict[str, int]:
     return {
         "running": running.run.id,
         "blocked": blocked.run.id,
+        "approval_blocked": approval_blocked.run.id,
         "failed": failed.run.id,
         "terminated": terminated.run.id,
         "completed": completed.run.id,
@@ -221,6 +253,23 @@ def test_workflow_routes_cover_operator_states() -> None:
         assert blocked.json()["paused_state"] == "blocked_validation"
         assert blocked.json()["lineage"]["events"][-1]["event_type"] == "validation_failed"
 
+        approval_blocked = client.get(f"/v1/workflow-runs/{seeded['approval_blocked']}")
+        assert approval_blocked.status_code == 200
+        assert approval_blocked.json()["paused_state"] == "awaiting_approval"
+        assert approval_blocked.json()["approval_checkpoint"]["allowed_actions"] == [
+            "approve",
+            "reject",
+            "request_revision",
+        ]
+
+        approve = client.post(
+            f"/v1/workflow-runs/{seeded['approval_blocked']}/approve",
+            json={"actor": "api:test"},
+        )
+        assert approve.status_code == 200
+        assert approve.json()["status"] == WorkflowRunStatus.PENDING.value
+        assert approve.json()["current_step"] == "apply_schedule"
+
         retry = client.post(
             f"/v1/workflow-runs/{seeded['blocked']}/retry",
             json={"reason": "Operator requested retry after correction."},
@@ -232,6 +281,24 @@ def test_workflow_routes_cover_operator_states() -> None:
         assert failed.status_code == 200
         assert failed.json()["failure_kind"] == "execution_failed"
         assert failed.json()["lineage"]["validation_artifacts"] == []
+
+        rejection_seed = _seed_states(session)["approval_blocked"]
+        reject = client.post(
+            f"/v1/workflow-runs/{rejection_seed}/reject",
+            json={"actor": "api:test"},
+        )
+        assert reject.status_code == 200
+        assert reject.json()["status"] == WorkflowRunStatus.TERMINATED.value
+
+        revision_seed = _seed_states(session)["approval_blocked"]
+        revision = client.post(
+            f"/v1/workflow-runs/{revision_seed}/request-revision",
+            json={"actor": "api:test", "feedback": "Keep Friday afternoon open."},
+        )
+        assert revision.status_code == 200
+        assert revision.json()["status"] == WorkflowRunStatus.PENDING.value
+        assert revision.json()["current_step"] == "dispatch_calendar_agent"
+        assert revision.json()["latest_decision"]["revision_feedback"] == "Keep Friday afternoon open."
 
         terminate = client.post(
             f"/v1/workflow-runs/{seeded['failed']}/terminate",

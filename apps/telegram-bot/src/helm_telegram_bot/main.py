@@ -19,6 +19,8 @@ def main() -> None:
     application.add_handler(CommandHandler("drafts", drafts.handle))
     application.add_handler(CommandHandler("study", study.handle))
     application.add_handler(CommandHandler("approve", approve.handle))
+    application.add_handler(CommandHandler("reject", approve.reject))
+    application.add_handler(CommandHandler("request_revision", approve.request_revision))
     application.add_handler(CommandHandler("snooze", snooze.handle))
     application.add_handler(CommandHandler("workflow_start", workflows.start))
     application.add_handler(CommandHandler("workflows", workflows.recent))

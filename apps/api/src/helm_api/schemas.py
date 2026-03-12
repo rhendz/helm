@@ -183,9 +183,29 @@ class WorkflowRunActionRequest(BaseModel):
     reason: str
 
 
+class WorkflowApprovalDecisionRequest(BaseModel):
+    actor: str
+    feedback: str | None = None
+
+
 class WorkflowAvailableActionResponse(BaseModel):
     action: str
     label: str
+
+
+class WorkflowApprovalCheckpointResponse(BaseModel):
+    checkpoint_id: int
+    target_artifact_id: int
+    proposal_summary: str | None = None
+    pause_reason: str
+    allowed_actions: list[str] = Field(default_factory=list)
+
+
+class WorkflowApprovalDecisionResponse(BaseModel):
+    decision: str
+    actor: str
+    decision_at: str
+    revision_feedback: str | None = None
 
 
 class WorkflowRunSummaryResponse(BaseModel):
@@ -205,6 +225,8 @@ class WorkflowRunSummaryResponse(BaseModel):
     retry_state: str | None = None
     retryable: bool
     available_actions: list[WorkflowAvailableActionResponse] = Field(default_factory=list)
+    approval_checkpoint: WorkflowApprovalCheckpointResponse | None = None
+    latest_decision: WorkflowApprovalDecisionResponse | None = None
     started_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None

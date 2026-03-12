@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from helm_api.dependencies import get_db
 from helm_api.schemas import (
+    WorkflowApprovalDecisionRequest,
     WorkflowRunActionRequest,
     WorkflowRunCreateRequest,
     WorkflowRunDetailResponse,
@@ -77,6 +78,48 @@ def terminate_workflow_run(
     service = WorkflowStatusService(db)
     try:
         result = service.terminate_run(run_id, reason=payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return WorkflowRunSummaryResponse(**result)
+
+
+@router.post("/{run_id}/approve", response_model=WorkflowRunSummaryResponse)
+def approve_workflow_run(
+    run_id: int,
+    payload: WorkflowApprovalDecisionRequest,
+    db: Session = Depends(get_db),
+) -> WorkflowRunSummaryResponse:
+    service = WorkflowStatusService(db)
+    try:
+        result = service.approve_run(run_id, actor=payload.actor)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return WorkflowRunSummaryResponse(**result)
+
+
+@router.post("/{run_id}/reject", response_model=WorkflowRunSummaryResponse)
+def reject_workflow_run(
+    run_id: int,
+    payload: WorkflowApprovalDecisionRequest,
+    db: Session = Depends(get_db),
+) -> WorkflowRunSummaryResponse:
+    service = WorkflowStatusService(db)
+    try:
+        result = service.reject_run(run_id, actor=payload.actor)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return WorkflowRunSummaryResponse(**result)
+
+
+@router.post("/{run_id}/request-revision", response_model=WorkflowRunSummaryResponse)
+def request_workflow_revision(
+    run_id: int,
+    payload: WorkflowApprovalDecisionRequest,
+    db: Session = Depends(get_db),
+) -> WorkflowRunSummaryResponse:
+    service = WorkflowStatusService(db)
+    try:
+        result = service.request_revision(run_id, actor=payload.actor, feedback=payload.feedback or "")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return WorkflowRunSummaryResponse(**result)

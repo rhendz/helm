@@ -13,11 +13,25 @@ def _format_run(run: dict[str, object]) -> str:
     last_event = run.get("last_event_summary") or "No recent event."
     actions = [item["action"] for item in run.get("available_actions", [])]
     next_action = ", ".join(actions) if actions else "none"
-    return (
+    lines = [
         f"Run {run['id']} [{run['status']}] step={step} paused={paused_state}\n"
         f"Last: {last_event}\n"
         f"Needs action: {'yes' if run.get('needs_action') else 'no'} | Next: {next_action}"
-    )
+    ]
+    approval_checkpoint = run.get("approval_checkpoint")
+    if isinstance(approval_checkpoint, dict):
+        proposal_summary = approval_checkpoint.get("proposal_summary") or "Proposal summary unavailable."
+        lines.append(
+            "Proposal: "
+            f"{proposal_summary}\n"
+            "Actions: approve continues, reject closes, request_revision regenerates."
+        )
+    latest_decision = run.get("latest_decision")
+    if isinstance(latest_decision, dict):
+        decision = latest_decision.get("decision")
+        actor = latest_decision.get("actor")
+        lines.append(f"Latest decision: {decision} by {actor}")
+    return "\n".join(lines)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 
 from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
 from helm_orchestration import (
+    ScheduleProposalValidator,
+    ValidationOutcome,
     ExecutionFailurePayload,
     NormalizedTaskValidator,
     RegisteredValidator,
@@ -51,10 +53,50 @@ def _orchestration(session: Session) -> WorkflowOrchestrationService:
                         value="normalize_request",
                     ),
                     validator=NormalizedTaskValidator(),
-                )
+                ),
+                RegisteredValidator(
+                    target=ValidatorTarget(
+                        kind=ValidationTargetKind.ARTIFACT_TYPE,
+                        value=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                    ),
+                    validator=ScheduleProposalValidator(),
+                ),
             ]
         ),
     )
+
+
+def _create_approval_blocked_run(session: Session) -> int:
+    orchestration = _orchestration(session)
+    created = orchestration.create_run(
+        workflow_type="weekly_scheduling",
+        first_step_name="dispatch_calendar_agent",
+        request_payload={
+            "request_text": "Plan my week around deep work.",
+            "submitted_by": "telegram:user",
+            "channel": "telegram",
+            "metadata": {"chat_id": "123"},
+        },
+    )
+    blocked = orchestration.complete_current_step(
+        created.run.id,
+        artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+        artifact_payload={
+            "proposal_summary": "Hold deep work blocks and review windows this week.",
+            "calendar_id": "primary",
+            "time_blocks": [
+                {
+                    "title": "Deep work",
+                    "start": "2026-03-16T09:00:00Z",
+                    "end": "2026-03-16T11:00:00Z",
+                }
+            ],
+            "proposed_changes": ["Reserve Monday and Tuesday mornings for deep work."],
+        },
+        next_step_name="apply_schedule",
+    )
+    assert blocked.run.status == WorkflowRunStatus.BLOCKED.value
+    return blocked.run.id
 
 
 def test_create_run_summary_answers_operator_triage_question() -> None:
@@ -100,6 +142,33 @@ def test_blocked_run_summary_distinguishes_validation_failure() -> None:
         assert summary["failure_summary"] == "Normalized task artifact failed validation."
         assert summary["retryable"] is True
         assert [action["action"] for action in summary["available_actions"]] == ["retry", "terminate"]
+
+
+def test_approval_blocked_run_summary_projects_checkpoint_state() -> None:
+    with _session() as session:
+        run_id = _create_approval_blocked_run(session)
+
+        summary = WorkflowStatusService(session).get_run_detail(run_id)
+
+        assert summary is not None
+        assert summary["status"] == WorkflowRunStatus.BLOCKED.value
+        assert summary["paused_state"] == "awaiting_approval"
+        assert summary["failure_kind"] == "approval_required"
+        assert summary["approval_checkpoint"]["proposal_summary"] == (
+            "Hold deep work blocks and review windows this week."
+        )
+        assert summary["approval_checkpoint"]["allowed_actions"] == [
+            "approve",
+            "reject",
+            "request_revision",
+        ]
+        assert [action["action"] for action in summary["available_actions"]] == [
+            "approve",
+            "reject",
+            "request_revision",
+        ]
+        assert summary["latest_validation_outcome"] == ValidationOutcome.PASSED.value
+        assert summary["latest_decision"] is None
 
 
 def test_failed_run_detail_exposes_lineage_without_validation_artifact() -> None:

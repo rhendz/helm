@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from helm_orchestration import WorkflowOrchestrationService
+from helm_orchestration import ApprovalAction, ApprovalDecision, WorkflowOrchestrationService
 from helm_storage.models import WorkflowArtifactORM, WorkflowRunORM
 from helm_storage.repositories import (
     RawRequestArtifactPayload,
@@ -70,6 +70,22 @@ class WorkflowStatusService:
     def terminate_run(self, run_id: int, *, reason: str) -> dict[str, object]:
         return self._build_summary(self._orchestration.terminate_run(run_id, reason=reason))
 
+    def approve_run(self, run_id: int, *, actor: str) -> dict[str, object]:
+        return self._submit_approval(run_id, ApprovalDecision(action=ApprovalAction.APPROVE, actor=actor))
+
+    def reject_run(self, run_id: int, *, actor: str) -> dict[str, object]:
+        return self._submit_approval(run_id, ApprovalDecision(action=ApprovalAction.REJECT, actor=actor))
+
+    def request_revision(self, run_id: int, *, actor: str, feedback: str) -> dict[str, object]:
+        return self._submit_approval(
+            run_id,
+            ApprovalDecision(
+                action=ApprovalAction.REQUEST_REVISION,
+                actor=actor,
+                revision_feedback=feedback,
+            ),
+        )
+
     def _build_state(self, run_id: int) -> WorkflowRunState:
         state = self._run_repo.get_with_current_state(run_id)
         if state is None:
@@ -93,6 +109,7 @@ class WorkflowStatusService:
     def _build_summary(self, state: WorkflowRunState) -> dict[str, object]:
         failed_step = self._latest_failed_step(state)
         latest_validation_artifact = state.latest_artifacts.get(WorkflowArtifactType.VALIDATION_RESULT.value)
+        approval_projection = self._approval_projection(state)
         latest_validation_outcome = None
         if latest_validation_artifact is not None:
             latest_validation_outcome = str(latest_validation_artifact.payload.get("outcome"))
@@ -119,6 +136,8 @@ class WorkflowStatusService:
             "retry_state": failed_step.retry_state if failed_step is not None else state.run.retry_state,
             "retryable": bool(failed_step.retryable) if failed_step is not None else False,
             "available_actions": self._available_actions(state, failed_step),
+            "approval_checkpoint": approval_projection["checkpoint"],
+            "latest_decision": approval_projection["latest_decision"],
             "started_at": state.run.started_at,
             "updated_at": state.run.updated_at,
             "completed_at": state.run.completed_at,
@@ -133,7 +152,14 @@ class WorkflowStatusService:
         intermediate = [
             self._artifact_payload(artifact)
             for artifact in artifacts
-            if artifact.artifact_type == WorkflowArtifactType.NORMALIZED_TASK.value
+            if artifact.artifact_type
+            in {
+                WorkflowArtifactType.NORMALIZED_TASK.value,
+                WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                WorkflowArtifactType.APPROVAL_REQUEST.value,
+                WorkflowArtifactType.APPROVAL_DECISION.value,
+                WorkflowArtifactType.REVISION_REQUEST.value,
+            }
         ]
         validations = [
             self._artifact_payload(artifact)
@@ -184,6 +210,12 @@ class WorkflowStatusService:
         if not state.run.needs_action:
             return []
 
+        if state.run.blocked_reason == "approval_required" and state.active_approval_checkpoint is not None:
+            return [
+                {"action": action, "label": _approval_action_label(action)}
+                for action in state.active_approval_checkpoint.allowed_actions
+            ]
+
         actions = [{"action": "terminate", "label": "Terminate run"}]
         if failed_step is not None and (
             state.run.status == WorkflowRunStatus.BLOCKED.value or failed_step.retryable
@@ -192,6 +224,8 @@ class WorkflowStatusService:
         return actions
 
     def _paused_state(self, state: WorkflowRunState, failed_step) -> tuple[str | None, str | None]:  # noqa: ANN001
+        if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
+            return "awaiting_approval", "Awaiting operator approval before downstream changes."
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
             return "blocked_validation", state.run.validation_outcome_summary or state.run.last_event_summary
         if state.run.status == WorkflowRunStatus.FAILED.value:
@@ -199,6 +233,8 @@ class WorkflowStatusService:
         return None, None
 
     def _failure_kind(self, state: WorkflowRunState, failed_step) -> str | None:  # noqa: ANN001
+        if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
+            return "approval_required"
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
             return "blocked_validation"
         if state.run.status == WorkflowRunStatus.FAILED.value:
@@ -208,6 +244,8 @@ class WorkflowStatusService:
         return None
 
     def _failure_summary(self, state: WorkflowRunState, failed_step) -> str | None:  # noqa: ANN001
+        if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
+            return "Awaiting operator approval before downstream changes."
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
             return state.run.validation_outcome_summary or (
                 failed_step.validation_outcome_summary if failed_step is not None else None
@@ -227,6 +265,34 @@ class WorkflowStatusService:
         if not failures:
             return None
         return max(failures, key=lambda step: (step.attempt_number, step.id))
+
+    def _approval_projection(self, state: WorkflowRunState) -> dict[str, object]:
+        schedule_proposal = state.latest_artifacts.get(WorkflowArtifactType.SCHEDULE_PROPOSAL.value)
+        latest_decision = state.latest_artifacts.get(WorkflowArtifactType.APPROVAL_DECISION.value)
+        checkpoint = state.active_approval_checkpoint
+        checkpoint_payload = None
+        if checkpoint is not None:
+            checkpoint_payload = {
+                "checkpoint_id": checkpoint.id,
+                "target_artifact_id": checkpoint.target_artifact_id,
+                "proposal_summary": (
+                    schedule_proposal.payload.get("proposal_summary") if schedule_proposal is not None else None
+                ),
+                "pause_reason": "Awaiting operator approval before downstream changes.",
+                "allowed_actions": list(checkpoint.allowed_actions),
+            }
+        decision_payload = None
+        if latest_decision is not None:
+            decision_payload = {
+                "decision": latest_decision.payload.get("decision"),
+                "actor": latest_decision.payload.get("actor"),
+                "decision_at": latest_decision.payload.get("decision_at"),
+                "revision_feedback": latest_decision.payload.get("revision_feedback"),
+            }
+        return {"checkpoint": checkpoint_payload, "latest_decision": decision_payload}
+
+    def _submit_approval(self, run_id: int, decision: ApprovalDecision) -> dict[str, object]:
+        return self._build_summary(self._orchestration.submit_approval_decision(run_id, decision=decision))
 
     def _artifact_payload(self, artifact: WorkflowArtifactORM) -> dict[str, object]:
         return {
@@ -270,3 +336,12 @@ class WorkflowStatusService:
             "downstream_sync_artifact_ids": list(payload.get("downstream_sync_artifact_ids", [])),
             "downstream_sync_reference_ids": list(payload.get("downstream_sync_reference_ids", [])),
         }
+
+
+def _approval_action_label(action: str) -> str:
+    labels = {
+        "approve": "Approve and continue",
+        "reject": "Reject and close run",
+        "request_revision": "Request revision and regenerate proposal",
+    }
+    return labels.get(action, action.replace("_", " ").title())
