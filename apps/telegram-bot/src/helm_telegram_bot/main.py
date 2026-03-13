@@ -1,7 +1,7 @@
 from helm_observability.logging import get_logger, setup_logging
 from telegram.ext import Application, CommandHandler
 
-from helm_telegram_bot.commands import actions, approve, digest, drafts, snooze, start, study
+from helm_telegram_bot.commands import actions, approve, digest, drafts, snooze, start, study, workflows
 from helm_telegram_bot.config import get_settings
 
 
@@ -20,6 +20,11 @@ def main() -> None:
     application.add_handler(CommandHandler("study", study.handle))
     application.add_handler(CommandHandler("approve", approve.handle))
     application.add_handler(CommandHandler("snooze", snooze.handle))
+    application.add_handler(CommandHandler("workflow_start", workflows.start))
+    application.add_handler(CommandHandler("workflows", workflows.recent))
+    application.add_handler(CommandHandler("workflow_needs_action", workflows.needs_action))
+    application.add_handler(CommandHandler("workflow_retry", workflows.retry))
+    application.add_handler(CommandHandler("workflow_terminate", workflows.terminate))
 
     logger.info("telegram_bot_started")
     application.run_polling()

@@ -1,5 +1,5 @@
 import pytest
-from helm_telegram_bot.commands import actions, approve, common, digest, drafts, snooze
+from helm_telegram_bot.commands import actions, approve, common, digest, drafts, snooze, workflows
 from helm_telegram_bot.services.command_service import DraftTransitionResult
 
 
@@ -260,3 +260,130 @@ async def test_drafts_unauthorized_short_circuit(monkeypatch: pytest.MonkeyPatch
     await drafts.handle(update, _Context(args=[]))
 
     assert update.message.replies == []
+
+
+@pytest.mark.asyncio
+async def test_workflow_start_usage_message_when_request_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await workflows.start(update, _Context(args=[]))
+
+    assert update.message.replies == ["Usage: /workflow_start <request text>"]
+
+
+@pytest.mark.asyncio
+async def test_workflow_start_formats_created_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def start_run(self, *, request_text: str, submitted_by: str, chat_id: str) -> dict[str, object]:
+            assert request_text == "Plan my week"
+            assert submitted_by == "telegram:1"
+            assert chat_id == "1"
+            return {
+                "id": 7,
+                "status": "pending",
+                "current_step": "normalize_request",
+                "paused_state": None,
+                "last_event_summary": "Workflow run created",
+                "needs_action": False,
+                "available_actions": [],
+            }
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(workflows, "_service", _Service())
+    update = _Update()
+
+    await workflows.start(update, _Context(args=["Plan", "my", "week"]))
+
+    assert update.message.replies == [
+        "Run 7 [pending] step=normalize_request paused=active\n"
+        "Last: Workflow run created\n"
+        "Needs action: no | Next: none"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_workflow_lists_needs_action_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_runs_needing_action(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "id": 9,
+                    "status": "blocked",
+                    "current_step": "normalize_request",
+                    "paused_state": "blocked_validation",
+                    "last_event_summary": "Validation blocked run at step normalize_request",
+                    "needs_action": True,
+                    "available_actions": [{"action": "retry"}, {"action": "terminate"}],
+                }
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(workflows, "_service", _Service())
+    update = _Update()
+
+    await workflows.needs_action(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Run 9 [blocked] step=normalize_request paused=blocked_validation\n"
+        "Last: Validation blocked run at step normalize_request\n"
+        "Needs action: yes | Next: retry, terminate"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_workflow_retry_usage_message_when_reason_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    update = _Update()
+
+    await workflows.retry(update, _Context(args=["5"]))
+
+    assert update.message.replies == ["Usage: /workflow_retry <run_id> <reason>"]
+
+
+@pytest.mark.asyncio
+async def test_workflow_terminate_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def __init__(self) -> None:
+            self.seen: tuple[int, str] | None = None
+
+        def terminate_run(self, run_id: int, *, reason: str) -> dict[str, object]:
+            self.seen = (run_id, reason)
+            return {
+                "id": run_id,
+                "status": "terminated",
+                "current_step": "normalize_request",
+                "paused_state": None,
+                "last_event_summary": reason,
+                "needs_action": False,
+                "available_actions": [],
+            }
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    service = _Service()
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(workflows, "_service", service)
+    update = _Update()
+
+    await workflows.terminate(update, _Context(args=["12", "Operator", "terminated", "run"]))
+
+    assert service.seen == (12, "Operator terminated run")
+    assert update.message.replies == [
+        "Run 12 [terminated] step=normalize_request paused=active\n"
+        "Last: Operator terminated run\n"
+        "Needs action: no | Next: none"
+    ]
