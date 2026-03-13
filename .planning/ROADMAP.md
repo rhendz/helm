@@ -81,7 +81,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Implement the fixed weekly scheduling workflow on top of the kernel primitives.
+- [x] 04-01: Implement the fixed weekly scheduling workflow on top of the kernel primitives.
 - [ ] 04-02: Add end-to-end verification, restart/recovery checks, and operator-facing completion summaries for the representative flow.
 
 ## Progress
@@ -94,4 +94,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
 | 2. Specialist Dispatch And Approval Semantics | 3/3 | Complete | 2026-03-12 |
 | 3. Adapter Writes And Recovery Guarantees | 5/5 | Complete | 2026-03-12 |
-| 4. Representative Scheduling Workflow | 0/2 | Not started | - |
+| 4. Representative Scheduling Workflow | 1/2 | In progress | - |
