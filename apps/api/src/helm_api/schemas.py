@@ -168,3 +168,107 @@ class ArtifactTraceResponse(BaseModel):
     source_pointers: list[ArtifactTracePointerResponse] = Field(default_factory=list)
     run_context: list[ArtifactTraceRunResponse] = Field(default_factory=list)
     reason: str | None = None
+
+
+class WorkflowRunCreateRequest(BaseModel):
+    workflow_type: str = "weekly_digest"
+    first_step_name: str = "normalize_request"
+    request_text: str
+    submitted_by: str
+    channel: str
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class WorkflowRunActionRequest(BaseModel):
+    reason: str
+
+
+class WorkflowAvailableActionResponse(BaseModel):
+    action: str
+    label: str
+
+
+class WorkflowRunSummaryResponse(BaseModel):
+    id: int
+    workflow_type: str
+    status: str
+    current_step: str | None = None
+    current_step_attempt: int
+    attempt_count: int
+    needs_action: bool
+    paused_state: str | None = None
+    pause_reason: str | None = None
+    last_event_summary: str | None = None
+    failure_summary: str | None = None
+    failure_kind: str | None = None
+    latest_validation_outcome: str | None = None
+    retry_state: str | None = None
+    retryable: bool
+    available_actions: list[WorkflowAvailableActionResponse] = Field(default_factory=list)
+    started_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+
+
+class WorkflowArtifactLinkResponse(BaseModel):
+    artifact_id: int
+    artifact_type: str
+    schema_version: str
+    version_number: int
+    step_id: int | None = None
+    producer_step_name: str | None = None
+    lineage_parent_id: int | None = None
+    supersedes_artifact_id: int | None = None
+    payload: dict[str, object]
+    created_at: datetime
+
+
+class WorkflowStepTransitionResponse(BaseModel):
+    id: int
+    step_name: str
+    attempt_number: int
+    status: str
+    retry_state: str | None = None
+    retryable: bool
+    validation_outcome_summary: str | None = None
+    execution_error_summary: str | None = None
+    failure_class: str | None = None
+    started_at: datetime
+    completed_at: datetime | None = None
+
+
+class WorkflowEventResponse(BaseModel):
+    id: int
+    event_type: str
+    run_status: str | None = None
+    step_status: str | None = None
+    step_id: int | None = None
+    summary: str
+    details: dict[str, object] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class WorkflowFinalSummaryResponse(BaseModel):
+    artifact_id: int | None = None
+    request_artifact_id: int | None = None
+    intermediate_artifact_ids: list[int] = Field(default_factory=list)
+    validation_artifact_ids: list[int] = Field(default_factory=list)
+    final_summary_text: str | None = None
+    approval_decision: str | None = None
+    approval_decision_artifact_id: int | None = None
+    downstream_sync_status: str | None = None
+    downstream_sync_artifact_ids: list[int] = Field(default_factory=list)
+    downstream_sync_reference_ids: list[str] = Field(default_factory=list)
+
+
+class WorkflowLineageResponse(BaseModel):
+    raw_request: WorkflowArtifactLinkResponse | None = None
+    intermediate_artifacts: list[WorkflowArtifactLinkResponse] = Field(default_factory=list)
+    validation_artifacts: list[WorkflowArtifactLinkResponse] = Field(default_factory=list)
+    final_summary: WorkflowFinalSummaryResponse = Field(default_factory=WorkflowFinalSummaryResponse)
+    step_transitions: list[WorkflowStepTransitionResponse] = Field(default_factory=list)
+    events: list[WorkflowEventResponse] = Field(default_factory=list)
+
+
+class WorkflowRunDetailResponse(WorkflowRunSummaryResponse):
+    lineage: WorkflowLineageResponse
