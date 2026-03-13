@@ -12,7 +12,7 @@ This roadmap turns the current Helm codebase into a reusable orchestration kerne
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Durable Workflow Foundation** - Establish the kernel's durable run, step, artifact, and validation model.
+- [x] **Phase 1: Durable Workflow Foundation** - Establish the kernel's durable run, step, artifact, and validation model.
 - [ ] **Phase 2: Specialist Dispatch And Approval Semantics** - Add typed specialist invocation plus first-class approval, revision, and resume behavior.
 - [ ] **Phase 3: Adapter Writes And Recovery Guarantees** - Make downstream side effects safe, idempotent, and recoverable across retry and resume.
 - [ ] **Phase 4: Representative Scheduling Workflow** - Prove the kernel with the fixed weekly task-to-calendar workflow from request through approved side effects.
@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 01-01: Add workflow run, step state, and artifact persistence models plus repositories.
 - [x] 01-02: Add typed workflow schemas, validation boundaries, and validation-failure handling.
-- [ ] 01-03: Expose run status and artifact inspection through API and Telegram-friendly read paths.
+- [x] 01-03: Expose run status and artifact inspection through API and Telegram-friendly read paths.
 
 ### Phase 2: Specialist Dispatch And Approval Semantics
 **Goal**: Helm can execute typed `TaskAgent` and `CalendarAgent` steps, create approval checkpoints, support revision versioning, and resume from decisions safely.
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Durable Workflow Foundation | 2/3 | In Progress | - |
+| 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
 | 2. Specialist Dispatch And Approval Semantics | 0/3 | Not started | - |
 | 3. Adapter Writes And Recovery Guarantees | 0/3 | Not started | - |
 | 4. Representative Scheduling Workflow | 0/2 | Not started | - |

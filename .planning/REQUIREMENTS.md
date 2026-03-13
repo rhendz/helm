@@ -8,7 +8,7 @@
 ### Workflow Lifecycle
 
 - [x] **FLOW-01**: User can start a workflow run from a new request and Helm persists the run with a unique ID, current status, and current step.
-- [ ] **FLOW-02**: User can inspect the current status of a workflow run, including active step, paused state, and final outcome.
+- [x] **FLOW-02**: User can inspect the current status of a workflow run, including active step, paused state, and final outcome.
 - [x] **FLOW-03**: Helm persists step transitions so an in-flight workflow can resume from the correct step after a restart.
 - [x] **FLOW-04**: Helm persists failure details for a failed workflow run, including failed step, error summary, and retryability state.
 
@@ -96,7 +96,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | FLOW-01 | Phase 1 | Complete |
-| FLOW-02 | Phase 1 | Pending |
+| FLOW-02 | Phase 1 | Complete |
 | FLOW-03 | Phase 1 | Complete |
 | FLOW-04 | Phase 1 | Complete |
 | AGNT-01 | Phase 2 | Pending |
@@ -140,4 +140,4 @@
 
 ---
 *Requirements defined: 2026-03-11*
-*Last updated: 2026-03-11 after initial definition*
+*Last updated: 2026-03-13 after completing Phase 1 plan 03*
