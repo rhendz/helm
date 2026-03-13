@@ -68,3 +68,50 @@ Expected Telegram output:
 6. Verify the superseded version exposes the revision feedback summary that triggered the rework.
 7. Approve the new version by posting the new `target_artifact_id`.
 8. Confirm run detail shows the approved decision attached to the approved proposal artifact, while the older version remains inspectable but not actionable.
+
+## Representative Weekly Scheduling Verification
+
+Use one realistic weekly brief for both Telegram and API checks so the persisted request contract matches:
+
+- `Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; Prep interviews medium 120m; Clear inbox low 30m. Constraints: protect deep work mornings; keep Friday afternoon open.`
+
+### Telegram create and proposal review
+
+1. Start the run with `/workflow_start <brief>`.
+2. Confirm the reply shows `workflow_type=weekly_scheduling`, `step=dispatch_task_agent`, and the parsed request stays compact instead of echoing every raw section.
+3. Resume the worker until the run blocks on approval.
+4. Check `/workflow_needs_action` and confirm the proposal output is outcome-first:
+   - scheduled block preview is visible
+   - honored constraints and assumptions are visible when present
+   - carry-forward work is visible when not everything fits
+   - the actionable proposal artifact id is visible for approve/reject/revision
+
+### Revision and version history
+
+1. Request a revision with `/request_revision <run_id> <proposal_artifact_id> Keep Friday afternoon open and move interview prep earlier.`
+2. Confirm the run resumes at `dispatch_calendar_agent`, then returns to `await_schedule_approval`.
+3. Run `/workflow_versions <run_id>` and confirm:
+   - the newest version is first
+   - the prior version is marked `superseded`
+   - the superseded version retains the revision feedback summary
+
+### Approval, completion, and lineage
+
+1. Approve the current proposal with `/approve <run_id> <proposal_artifact_id>` or `POST /v1/workflow-runs/{run_id}/approve`.
+2. Confirm no downstream task or calendar write exists before approval, and that sync rows are created immediately after approval.
+3. Let `apply_schedule` finish, then inspect `GET /v1/workflow-runs/{run_id}`.
+4. Confirm the completed response includes:
+   - `completion_summary.headline` describing scheduled outcome and approved-write count
+   - `completion_summary.carry_forward_tasks` for work that did not fit
+   - `lineage.final_summary.approval_decision=approve`
+   - `lineage.final_summary.approval_decision_artifact_id`
+   - `lineage.final_summary.downstream_sync_status=succeeded`
+   - `lineage.final_summary.downstream_sync_reference_ids` for both task and calendar writes
+
+### Restart-safe resume around approval and apply_schedule
+
+1. Stop the worker after the proposal is created and approval is pending.
+2. Restart the worker and confirm the run still waits at `await_schedule_approval` with the same actionable artifact id.
+3. Approve the proposal, then stop the worker after one sync row succeeds but before all writes finish.
+4. Restart the worker and confirm it resumes only the remaining sync work instead of repeating already-succeeded writes.
+5. Re-check `GET /v1/workflow-runs/{run_id}` and confirm the final summary lineage still points at the approved proposal version and the persisted sync records from the resumed execution.

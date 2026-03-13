@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Durable Workflow Foundation** - Establish the kernel's durable run, step, artifact, and validation model.
 - [x] **Phase 2: Specialist Dispatch And Approval Semantics** - Add typed specialist invocation plus first-class approval, revision, and resume behavior.
 - [x] **Phase 3: Adapter Writes And Recovery Guarantees** - Make downstream side effects safe, idempotent, and recoverable across retry and resume.
-- [ ] **Phase 4: Representative Scheduling Workflow** - Prove the kernel with the fixed weekly task-to-calendar workflow from request through approved side effects.
+- [x] **Phase 4: Representative Scheduling Workflow** - Prove the kernel with the fixed weekly task-to-calendar workflow from request through approved side effects.
 
 ## Phase Details
 
@@ -82,7 +82,7 @@ Plans:
 
 Plans:
 - [x] 04-01: Implement the fixed weekly scheduling workflow on top of the kernel primitives.
-- [ ] 04-02: Add end-to-end verification, restart/recovery checks, and operator-facing completion summaries for the representative flow.
+- [x] 04-02: Add end-to-end verification, restart/recovery checks, and operator-facing completion summaries for the representative flow.
 
 ## Progress
 
@@ -94,4 +94,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
 | 2. Specialist Dispatch And Approval Semantics | 3/3 | Complete | 2026-03-12 |
 | 3. Adapter Writes And Recovery Guarantees | 5/5 | Complete | 2026-03-12 |
-| 4. Representative Scheduling Workflow | 1/2 | In progress | - |
+| 4. Representative Scheduling Workflow | 2/2 | Complete | 2026-03-13 |

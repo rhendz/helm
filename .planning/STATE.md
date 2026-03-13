@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Phase 4 plan 04-01 complete
-last_updated: "2026-03-13T02:09:38Z"
-last_activity: 2026-03-12 — Completed phase 4 plan 01 representative weekly scheduling contract, worker flow, and shared projections
+status: completed
+stopped_at: Phase 4 plan 04-02 complete
+last_updated: "2026-03-13T03:05:00Z"
+last_activity: 2026-03-13 — Completed phase 4 plan 02 representative final-summary lineage, completion projections, and verification
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 12
-  percent: 92
+  completed_plans: 13
+  percent: 100
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-11)
 
 **Core value:** Helm can execute multi-step, approval-gated workflows reliably enough that workflow state, artifacts, and side effects remain durable and inspectable across restarts and failures.
-**Current focus:** Phase 4 - Representative Scheduling Workflow
+**Current focus:** Milestone complete
 
 ## Current Position
 
 Phase: 4 of 4 (Representative Scheduling Workflow)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-03-12 — Completed phase 4 plan 01 representative weekly scheduling contract, worker flow, and shared projections
+Plan: 2 of 2 in current phase
+Status: Complete
+Last activity: 2026-03-13 — Completed phase 4 plan 02 representative final-summary lineage, completion projections, and verification
 
-Progress: [█████████░] 92%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
+- Total plans completed: 13
 - Average duration: 13 min
-- Total execution time: 4.2 hours
+- Total execution time: 5.1 hours
 
 **By Phase:**
 
@@ -46,11 +46,11 @@ Progress: [█████████░] 92%
 | 1 | 3 | 30 min | 10 min |
 | 2 | 3 | 30 min | 10 min |
 | 3 | 5 | 80 min | 16 min |
-| 4 | 1 | 115 min | 115 min |
+| 4 | 2 | 170 min | 85 min |
 
 **Recent Trend:**
-- Last 5 plans: 17 min, 10 min, 9 min, 24 min, 115 min
-- Trend: Slower due to cross-boundary representative workflow work
+- Last 5 plans: 10 min, 9 min, 24 min, 115 min, 55 min
+- Trend: Complete after heavier cross-boundary representative workflow work
 
 *Updated after each plan completion*
 | Phase 01 P02 | 6 min | 3 tasks | 11 files |
@@ -64,6 +64,7 @@ Progress: [█████████░] 92%
 | Phase 03 P04 | 9 min | 3 tasks | 2 files |
 | Phase 03 P05 | 24 min | 3 tasks | 10 files |
 | Phase 04 P01 | 115 min | 3 tasks | 11 files |
+| Phase 04 P02 | 55 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -106,6 +107,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Explicit replay requests now gate on safe_next_actions from the shared workflow status projection.
 - [Phase 03]: Worker replay jobs now delegate workflow replay execution to the shared replay service.
 - [Phase 03]: Telegram workflow summaries now merge safe_next_actions with operator actions so replay remains distinct from retry.
+- [Phase 04]: Representative completed runs persist a final summary artifact automatically when approved sync execution finishes.
+- [Phase 04]: Shared representative completion and recovery summaries derive from final-summary artifacts plus sync rows rather than stale event text.
+- [Phase 04]: Telegram representative completion messaging prefers compact outcome summaries and leaves deep lineage to run detail surfaces.
 
 ### Pending Todos
 
@@ -118,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T00:15:15.296Z
-Stopped at: Phase 4 plan 04-01 complete
-Resume file: .planning/phases/04-representative-scheduling-workflow/04-01-SUMMARY.md
+Last session: 2026-03-13T02:10:00Z
+Stopped at: Phase 4 plan 04-02 complete
+Resume file: .planning/phases/04-representative-scheduling-workflow/04-02-SUMMARY.md
