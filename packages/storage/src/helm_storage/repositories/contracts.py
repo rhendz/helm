@@ -17,6 +17,7 @@ from helm_storage.models import (
     WorkflowArtifactORM,
     WorkflowEventORM,
     WorkflowRunORM,
+    WorkflowSpecialistInvocationORM,
     WorkflowStepORM,
 )
 
@@ -125,6 +126,7 @@ class WorkflowStepStatus(StrEnum):
 class WorkflowArtifactType(StrEnum):
     RAW_REQUEST = "raw_request"
     NORMALIZED_TASK = "normalized_task"
+    SCHEDULE_PROPOSAL = "schedule_proposal"
     VALIDATION_RESULT = "validation_result"
     FINAL_SUMMARY = "final_summary"
 
@@ -177,6 +179,24 @@ class ValidationArtifactPayload:
             "validator_name": self.validator_name,
             "schema_version": self.schema_version,
             "issues": list(self.issues),
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduleProposalArtifactPayload:
+    proposal_summary: str
+    calendar_id: str | None
+    time_blocks: tuple[dict[str, Any], ...]
+    proposed_changes: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "proposal_summary": self.proposal_summary,
+            "calendar_id": self.calendar_id,
+            "time_blocks": list(self.time_blocks),
+            "proposed_changes": list(self.proposed_changes),
             "warnings": list(self.warnings),
         }
 
@@ -285,6 +305,26 @@ class NewWorkflowEvent:
     run_status: str | None = None
     step_status: str | None = None
     details: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewWorkflowSpecialistInvocation:
+    run_id: int
+    step_id: int
+    specialist_name: str
+    input_artifact_id: int
+    output_artifact_id: int | None = None
+    status: str = "running"
+    completed_at: datetime | None = None
+    error_summary: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSpecialistInvocationPatch:
+    output_artifact_id: int | None = None
+    status: str | None = None
+    completed_at: datetime | None = None
+    error_summary: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -466,3 +506,16 @@ class WorkflowEventRepository(Protocol):
     def create(self, event: NewWorkflowEvent) -> WorkflowEventORM: ...
 
     def list_for_run(self, run_id: int) -> list[WorkflowEventORM]: ...
+
+
+@runtime_checkable
+class WorkflowSpecialistInvocationRepository(Protocol):
+    def create(self, invocation: NewWorkflowSpecialistInvocation) -> WorkflowSpecialistInvocationORM: ...
+
+    def update(
+        self,
+        invocation_id: int,
+        patch: WorkflowSpecialistInvocationPatch,
+    ) -> WorkflowSpecialistInvocationORM | None: ...
+
+    def list_for_run(self, run_id: int) -> list[WorkflowSpecialistInvocationORM]: ...

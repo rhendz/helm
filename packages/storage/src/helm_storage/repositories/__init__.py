@@ -22,8 +22,10 @@ from helm_storage.repositories.contracts import (
     NewWorkflowArtifact,
     NewWorkflowEvent,
     NewWorkflowRun,
+    NewWorkflowSpecialistInvocation,
     NewWorkflowStep,
     ScheduledThreadTaskRepository,
+    ScheduleProposalArtifactPayload,
     ValidationArtifactPayload,
     WorkflowArtifactRepository,
     WorkflowArtifactType,
@@ -32,6 +34,8 @@ from helm_storage.repositories.contracts import (
     WorkflowRunRepository,
     WorkflowRunState,
     WorkflowRunStatus,
+    WorkflowSpecialistInvocationPatch,
+    WorkflowSpecialistInvocationRepository,
     WorkflowStepPatch,
     WorkflowStepRepository,
     WorkflowStepStatus,
@@ -56,6 +60,9 @@ from helm_storage.repositories.study_ingest import SQLAlchemyStudyIngestReposito
 from helm_storage.repositories.workflow_artifacts import SQLAlchemyWorkflowArtifactRepository
 from helm_storage.repositories.workflow_events import SQLAlchemyWorkflowEventRepository
 from helm_storage.repositories.workflow_runs import SQLAlchemyWorkflowRunRepository
+from helm_storage.repositories.workflow_specialist_invocations import (
+    SQLAlchemyWorkflowSpecialistInvocationRepository,
+)
 from helm_storage.repositories.workflow_steps import SQLAlchemyWorkflowStepRepository
 
 __all__ = [
@@ -77,9 +84,11 @@ __all__ = [
     "NewWorkflowArtifact",
     "NewWorkflowEvent",
     "NewWorkflowRun",
+    "NewWorkflowSpecialistInvocation",
     "NewWorkflowStep",
     "NormalizedTaskArtifactPayload",
     "RawRequestArtifactPayload",
+    "ScheduleProposalArtifactPayload",
     "ScheduledThreadTaskRepository",
     "SQLAlchemyActionProposalRepository",
     "SQLAlchemyActionItemRepository",
@@ -100,6 +109,7 @@ __all__ = [
     "SQLAlchemyWorkflowArtifactRepository",
     "SQLAlchemyWorkflowEventRepository",
     "SQLAlchemyWorkflowRunRepository",
+    "SQLAlchemyWorkflowSpecialistInvocationRepository",
     "SQLAlchemyWorkflowStepRepository",
     "ValidationArtifactPayload",
     "WorkflowArtifactRepository",
@@ -109,6 +119,8 @@ __all__ = [
     "WorkflowRunRepository",
     "WorkflowRunState",
     "WorkflowRunStatus",
+    "WorkflowSpecialistInvocationPatch",
+    "WorkflowSpecialistInvocationRepository",
     "WorkflowStepPatch",
     "WorkflowStepRepository",
     "WorkflowStepStatus",

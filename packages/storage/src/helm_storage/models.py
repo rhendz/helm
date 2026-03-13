@@ -147,6 +147,9 @@ class WorkflowRunORM(Base):
     events: Mapped[list["WorkflowEventORM"]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
+    specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
 
 
 class WorkflowStepORM(Base):
@@ -173,6 +176,9 @@ class WorkflowStepORM(Base):
     run: Mapped["WorkflowRunORM"] = relationship(back_populates="steps")
     artifacts: Mapped[list["WorkflowArtifactORM"]] = relationship(back_populates="step")
     events: Mapped[list["WorkflowEventORM"]] = relationship(back_populates="step")
+    specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="step"
+    )
 
 
 class WorkflowArtifactORM(Base):
@@ -209,6 +215,14 @@ class WorkflowArtifactORM(Base):
         remote_side="WorkflowArtifactORM.id",
         foreign_keys=[supersedes_artifact_id],
     )
+    input_to_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="input_artifact",
+        foreign_keys="WorkflowSpecialistInvocationORM.input_artifact_id",
+    )
+    output_from_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="output_artifact",
+        foreign_keys="WorkflowSpecialistInvocationORM.output_artifact_id",
+    )
 
 
 class WorkflowEventORM(Base):
@@ -228,6 +242,39 @@ class WorkflowEventORM(Base):
 
     run: Mapped["WorkflowRunORM"] = relationship(back_populates="events")
     step: Mapped["WorkflowStepORM | None"] = relationship(back_populates="events")
+
+
+class WorkflowSpecialistInvocationORM(Base):
+    __tablename__ = "workflow_specialist_invocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int] = mapped_column(ForeignKey("workflow_steps.id", ondelete="CASCADE"))
+    specialist_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    output_artifact_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_summary: Mapped[str | None] = mapped_column(Text())
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="specialist_invocations")
+    step: Mapped["WorkflowStepORM"] = relationship(back_populates="specialist_invocations")
+    input_artifact: Mapped["WorkflowArtifactORM"] = relationship(
+        back_populates="input_to_invocations",
+        foreign_keys=[input_artifact_id],
+    )
+    output_artifact: Mapped["WorkflowArtifactORM | None"] = relationship(
+        back_populates="output_from_invocations",
+        foreign_keys=[output_artifact_id],
+    )
 
 
 class EmailMessageORM(Base):

@@ -4,17 +4,21 @@ from helm_storage.db import Base
 from helm_storage.repositories import (
     NormalizedTaskArtifactPayload,
     RawRequestArtifactPayload,
+    ScheduleProposalArtifactPayload,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowRunRepository,
+    SQLAlchemyWorkflowSpecialistInvocationRepository,
     SQLAlchemyWorkflowStepRepository,
     ValidationArtifactPayload,
     WorkflowArtifactRepository,
     WorkflowArtifactType,
     WorkflowEventRepository,
+    WorkflowSpecialistInvocationRepository,
     WorkflowRunPatch,
     WorkflowRunRepository,
     WorkflowRunStatus,
+    WorkflowSpecialistInvocationPatch,
     WorkflowStepPatch,
     WorkflowStepRepository,
     WorkflowStepStatus,
@@ -24,6 +28,7 @@ from helm_storage.repositories.contracts import (
     NewWorkflowArtifact,
     NewWorkflowEvent,
     NewWorkflowRun,
+    NewWorkflowSpecialistInvocation,
     NewWorkflowStep,
 )
 from sqlalchemy import create_engine, inspect
@@ -36,7 +41,7 @@ def _session() -> Session:
     return Session(engine)
 
 
-def test_workflow_schema_tables_exist_in_metadata() -> None:
+def test_workflow_schema_tables_include_specialist_dispatch_metadata() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
 
@@ -47,6 +52,7 @@ def test_workflow_schema_tables_exist_in_metadata() -> None:
         "workflow_steps",
         "workflow_artifacts",
         "workflow_events",
+        "workflow_specialist_invocations",
     }
 
     run_columns = {column["name"] for column in inspector.get_columns("workflow_runs")}
@@ -68,6 +74,21 @@ def test_workflow_schema_tables_exist_in_metadata() -> None:
     event_columns = {column["name"] for column in inspector.get_columns("workflow_events")}
     assert {"event_type", "run_status", "step_status", "details"} <= event_columns
 
+    invocation_columns = {
+        column["name"] for column in inspector.get_columns("workflow_specialist_invocations")
+    }
+    assert {
+        "run_id",
+        "step_id",
+        "specialist_name",
+        "input_artifact_id",
+        "output_artifact_id",
+        "status",
+        "started_at",
+        "completed_at",
+        "error_summary",
+    } <= invocation_columns
+
 
 def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> None:
     with _session() as session:
@@ -75,11 +96,13 @@ def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> No
         step_repo = SQLAlchemyWorkflowStepRepository(session)
         artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
         event_repo = SQLAlchemyWorkflowEventRepository(session)
+        invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
 
         assert isinstance(run_repo, WorkflowRunRepository)
         assert isinstance(step_repo, WorkflowStepRepository)
         assert isinstance(artifact_repo, WorkflowArtifactRepository)
         assert isinstance(event_repo, WorkflowEventRepository)
+        assert isinstance(invocation_repo, WorkflowSpecialistInvocationRepository)
 
         run = run_repo.create(
             NewWorkflowRun(
@@ -135,11 +158,12 @@ def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> No
         assert current_state.last_event.summary == "Normalization started"
 
 
-def test_workflow_artifact_versioning_validation_and_summary_lineage() -> None:
+def test_workflow_specialist_invocation_and_schedule_proposal_lineage() -> None:
     with _session() as session:
         run_repo = SQLAlchemyWorkflowRunRepository(session)
         step_repo = SQLAlchemyWorkflowStepRepository(session)
         artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
+        invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
 
         run = run_repo.create(
             NewWorkflowRun(
@@ -173,6 +197,15 @@ def test_workflow_artifact_versioning_validation_and_summary_lineage() -> None:
             NewWorkflowStep(
                 run_id=run.id,
                 step_name="summarize",
+                status=WorkflowStepStatus.SUCCEEDED.value,
+                attempt_number=1,
+                completed_at=datetime.now(UTC),
+            )
+        )
+        schedule_step = step_repo.create(
+            NewWorkflowStep(
+                run_id=run.id,
+                step_name="dispatch_calendar_agent",
                 status=WorkflowStepStatus.SUCCEEDED.value,
                 attempt_number=1,
                 completed_at=datetime.now(UTC),
@@ -243,6 +276,45 @@ def test_workflow_artifact_versioning_validation_and_summary_lineage() -> None:
                 ).to_dict(),
             )
         )
+        schedule_proposal = artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run.id,
+                step_id=schedule_step.id,
+                artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                schema_version="2026-03-13",
+                producer_step_name=schedule_step.step_name,
+                lineage_parent_id=normalized_v2.id,
+                payload=ScheduleProposalArtifactPayload(
+                    proposal_summary="Schedule the reviewed tasks across the week.",
+                    calendar_id="primary",
+                    time_blocks=(
+                        {
+                            "title": "Triage inbox",
+                            "start": "2026-03-16T09:00:00Z",
+                            "end": "2026-03-16T09:30:00Z",
+                        },
+                    ),
+                    proposed_changes=("Create one focused triage block on Monday morning.",),
+                    warnings=("Deadline for draft priorities is still tentative.",),
+                ).to_dict(),
+            )
+        )
+        invocation = invocation_repo.create(
+            NewWorkflowSpecialistInvocation(
+                run_id=run.id,
+                step_id=schedule_step.id,
+                specialist_name="calendar_agent",
+                input_artifact_id=normalized_v2.id,
+            )
+        )
+        updated_invocation = invocation_repo.update(
+            invocation.id,
+            WorkflowSpecialistInvocationPatch(
+                output_artifact_id=schedule_proposal.id,
+                status="succeeded",
+                completed_at=datetime.now(UTC),
+            ),
+        )
         summary_artifact = artifact_repo.create(
             NewWorkflowArtifact(
                 run_id=run.id,
@@ -250,10 +322,10 @@ def test_workflow_artifact_versioning_validation_and_summary_lineage() -> None:
                 artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
                 schema_version="2026-03-13",
                 producer_step_name=summarize_step.step_name,
-                lineage_parent_id=validation_artifact.id,
+                lineage_parent_id=schedule_proposal.id,
                 payload=WorkflowSummaryArtifactPayload(
                     request_artifact_id=request_artifact.id,
-                    intermediate_artifact_ids=(normalized_v2.id,),
+                    intermediate_artifact_ids=(normalized_v2.id, schedule_proposal.id),
                     validation_artifact_ids=(validation_artifact.id,),
                     final_summary_text="Digest ready for operator review",
                     approval_decision=None,
@@ -267,17 +339,26 @@ def test_workflow_artifact_versioning_validation_and_summary_lineage() -> None:
 
         latest_by_type = artifact_repo.get_latest_by_type(run.id)
         assert latest_by_type[WorkflowArtifactType.NORMALIZED_TASK.value].id == normalized_v2.id
+        assert latest_by_type[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].id == schedule_proposal.id
         assert latest_by_type[WorkflowArtifactType.FINAL_SUMMARY.value].id == summary_artifact.id
+
+        assert updated_invocation is not None
+        assert updated_invocation.input_artifact_id == normalized_v2.id
+        assert updated_invocation.output_artifact_id == schedule_proposal.id
+        assert updated_invocation.status == "succeeded"
 
         summary_payload = latest_by_type[WorkflowArtifactType.FINAL_SUMMARY.value].payload
         assert summary_payload["request_artifact_id"] == request_artifact.id
-        assert summary_payload["intermediate_artifact_ids"] == [normalized_v2.id]
+        assert summary_payload["intermediate_artifact_ids"] == [normalized_v2.id, schedule_proposal.id]
         assert summary_payload["validation_artifact_ids"] == [validation_artifact.id]
         assert summary_payload["approval_decision"] is None
         assert summary_payload["approval_decision_artifact_id"] is None
         assert summary_payload["downstream_sync_status"] is None
         assert summary_payload["downstream_sync_artifact_ids"] == []
         assert summary_payload["downstream_sync_reference_ids"] == []
+
+        persisted_invocations = invocation_repo.list_for_run(run.id)
+        assert [record.specialist_name for record in persisted_invocations] == ["calendar_agent"]
 
 
 def test_workflow_failure_and_blocked_validation_states_stay_distinct() -> None:
