@@ -331,6 +331,45 @@ def test_resume_service_uses_persisted_state_after_interruption() -> None:
         )
 
 
+def test_resume_service_skips_blocked_runs_until_explicit_retry() -> None:
+    with _session() as session:
+        service = _service(session)
+        blocked = service.create_run(
+            workflow_type="weekly_digest",
+            first_step_name="normalize_request",
+            request_payload=_request_payload(),
+        )
+        runnable = service.create_run(
+            workflow_type="weekly_digest",
+            first_step_name="normalize_request",
+            request_payload=_request_payload(),
+        )
+        service.complete_current_step(
+            blocked.run.id,
+            artifact_type=WorkflowArtifactType.NORMALIZED_TASK.value,
+            artifact_payload={"title": "Weekly planning", "summary": "", "tasks": []},
+            next_step_name="summarize",
+        )
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            handlers={
+                "normalize_request": lambda _state: StepExecutionResult(
+                    artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
+                    payload=_normalized_task(),
+                    next_step_name="summarize",
+                )
+            },
+        )
+
+        initial_runnable = resume_service.list_runnable_runs()
+        assert [state.run.id for state in initial_runnable] == [runnable.run.id]
+
+        service.retry_current_step(blocked.run.id, reason="Operator requested retry.")
+        retried_runnable = resume_service.list_runnable_runs()
+        assert [state.run.id for state in retried_runnable] == [blocked.run.id, runnable.run.id]
+
+
 def test_resume_service_records_handler_exceptions_as_failed_runs() -> None:
     with _session() as session:
         service = _service(session)
