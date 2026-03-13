@@ -233,6 +233,52 @@ def test_format_run_prefers_compact_completion_summary_for_representative_runs()
     )
 
 
+def test_format_run_shows_replay_requested_recovery_for_completed_representative_runs() -> None:
+    formatted = workflows._format_run(
+        {
+            "id": 14,
+            "status": "completed",
+            "current_step": "apply_schedule",
+            "paused_state": None,
+            "last_event_summary": "Replay requested for calendar:inbox-triage:1.",
+            "needs_action": False,
+            "available_actions": [],
+            "safe_next_actions": [
+                {"action": "await_replay", "label": "Await replay processing"}
+            ],
+            "completion_summary": {
+                "headline": "Approved schedule needs downstream follow-up after 3 planned write(s).",
+                "scheduled_highlights": ["Triage inbox"],
+                "total_sync_writes": 3,
+                "task_sync_writes": 1,
+                "calendar_sync_writes": 2,
+                "downstream_sync_status": "replay_requested",
+                "carry_forward_tasks": [],
+                "attention_items": [
+                    "Replay requested for downstream sync lineage.",
+                    "Next: Await replay processing.",
+                ],
+            },
+            "latest_decision": {
+                "decision": "approve",
+                "actor": "telegram:1",
+                "target_artifact_id": 41,
+            },
+        }
+    )
+
+    assert formatted == (
+        "Run 14 [completed] step=apply_schedule paused=active\n"
+        "Last: Replay requested for calendar:inbox-triage:1.\n"
+        "Needs action: no | Next: await_replay\n"
+        "Outcome: Approved schedule needs downstream follow-up after 3 planned write(s).\n"
+        "Scheduled: Triage inbox\n"
+        "Sync: 3 writes (1 task, 2 calendar) status=replay_requested\n"
+        "Attention: Replay requested for downstream sync lineage.; Next: Await replay processing.\n"
+        "Latest decision: approve by telegram:1 on artifact 41"
+    )
+
+
 @pytest.mark.asyncio
 async def test_snooze_usage_message_when_id_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _allow(_update: _Update, _context: _Context) -> bool:

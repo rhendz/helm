@@ -714,6 +714,42 @@ def test_completed_run_detail_exposes_final_summary_contract() -> None:
         assert detail["completion_summary"]["attention_items"] == []
 
 
+def test_completed_then_replayed_run_projects_live_recovery_over_stale_success_summary() -> None:
+    with _session() as session:
+        run_id, orchestration, _calendar_adapter = _approved_sync_run(session)
+        completed = orchestration.execute_pending_sync_step(run_id)
+        original_calendar_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(completed.run.id)[1]
+
+        replayed = orchestration.request_sync_replay(
+            completed.run.id,
+            actor="telegram:user",
+            sync_record_ids=(original_calendar_record.id,),
+            reason="Replay completed schedule after downstream adapter drift.",
+        )
+        detail = WorkflowStatusService(session).get_run_detail(replayed.run.id)
+
+        assert detail is not None
+        assert detail["status"] == WorkflowRunStatus.COMPLETED.value
+        assert detail["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        assert detail["failure_kind"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        assert detail["lineage"]["final_summary"]["downstream_sync_status"] == "succeeded"
+        assert detail["completion_summary"]["headline"] == (
+            "Approved schedule needs downstream follow-up after 3 planned write(s)."
+        )
+        assert detail["completion_summary"]["downstream_sync_status"] == (
+            WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        )
+        assert detail["completion_summary"]["total_sync_writes"] == 3
+        assert detail["completion_summary"]["attention_items"] == [
+            "Replay requested for downstream sync lineage.",
+            "Next: Await replay processing.",
+        ]
+        assert detail["safe_next_actions"] == [
+            {"action": "await_replay", "label": "Await replay processing"}
+        ]
+        assert detail["sync"]["replay_lineage"]["source_sync_record_ids"] == [original_calendar_record.id]
+
+
 def test_telegram_service_replay_wrapper_uses_shared_replay_request(monkeypatch) -> None:  # noqa: ANN001
     seen: dict[str, object] = {}
 

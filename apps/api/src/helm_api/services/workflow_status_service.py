@@ -741,13 +741,17 @@ class WorkflowStatusService:
             str(item) for item in latest_proposal.get("carry_forward_tasks", []) if isinstance(item, str)
         ]
         attention_items: list[str] = []
+        live_downstream_sync_status = self._live_downstream_sync_status(
+            final_summary=final_summary,
+            sync_projection=sync_projection,
+        )
         failure_summary = self._failure_summary(state, failed_step, sync_projection)
         if failure_summary and state.run.status in {
             WorkflowRunStatus.FAILED.value,
             WorkflowRunStatus.TERMINATED.value,
         }:
             attention_items.append(failure_summary)
-        elif final_summary.get("downstream_sync_status") not in {None, "succeeded"} and isinstance(
+        elif live_downstream_sync_status not in {None, "succeeded"} and isinstance(
             sync_projection.get("failure_summary"), str
         ):
             attention_items.append(sync_projection["failure_summary"])
@@ -770,7 +774,7 @@ class WorkflowStatusService:
                 total_sync_writes=total_sync_writes,
             ),
             "approval_decision": final_summary.get("approval_decision"),
-            "downstream_sync_status": final_summary.get("downstream_sync_status"),
+            "downstream_sync_status": live_downstream_sync_status,
             "scheduled_block_count": len(latest_proposal.get("time_blocks", [])),
             "scheduled_highlights": scheduled_highlights[:3],
             "total_sync_writes": total_sync_writes,
@@ -789,7 +793,13 @@ class WorkflowStatusService:
         scheduled_block_count: int,
         total_sync_writes: int,
     ) -> str:
-        downstream_sync_status = final_summary.get("downstream_sync_status")
+        if sync_projection.get("recovery_class") is not None:
+            return f"Approved schedule needs downstream follow-up after {total_sync_writes} planned write(s)."
+
+        downstream_sync_status = self._live_downstream_sync_status(
+            final_summary=final_summary,
+            sync_projection=sync_projection,
+        )
         if state.run.status == WorkflowRunStatus.COMPLETED.value and downstream_sync_status == "succeeded":
             return f"Scheduled {scheduled_block_count} block(s) and synced {total_sync_writes} approved write(s)."
         if state.run.status == WorkflowRunStatus.COMPLETED.value:
@@ -797,13 +807,23 @@ class WorkflowStatusService:
                 f"Completed scheduling with downstream sync status "
                 f"{downstream_sync_status or 'unknown'}."
             )
-        if sync_projection.get("recovery_class") is not None:
-            return f"Approved schedule needs downstream follow-up after {total_sync_writes} planned write(s)."
         if state.run.status in {WorkflowRunStatus.FAILED.value, WorkflowRunStatus.TERMINATED.value}:
             return f"Approved schedule needs downstream follow-up after {total_sync_writes} planned write(s)."
         if total_sync_writes:
             return f"Approved schedule is queued to sync {total_sync_writes} planned write(s)."
         return f"Prepared a proposal with {scheduled_block_count} scheduled block(s)."
+
+    def _live_downstream_sync_status(
+        self,
+        *,
+        final_summary: dict[str, object],
+        sync_projection: dict[str, object],
+    ) -> str | None:
+        recovery_class = sync_projection.get("recovery_class")
+        if isinstance(recovery_class, str) and recovery_class:
+            return recovery_class
+        downstream_sync_status = final_summary.get("downstream_sync_status")
+        return downstream_sync_status if isinstance(downstream_sync_status, str) else None
 
 
 def _approval_action_label(action: str) -> str:

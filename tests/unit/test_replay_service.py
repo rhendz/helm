@@ -7,14 +7,18 @@ from helm_orchestration import (
     ApprovalDecision,
     CalendarAgentInput,
     CalendarAgentOutput,
+    CalendarSyncResult,
     NormalizedTaskArtifact,
     PreparedSpecialistInput,
     ScheduleBlock,
     ScheduleProposalValidator,
     SpecialistName,
+    SyncOutcomeStatus,
+    SyncRetryDisposition,
     TaskAgentInput,
     TaskAgentOutput,
     TaskArtifact,
+    TaskSyncResult,
     ValidationTargetKind,
     ValidatorRegistry,
     ValidatorTarget,
@@ -39,6 +43,30 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy import select
 from helm_worker.jobs import replay as replay_job
+
+
+class _RecordingTaskAdapter:
+    def upsert_task(self, request):  # noqa: ANN001
+        return TaskSyncResult(
+            status=SyncOutcomeStatus.SUCCEEDED,
+            external_object_id=f"task-{request.item.planned_item_key}",
+            retry_disposition=SyncRetryDisposition.TERMINAL,
+        )
+
+    def reconcile_task(self, request):  # noqa: ANN001
+        raise AssertionError("Task reconcile not expected in replay service tests.")
+
+
+class _RecordingCalendarAdapter:
+    def upsert_calendar_block(self, request):  # noqa: ANN001
+        return CalendarSyncResult(
+            status=SyncOutcomeStatus.SUCCEEDED,
+            external_object_id=f"event-{request.item.planned_item_key}",
+            retry_disposition=SyncRetryDisposition.TERMINAL,
+        )
+
+    def reconcile_calendar_block(self, request):  # noqa: ANN001
+        raise AssertionError("Calendar reconcile not expected in replay service tests.")
 
 
 def _session_factory():
@@ -192,6 +220,17 @@ def _approved_sync_run(session: Session) -> int:
     return approved.run.id
 
 
+def _completed_sync_run(session: Session) -> int:
+    run_id = _approved_sync_run(session)
+    WorkflowOrchestrationService(
+        session,
+        validator_registry=_validator_registry(),
+        task_system_adapter=_RecordingTaskAdapter(),
+        calendar_system_adapter=_RecordingCalendarAdapter(),
+    ).execute_pending_sync_step(run_id)
+    return run_id
+
+
 def test_api_workflow_replay_endpoint_requests_explicit_replay(monkeypatch) -> None:  # noqa: ANN001
     _engine, session_local = _session_factory()
     monkeypatch.setattr(replay_service, "SessionLocal", session_local)
@@ -228,6 +267,33 @@ def test_api_workflow_replay_endpoint_requests_explicit_replay(monkeypatch) -> N
         "Approved schedule needs downstream follow-up after 3 planned write(s)."
     )
     assert payload["run"]["sync"]["replay_lineage"]["source_sync_record_ids"] == [failed_record.id]
+
+
+def test_completed_run_replay_leaves_durable_recovery_truth_for_shared_projection() -> None:
+    _engine, session_local = _session_factory()
+
+    with session_local() as session:
+        run_id = _completed_sync_run(session)
+        original_calendar_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)[1]
+
+        replayed = WorkflowOrchestrationService(session, validator_registry=_validator_registry()).request_sync_replay(
+            run_id,
+            actor="api:operator",
+            sync_record_ids=(original_calendar_record.id,),
+            reason="Replay completed run after adapter drift.",
+        )
+        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(replayed.run.id)
+
+        assert replayed.run.status == "completed"
+        assert sync_records[1].status == WorkflowSyncStatus.SUCCEEDED.value
+        assert sync_records[1].recovery_classification == (
+            WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        )
+        assert sync_records[-1].status == WorkflowSyncStatus.PENDING.value
+        assert sync_records[-1].replayed_from_sync_record_id == original_calendar_record.id
+        assert sync_records[-1].recovery_classification == (
+            WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        )
 
 
 def test_api_workflow_replay_endpoint_rejects_retryable_sync_failures(monkeypatch) -> None:  # noqa: ANN001
