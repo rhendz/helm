@@ -42,6 +42,10 @@ class SQLAlchemyWorkflowArtifactRepository:
         )
         return list(self._session.execute(stmt).scalars().all())
 
+    def get_by_id(self, artifact_id: int) -> WorkflowArtifactORM | None:
+        stmt = select(WorkflowArtifactORM).where(WorkflowArtifactORM.id == artifact_id)
+        return self._session.execute(stmt).scalars().first()
+
     def get_latest_for_run(
         self,
         run_id: int,

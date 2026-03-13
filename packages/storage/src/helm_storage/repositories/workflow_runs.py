@@ -1,7 +1,13 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from helm_storage.models import WorkflowArtifactORM, WorkflowEventORM, WorkflowRunORM, WorkflowStepORM
+from helm_storage.models import (
+    WorkflowApprovalCheckpointORM,
+    WorkflowArtifactORM,
+    WorkflowEventORM,
+    WorkflowRunORM,
+    WorkflowStepORM,
+)
 from helm_storage.repositories.contracts import WorkflowRunPatch, WorkflowRunState
 
 
@@ -19,8 +25,11 @@ class SQLAlchemyWorkflowRunRepository:
             attempt_count=run.attempt_count,
             validation_outcome_summary=run.validation_outcome_summary,
             execution_error_summary=run.execution_error_summary,
+            blocked_reason=run.blocked_reason,
             failure_class=run.failure_class,
             retry_state=run.retry_state,
+            resume_step_name=run.resume_step_name,
+            resume_step_attempt=run.resume_step_attempt,
             last_event_summary=run.last_event_summary,
             completed_at=run.completed_at,
         )
@@ -55,6 +64,7 @@ class SQLAlchemyWorkflowRunRepository:
                 selectinload(WorkflowRunORM.steps),
                 selectinload(WorkflowRunORM.artifacts),
                 selectinload(WorkflowRunORM.events),
+                selectinload(WorkflowRunORM.approval_checkpoints),
             )
             .where(WorkflowRunORM.id == run_id)
         )
@@ -70,6 +80,7 @@ class SQLAlchemyWorkflowRunRepository:
                 selectinload(WorkflowRunORM.steps),
                 selectinload(WorkflowRunORM.artifacts),
                 selectinload(WorkflowRunORM.events),
+                selectinload(WorkflowRunORM.approval_checkpoints),
             )
             .where(WorkflowRunORM.needs_action.is_(True))
             .order_by(WorkflowRunORM.started_at.desc(), WorkflowRunORM.id.desc())
@@ -86,6 +97,7 @@ class SQLAlchemyWorkflowRunRepository:
                 selectinload(WorkflowRunORM.steps),
                 selectinload(WorkflowRunORM.artifacts),
                 selectinload(WorkflowRunORM.events),
+                selectinload(WorkflowRunORM.approval_checkpoints),
             )
             .where(WorkflowRunORM.needs_action.is_(False))
             .where(WorkflowRunORM.status.in_(("pending", "running")))
@@ -101,11 +113,15 @@ def _build_state(run: WorkflowRunORM) -> WorkflowRunState:
     current_step = _pick_current_step(run.steps, run.current_step_name, run.current_step_attempt)
     latest_artifacts = _latest_artifacts(run.artifacts)
     last_event = max(run.events, key=lambda event: event.id) if run.events else None
+    approval_checkpoints = tuple(sorted(run.approval_checkpoints, key=lambda checkpoint: checkpoint.id))
+    active_approval_checkpoint = _pick_active_approval_checkpoint(approval_checkpoints)
     return WorkflowRunState(
         run=run,
         current_step=current_step,
         latest_artifacts=latest_artifacts,
         last_event=last_event,
+        approval_checkpoints=approval_checkpoints,
+        active_approval_checkpoint=active_approval_checkpoint,
     )
 
 
@@ -132,3 +148,12 @@ def _latest_artifacts(artifacts: list[WorkflowArtifactORM]) -> dict[str, Workflo
         if existing is None or artifact.version_number > existing.version_number:
             latest[artifact.artifact_type] = artifact
     return latest
+
+
+def _pick_active_approval_checkpoint(
+    approval_checkpoints: tuple[WorkflowApprovalCheckpointORM, ...],
+) -> WorkflowApprovalCheckpointORM | None:
+    pending = [checkpoint for checkpoint in approval_checkpoints if checkpoint.status == "pending"]
+    if pending:
+        return max(pending, key=lambda checkpoint: checkpoint.id)
+    return None

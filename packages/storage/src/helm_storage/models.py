@@ -127,8 +127,11 @@ class WorkflowRunORM(Base):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     validation_outcome_summary: Mapped[str | None] = mapped_column(Text())
     execution_error_summary: Mapped[str | None] = mapped_column(Text())
+    blocked_reason: Mapped[str | None] = mapped_column(String(64))
     failure_class: Mapped[str | None] = mapped_column(String(64))
     retry_state: Mapped[str | None] = mapped_column(String(32))
+    resume_step_name: Mapped[str | None] = mapped_column(String(128))
+    resume_step_attempt: Mapped[int | None] = mapped_column(Integer)
     last_event_summary: Mapped[str | None] = mapped_column(Text())
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -145,6 +148,9 @@ class WorkflowRunORM(Base):
         back_populates="run", cascade="all, delete-orphan"
     )
     events: Mapped[list["WorkflowEventORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    approval_checkpoints: Mapped[list["WorkflowApprovalCheckpointORM"]] = relationship(
         back_populates="run", cascade="all, delete-orphan"
     )
     specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
@@ -223,6 +229,9 @@ class WorkflowArtifactORM(Base):
         back_populates="output_artifact",
         foreign_keys="WorkflowSpecialistInvocationORM.output_artifact_id",
     )
+    approval_checkpoints: Mapped[list["WorkflowApprovalCheckpointORM"]] = relationship(
+        back_populates="target_artifact",
+    )
 
 
 class WorkflowEventORM(Base):
@@ -242,6 +251,36 @@ class WorkflowEventORM(Base):
 
     run: Mapped["WorkflowRunORM"] = relationship(back_populates="events")
     step: Mapped["WorkflowStepORM | None"] = relationship(back_populates="events")
+
+
+class WorkflowApprovalCheckpointORM(Base):
+    __tablename__ = "workflow_approval_checkpoints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int] = mapped_column(ForeignKey("workflow_steps.id", ondelete="CASCADE"))
+    target_artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    resume_step_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    resume_step_attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    allowed_actions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    decision: Mapped[str | None] = mapped_column(String(32))
+    decision_actor: Mapped[str | None] = mapped_column(String(255))
+    decision_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision_feedback: Mapped[str | None] = mapped_column(Text())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="approval_checkpoints")
+    step: Mapped["WorkflowStepORM"] = relationship()
+    target_artifact: Mapped["WorkflowArtifactORM"] = relationship(
+        back_populates="approval_checkpoints",
+    )
 
 
 class WorkflowSpecialistInvocationORM(Base):

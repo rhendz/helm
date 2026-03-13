@@ -14,6 +14,7 @@ from helm_storage.models import (
     EmailDraftORM,
     EmailThreadORM,
     ScheduledThreadTaskORM,
+    WorkflowApprovalCheckpointORM,
     WorkflowArtifactORM,
     WorkflowEventORM,
     WorkflowRunORM,
@@ -127,8 +128,17 @@ class WorkflowArtifactType(StrEnum):
     RAW_REQUEST = "raw_request"
     NORMALIZED_TASK = "normalized_task"
     SCHEDULE_PROPOSAL = "schedule_proposal"
+    APPROVAL_REQUEST = "approval_request"
+    APPROVAL_DECISION = "approval_decision"
+    REVISION_REQUEST = "revision_request"
     VALIDATION_RESULT = "validation_result"
     FINAL_SUMMARY = "final_summary"
+
+
+class WorkflowBlockedReason(StrEnum):
+    VALIDATION_FAILED = "validation_failed"
+    APPROVAL_REQUIRED = "approval_required"
+    EXECUTION_FAILED = "execution_failed"
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,6 +238,42 @@ class WorkflowSummaryArtifactPayload:
 
 
 @dataclass(frozen=True, slots=True)
+class ApprovalRequestArtifactPayload:
+    checkpoint_id: int
+    target_artifact_id: int
+    allowed_actions: tuple[str, ...]
+    pause_reason: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "checkpoint_id": self.checkpoint_id,
+            "target_artifact_id": self.target_artifact_id,
+            "allowed_actions": list(self.allowed_actions),
+            "pause_reason": self.pause_reason,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovalDecisionArtifactPayload:
+    checkpoint_id: int
+    target_artifact_id: int
+    decision: str
+    actor: str
+    decision_at: datetime
+    revision_feedback: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "checkpoint_id": self.checkpoint_id,
+            "target_artifact_id": self.target_artifact_id,
+            "decision": self.decision,
+            "actor": self.actor,
+            "decision_at": self.decision_at.isoformat(),
+            "revision_feedback": self.revision_feedback,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class NewWorkflowRun:
     workflow_type: str
     status: str = WorkflowRunStatus.PENDING.value
@@ -237,8 +283,11 @@ class NewWorkflowRun:
     attempt_count: int = 0
     validation_outcome_summary: str | None = None
     execution_error_summary: str | None = None
+    blocked_reason: str | None = None
     failure_class: str | None = None
     retry_state: str | None = None
+    resume_step_name: str | None = None
+    resume_step_attempt: int | None = None
     last_event_summary: str | None = None
     completed_at: datetime | None = None
 
@@ -252,8 +301,11 @@ class WorkflowRunPatch:
     attempt_count: int | None = None
     validation_outcome_summary: str | None = None
     execution_error_summary: str | None = None
+    blocked_reason: str | None = None
     failure_class: str | None = None
     retry_state: str | None = None
+    resume_step_name: str | None = None
+    resume_step_attempt: int | None = None
     last_event_summary: str | None = None
     completed_at: datetime | None = None
 
@@ -328,11 +380,39 @@ class WorkflowSpecialistInvocationPatch:
 
 
 @dataclass(frozen=True, slots=True)
+class NewWorkflowApprovalCheckpoint:
+    run_id: int
+    step_id: int
+    target_artifact_id: int
+    resume_step_name: str
+    allowed_actions: tuple[str, ...]
+    resume_step_attempt: int = 1
+    status: str = "pending"
+    decision: str | None = None
+    decision_actor: str | None = None
+    decision_at: datetime | None = None
+    revision_feedback: str | None = None
+    resolved_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowApprovalCheckpointPatch:
+    status: str | None = None
+    decision: str | None = None
+    decision_actor: str | None = None
+    decision_at: datetime | None = None
+    revision_feedback: str | None = None
+    resolved_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class WorkflowRunState:
     run: WorkflowRunORM
     current_step: WorkflowStepORM | None
     latest_artifacts: dict[str, WorkflowArtifactORM]
     last_event: WorkflowEventORM | None
+    approval_checkpoints: tuple[WorkflowApprovalCheckpointORM, ...]
+    active_approval_checkpoint: WorkflowApprovalCheckpointORM | None
 
 
 @runtime_checkable
@@ -517,5 +597,22 @@ class WorkflowSpecialistInvocationRepository(Protocol):
         invocation_id: int,
         patch: WorkflowSpecialistInvocationPatch,
     ) -> WorkflowSpecialistInvocationORM | None: ...
+
+
+@runtime_checkable
+class WorkflowApprovalCheckpointRepository(Protocol):
+    def create(self, checkpoint: NewWorkflowApprovalCheckpoint) -> WorkflowApprovalCheckpointORM: ...
+
+    def update(
+        self,
+        checkpoint_id: int,
+        patch: WorkflowApprovalCheckpointPatch,
+    ) -> WorkflowApprovalCheckpointORM | None: ...
+
+    def get_by_id(self, checkpoint_id: int) -> WorkflowApprovalCheckpointORM | None: ...
+
+    def get_active_for_run(self, run_id: int) -> WorkflowApprovalCheckpointORM | None: ...
+
+    def list_for_run(self, run_id: int) -> list[WorkflowApprovalCheckpointORM]: ...
 
     def list_for_run(self, run_id: int) -> list[WorkflowSpecialistInvocationORM]: ...

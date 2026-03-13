@@ -4,6 +4,8 @@ from helm_storage.repositories.action_items import SQLAlchemyActionItemRepositor
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository
 from helm_storage.repositories.agent_runs import AgentRunStatus, SQLAlchemyAgentRunRepository
 from helm_storage.repositories.contracts import (
+    ApprovalDecisionArtifactPayload,
+    ApprovalRequestArtifactPayload,
     ActionItemRepository,
     ActionProposalRepository,
     DigestItemRepository,
@@ -20,6 +22,7 @@ from helm_storage.repositories.contracts import (
     NewEmailThread,
     NewScheduledThreadTask,
     NewWorkflowArtifact,
+    NewWorkflowApprovalCheckpoint,
     NewWorkflowEvent,
     NewWorkflowRun,
     NewWorkflowSpecialistInvocation,
@@ -29,6 +32,9 @@ from helm_storage.repositories.contracts import (
     ValidationArtifactPayload,
     WorkflowArtifactRepository,
     WorkflowArtifactType,
+    WorkflowApprovalCheckpointPatch,
+    WorkflowApprovalCheckpointRepository,
+    WorkflowBlockedReason,
     WorkflowEventRepository,
     WorkflowRunPatch,
     WorkflowRunRepository,
@@ -58,6 +64,9 @@ from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueReposito
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
 from helm_storage.repositories.study_ingest import SQLAlchemyStudyIngestRepository
 from helm_storage.repositories.workflow_artifacts import SQLAlchemyWorkflowArtifactRepository
+from helm_storage.repositories.workflow_approval_checkpoints import (
+    SQLAlchemyWorkflowApprovalCheckpointRepository,
+)
 from helm_storage.repositories.workflow_events import SQLAlchemyWorkflowEventRepository
 from helm_storage.repositories.workflow_runs import SQLAlchemyWorkflowRunRepository
 from helm_storage.repositories.workflow_specialist_invocations import (
@@ -67,6 +76,8 @@ from helm_storage.repositories.workflow_steps import SQLAlchemyWorkflowStepRepos
 
 __all__ = [
     "ActionItemRepository",
+    "ApprovalDecisionArtifactPayload",
+    "ApprovalRequestArtifactPayload",
     "ActionProposalRepository",
     "DigestItemRepository",
     "DraftReplyRepository",
@@ -82,6 +93,7 @@ __all__ = [
     "NewEmailThread",
     "NewScheduledThreadTask",
     "NewWorkflowArtifact",
+    "NewWorkflowApprovalCheckpoint",
     "NewWorkflowEvent",
     "NewWorkflowRun",
     "NewWorkflowSpecialistInvocation",
@@ -107,6 +119,7 @@ __all__ = [
     "SQLAlchemyScheduledThreadTaskRepository",
     "SQLAlchemyStudyIngestRepository",
     "SQLAlchemyWorkflowArtifactRepository",
+    "SQLAlchemyWorkflowApprovalCheckpointRepository",
     "SQLAlchemyWorkflowEventRepository",
     "SQLAlchemyWorkflowRunRepository",
     "SQLAlchemyWorkflowSpecialistInvocationRepository",
@@ -114,6 +127,9 @@ __all__ = [
     "ValidationArtifactPayload",
     "WorkflowArtifactRepository",
     "WorkflowArtifactType",
+    "WorkflowApprovalCheckpointPatch",
+    "WorkflowApprovalCheckpointRepository",
+    "WorkflowBlockedReason",
     "WorkflowEventRepository",
     "WorkflowRunPatch",
     "WorkflowRunRepository",

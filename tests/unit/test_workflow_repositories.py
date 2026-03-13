@@ -2,9 +2,13 @@ from datetime import UTC, datetime
 
 from helm_storage.db import Base
 from helm_storage.repositories import (
+    ApprovalDecisionArtifactPayload,
+    ApprovalRequestArtifactPayload,
     NormalizedTaskArtifactPayload,
+    NewWorkflowApprovalCheckpoint,
     RawRequestArtifactPayload,
     ScheduleProposalArtifactPayload,
+    SQLAlchemyWorkflowApprovalCheckpointRepository,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowRunRepository,
@@ -13,6 +17,9 @@ from helm_storage.repositories import (
     ValidationArtifactPayload,
     WorkflowArtifactRepository,
     WorkflowArtifactType,
+    WorkflowApprovalCheckpointPatch,
+    WorkflowApprovalCheckpointRepository,
+    WorkflowBlockedReason,
     WorkflowEventRepository,
     WorkflowSpecialistInvocationRepository,
     WorkflowRunPatch,
@@ -52,11 +59,20 @@ def test_workflow_schema_tables_include_specialist_dispatch_metadata() -> None:
         "workflow_steps",
         "workflow_artifacts",
         "workflow_events",
+        "workflow_approval_checkpoints",
         "workflow_specialist_invocations",
     }
 
     run_columns = {column["name"] for column in inspector.get_columns("workflow_runs")}
-    assert {"status", "current_step_name", "needs_action", "validation_outcome_summary"} <= run_columns
+    assert {
+        "status",
+        "current_step_name",
+        "needs_action",
+        "validation_outcome_summary",
+        "blocked_reason",
+        "resume_step_name",
+        "resume_step_attempt",
+    } <= run_columns
 
     step_columns = {column["name"] for column in inspector.get_columns("workflow_steps")}
     assert {"step_name", "attempt_number", "failure_class", "retry_state"} <= step_columns
@@ -73,6 +89,24 @@ def test_workflow_schema_tables_include_specialist_dispatch_metadata() -> None:
 
     event_columns = {column["name"] for column in inspector.get_columns("workflow_events")}
     assert {"event_type", "run_status", "step_status", "details"} <= event_columns
+
+    approval_columns = {
+        column["name"] for column in inspector.get_columns("workflow_approval_checkpoints")
+    }
+    assert {
+        "run_id",
+        "step_id",
+        "target_artifact_id",
+        "resume_step_name",
+        "resume_step_attempt",
+        "allowed_actions",
+        "status",
+        "decision",
+        "decision_actor",
+        "decision_at",
+        "revision_feedback",
+        "resolved_at",
+    } <= approval_columns
 
     invocation_columns = {
         column["name"] for column in inspector.get_columns("workflow_specialist_invocations")
@@ -97,12 +131,14 @@ def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> No
         artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
         event_repo = SQLAlchemyWorkflowEventRepository(session)
         invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
+        approval_repo = SQLAlchemyWorkflowApprovalCheckpointRepository(session)
 
         assert isinstance(run_repo, WorkflowRunRepository)
         assert isinstance(step_repo, WorkflowStepRepository)
         assert isinstance(artifact_repo, WorkflowArtifactRepository)
         assert isinstance(event_repo, WorkflowEventRepository)
         assert isinstance(invocation_repo, WorkflowSpecialistInvocationRepository)
+        assert isinstance(approval_repo, WorkflowApprovalCheckpointRepository)
 
         run = run_repo.create(
             NewWorkflowRun(
@@ -156,6 +192,7 @@ def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> No
         assert current_state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value].id == raw_request.id
         assert current_state.last_event is not None
         assert current_state.last_event.summary == "Normalization started"
+        assert current_state.active_approval_checkpoint is None
 
 
 def test_workflow_specialist_invocation_and_schedule_proposal_lineage() -> None:
@@ -359,6 +396,149 @@ def test_workflow_specialist_invocation_and_schedule_proposal_lineage() -> None:
 
         persisted_invocations = invocation_repo.list_for_run(run.id)
         assert [record.specialist_name for record in persisted_invocations] == ["calendar_agent"]
+
+
+def test_workflow_approval_checkpoint_persists_pending_and_resolved_decisions() -> None:
+    with _session() as session:
+        run_repo = SQLAlchemyWorkflowRunRepository(session)
+        step_repo = SQLAlchemyWorkflowStepRepository(session)
+        artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
+        event_repo = SQLAlchemyWorkflowEventRepository(session)
+        approval_repo = SQLAlchemyWorkflowApprovalCheckpointRepository(session)
+
+        run = run_repo.create(
+            NewWorkflowRun(
+                workflow_type="weekly_scheduling",
+                status=WorkflowRunStatus.BLOCKED.value,
+                current_step_name="await_schedule_approval",
+                current_step_attempt=1,
+                attempt_count=3,
+                needs_action=True,
+                blocked_reason=WorkflowBlockedReason.APPROVAL_REQUIRED.value,
+                resume_step_name="apply_schedule",
+                resume_step_attempt=1,
+            )
+        )
+        proposal_step = step_repo.create(
+            NewWorkflowStep(
+                run_id=run.id,
+                step_name="dispatch_calendar_agent",
+                status=WorkflowStepStatus.SUCCEEDED.value,
+                attempt_number=1,
+                completed_at=datetime.now(UTC),
+            )
+        )
+        proposal_artifact = artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run.id,
+                step_id=proposal_step.id,
+                artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                schema_version="2026-03-13",
+                producer_step_name=proposal_step.step_name,
+                payload=ScheduleProposalArtifactPayload(
+                    proposal_summary="Hold focus blocks and meeting windows for the week.",
+                    calendar_id="primary",
+                    time_blocks=(
+                        {
+                            "title": "Deep work",
+                            "start": "2026-03-16T09:00:00Z",
+                            "end": "2026-03-16T11:00:00Z",
+                        },
+                    ),
+                    proposed_changes=("Reserve Monday and Tuesday mornings for deep work.",),
+                ).to_dict(),
+            )
+        )
+        checkpoint = approval_repo.create(
+            NewWorkflowApprovalCheckpoint(
+                run_id=run.id,
+                step_id=proposal_step.id,
+                target_artifact_id=proposal_artifact.id,
+                resume_step_name="apply_schedule",
+                allowed_actions=("approve", "reject", "request_revision"),
+            )
+        )
+        approval_request = artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run.id,
+                step_id=proposal_step.id,
+                artifact_type=WorkflowArtifactType.APPROVAL_REQUEST.value,
+                schema_version="2026-03-13",
+                producer_step_name="await_schedule_approval",
+                lineage_parent_id=proposal_artifact.id,
+                payload=ApprovalRequestArtifactPayload(
+                    checkpoint_id=checkpoint.id,
+                    target_artifact_id=proposal_artifact.id,
+                    allowed_actions=("approve", "reject", "request_revision"),
+                    pause_reason="Awaiting operator approval before downstream changes.",
+                ).to_dict(),
+            )
+        )
+        event_repo.create(
+            NewWorkflowEvent(
+                run_id=run.id,
+                step_id=proposal_step.id,
+                event_type="approval_checkpoint_created",
+                run_status=WorkflowRunStatus.BLOCKED.value,
+                step_status=WorkflowStepStatus.SUCCEEDED.value,
+                summary="Approval checkpoint created for schedule proposal.",
+                details={"checkpoint_id": checkpoint.id, "artifact_id": approval_request.id},
+            )
+        )
+
+        active_state = run_repo.get_with_current_state(run.id)
+        assert active_state is not None
+        assert active_state.active_approval_checkpoint is not None
+        assert active_state.active_approval_checkpoint.id == checkpoint.id
+        assert active_state.active_approval_checkpoint.allowed_actions == [
+            "approve",
+            "reject",
+            "request_revision",
+        ]
+
+        resolved = approval_repo.update(
+            checkpoint.id,
+            WorkflowApprovalCheckpointPatch(
+                status="resolved",
+                decision="request_revision",
+                decision_actor="telegram:1",
+                decision_at=datetime.now(UTC),
+                revision_feedback="Keep Friday afternoon free.",
+                resolved_at=datetime.now(UTC),
+            ),
+        )
+        assert resolved is not None
+
+        decision_artifact = artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run.id,
+                step_id=proposal_step.id,
+                artifact_type=WorkflowArtifactType.APPROVAL_DECISION.value,
+                schema_version="2026-03-13",
+                producer_step_name="await_schedule_approval",
+                lineage_parent_id=approval_request.id,
+                payload=ApprovalDecisionArtifactPayload(
+                    checkpoint_id=checkpoint.id,
+                    target_artifact_id=proposal_artifact.id,
+                    decision="request_revision",
+                    actor="telegram:1",
+                    decision_at=resolved.decision_at,
+                    revision_feedback="Keep Friday afternoon free.",
+                ).to_dict(),
+            )
+        )
+
+        current_state = run_repo.get_with_current_state(run.id)
+        assert current_state is not None
+        assert current_state.run.blocked_reason == WorkflowBlockedReason.APPROVAL_REQUIRED.value
+        assert current_state.active_approval_checkpoint is None
+        assert len(current_state.approval_checkpoints) == 1
+        assert current_state.approval_checkpoints[0].target_artifact_id == proposal_artifact.id
+        assert current_state.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].id == (
+            decision_artifact.id
+        )
+        assert current_state.last_event is not None
+        assert current_state.last_event.event_type == "approval_checkpoint_created"
 
 
 def test_workflow_failure_and_blocked_validation_states_stay_distinct() -> None:
