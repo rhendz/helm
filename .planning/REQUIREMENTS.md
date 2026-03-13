@@ -56,12 +56,12 @@
 
 ### Representative Workflow
 
-- [ ] **DEMO-01**: User can submit a weekly scheduling request containing multiple tasks and Helm creates a workflow run for that request.
+- [x] **DEMO-01**: User can submit a weekly scheduling request containing multiple tasks and Helm creates a workflow run for that request.
 - [x] **DEMO-02**: Helm converts the weekly scheduling request into normalized task artifacts through `TaskAgent`.
 - [x] **DEMO-03**: Helm converts normalized tasks into a schedule proposal through `CalendarAgent`.
-- [ ] **DEMO-04**: Helm pauses for approval before any downstream create, update, or delete of tasks or calendar blocks.
-- [ ] **DEMO-05**: Helm can create a revised scheduling proposal as a new version after user feedback at the approval checkpoint.
-- [ ] **DEMO-06**: Helm completes the representative scheduling workflow with full lineage from raw request to downstream sync results.
+- [x] **DEMO-04**: Helm pauses for approval before any downstream create, update, or delete of tasks or calendar blocks.
+- [x] **DEMO-05**: Helm can create a revised scheduling proposal as a new version after user feedback at the approval checkpoint.
+- [x] **DEMO-06**: Helm completes the representative scheduling workflow with full lineage from raw request to downstream sync results.
 
 ## v2 Requirements
 
@@ -127,12 +127,12 @@
 | RCVR-03 | Phase 3 | Complete |
 | RCVR-04 | Phase 3 | Complete |
 | OPER-01 | Phase 3 | Complete |
-| DEMO-01 | Phase 4 | Pending |
+| DEMO-01 | Phase 4 | Complete |
 | DEMO-02 | Phase 2 | Complete |
 | DEMO-03 | Phase 2 | Complete |
-| DEMO-04 | Phase 4 | Pending |
-| DEMO-05 | Phase 4 | Pending |
-| DEMO-06 | Phase 4 | Pending |
+| DEMO-04 | Phase 4 | Complete |
+| DEMO-05 | Phase 4 | Complete |
+| DEMO-06 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 36 total
