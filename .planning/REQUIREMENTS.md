@@ -7,9 +7,9 @@
 
 ### Workflow Lifecycle
 
-- [ ] **FLOW-01**: User can start a workflow run from a new request and Helm persists the run with a unique ID, current status, and current step.
+- [x] **FLOW-01**: User can start a workflow run from a new request and Helm persists the run with a unique ID, current status, and current step.
 - [ ] **FLOW-02**: User can inspect the current status of a workflow run, including active step, paused state, and final outcome.
-- [ ] **FLOW-03**: Helm persists step transitions so an in-flight workflow can resume from the correct step after a restart.
+- [x] **FLOW-03**: Helm persists step transitions so an in-flight workflow can resume from the correct step after a restart.
 - [ ] **FLOW-04**: Helm persists failure details for a failed workflow run, including failed step, error summary, and retryability state.
 
 ### Specialist Dispatch
@@ -23,11 +23,11 @@
 
 ### Artifacts
 
-- [ ] **ARTF-01**: Helm persists the raw user input that created a workflow run.
-- [ ] **ARTF-02**: Helm persists structured task artifacts produced from the user request, including task priority, estimated duration, deadlines, and dependencies when available.
-- [ ] **ARTF-03**: Helm persists validation results, including warnings and ambiguity flags, for intermediate workflow artifacts.
+- [x] **ARTF-01**: Helm persists the raw user input that created a workflow run.
+- [x] **ARTF-02**: Helm persists structured task artifacts produced from the user request, including task priority, estimated duration, deadlines, and dependencies when available.
+- [x] **ARTF-03**: Helm persists validation results, including warnings and ambiguity flags, for intermediate workflow artifacts.
 - [ ] **ARTF-04**: Helm persists schedule proposal artifacts produced by `CalendarAgent`, including proposed time blocks and proposed calendar changes.
-- [ ] **ARTF-05**: Helm persists a final workflow summary artifact that links the request, specialist outputs, approval decisions, and downstream sync results.
+- [x] **ARTF-05**: Helm persists a final workflow summary artifact that links the request, specialist outputs, approval decisions, and downstream sync results.
 
 ### Approval And Resume
 
@@ -95,9 +95,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FLOW-01 | Phase 1 | Pending |
+| FLOW-01 | Phase 1 | Complete |
 | FLOW-02 | Phase 1 | Pending |
-| FLOW-03 | Phase 1 | Pending |
+| FLOW-03 | Phase 1 | Complete |
 | FLOW-04 | Phase 1 | Pending |
 | AGNT-01 | Phase 2 | Pending |
 | AGNT-02 | Phase 2 | Pending |
@@ -105,11 +105,11 @@
 | AGNT-04 | Phase 1 | Pending |
 | AGNT-05 | Phase 1 | Pending |
 | AGNT-06 | Phase 1 | Pending |
-| ARTF-01 | Phase 1 | Pending |
-| ARTF-02 | Phase 1 | Pending |
-| ARTF-03 | Phase 1 | Pending |
+| ARTF-01 | Phase 1 | Complete |
+| ARTF-02 | Phase 1 | Complete |
+| ARTF-03 | Phase 1 | Complete |
 | ARTF-04 | Phase 2 | Pending |
-| ARTF-05 | Phase 1 | Pending |
+| ARTF-05 | Phase 1 | Complete |
 | APRV-01 | Phase 2 | Pending |
 | APRV-02 | Phase 2 | Pending |
 | APRV-03 | Phase 2 | Pending |
