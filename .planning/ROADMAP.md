@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01: Add workflow run, step state, and artifact persistence models plus repositories.
-- [ ] 01-02: Add typed workflow schemas, validation boundaries, and validation-failure handling.
+- [x] 01-02: Add typed workflow schemas, validation boundaries, and validation-failure handling.
 - [ ] 01-03: Expose run status and artifact inspection through API and Telegram-friendly read paths.
 
 ### Phase 2: Specialist Dispatch And Approval Semantics
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Durable Workflow Foundation | 1/3 | In Progress | - |
+| 1. Durable Workflow Foundation | 2/3 | In Progress | - |
 | 2. Specialist Dispatch And Approval Semantics | 0/3 | Not started | - |
 | 3. Adapter Writes And Recovery Guarantees | 0/3 | Not started | - |
 | 4. Representative Scheduling Workflow | 0/2 | Not started | - |

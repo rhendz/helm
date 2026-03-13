@@ -10,16 +10,16 @@
 - [x] **FLOW-01**: User can start a workflow run from a new request and Helm persists the run with a unique ID, current status, and current step.
 - [ ] **FLOW-02**: User can inspect the current status of a workflow run, including active step, paused state, and final outcome.
 - [x] **FLOW-03**: Helm persists step transitions so an in-flight workflow can resume from the correct step after a restart.
-- [ ] **FLOW-04**: Helm persists failure details for a failed workflow run, including failed step, error summary, and retryability state.
+- [x] **FLOW-04**: Helm persists failure details for a failed workflow run, including failed step, error summary, and retryability state.
 
 ### Specialist Dispatch
 
 - [ ] **AGNT-01**: Helm can invoke `TaskAgent` with typed input derived from raw workflow input.
 - [ ] **AGNT-02**: Helm can invoke `CalendarAgent` with typed scheduling input derived from validated task artifacts and calendar constraints.
 - [ ] **AGNT-03**: Helm persists an invocation record for each specialist execution, including input reference, output reference, timing, and result status.
-- [ ] **AGNT-04**: Helm validates specialist outputs before any downstream workflow step or adapter write consumes them.
-- [ ] **AGNT-05**: Helm marks a workflow step as validation-failed when a specialist output is malformed, incomplete, or ambiguous enough to violate the step schema.
-- [ ] **AGNT-06**: Helm persists validation-failure details and prevents downstream execution until the workflow is explicitly retried, revised, or terminated.
+- [x] **AGNT-04**: Helm validates specialist outputs before any downstream workflow step or adapter write consumes them.
+- [x] **AGNT-05**: Helm marks a workflow step as validation-failed when a specialist output is malformed, incomplete, or ambiguous enough to violate the step schema.
+- [x] **AGNT-06**: Helm persists validation-failure details and prevents downstream execution until the workflow is explicitly retried, revised, or terminated.
 
 ### Artifacts
 
@@ -98,13 +98,13 @@
 | FLOW-01 | Phase 1 | Complete |
 | FLOW-02 | Phase 1 | Pending |
 | FLOW-03 | Phase 1 | Complete |
-| FLOW-04 | Phase 1 | Pending |
+| FLOW-04 | Phase 1 | Complete |
 | AGNT-01 | Phase 2 | Pending |
 | AGNT-02 | Phase 2 | Pending |
 | AGNT-03 | Phase 2 | Pending |
-| AGNT-04 | Phase 1 | Pending |
-| AGNT-05 | Phase 1 | Pending |
-| AGNT-06 | Phase 1 | Pending |
+| AGNT-04 | Phase 1 | Complete |
+| AGNT-05 | Phase 1 | Complete |
+| AGNT-06 | Phase 1 | Complete |
 | ARTF-01 | Phase 1 | Complete |
 | ARTF-02 | Phase 1 | Complete |
 | ARTF-03 | Phase 1 | Complete |
