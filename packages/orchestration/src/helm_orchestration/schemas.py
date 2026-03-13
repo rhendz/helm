@@ -82,6 +82,32 @@ class TaskArtifact(BaseModel):
     estimated_minutes: int | None = None
     deadline: str | None = None
     dependencies: tuple[str, ...] = ()
+    source_line: str | None = None
+    warnings: tuple[str, ...] = ()
+
+
+class WeeklyTaskRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    details: str | None = None
+    priority: str | None = None
+    deadline: str | None = None
+    estimated_minutes: int | None = None
+    source_line: str | None = None
+    warnings: tuple[str, ...] = ()
+
+
+class WeeklySchedulingRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    raw_request_text: str
+    planning_goal: str | None = None
+    tasks: tuple[WeeklyTaskRequest, ...] = ()
+    protected_time: tuple[str, ...] = ()
+    no_meeting_windows: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
 
 
 class RawWorkflowRequest(BaseModel):
@@ -91,6 +117,7 @@ class RawWorkflowRequest(BaseModel):
     submitted_by: str
     channel: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    weekly_request: WeeklySchedulingRequest | None = None
 
 
 class TaskAgentInput(BaseModel):
@@ -105,6 +132,7 @@ class TaskAgentInput(BaseModel):
     channel: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     constraints: tuple[str, ...] = ()
+    weekly_request: WeeklySchedulingRequest | None = None
 
 
 class NormalizedTaskArtifact(BaseModel):
@@ -113,6 +141,10 @@ class NormalizedTaskArtifact(BaseModel):
     title: str
     summary: str
     tasks: tuple[TaskArtifact, ...]
+    request_summary: str | None = None
+    protected_time: tuple[str, ...] = ()
+    no_meeting_windows: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
 
 
@@ -140,6 +172,7 @@ class CalendarAgentInput(BaseModel):
     scheduling_constraints: tuple[str, ...] = ()
     source_context: dict[str, Any] = Field(default_factory=dict)
     request_text: str | None = None
+    weekly_request: WeeklySchedulingRequest | None = None
     warnings: tuple[str, ...] = ()
     revision_request_artifact_id: int | None = None
     revision_feedback: str | None = None
@@ -154,6 +187,10 @@ class ScheduleProposalArtifact(BaseModel):
     calendar_id: str | None = None
     time_blocks: tuple[ScheduleBlock, ...]
     proposed_changes: tuple[str, ...]
+    honored_constraints: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    carry_forward_tasks: tuple[str, ...] = ()
+    rationale: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
 
 

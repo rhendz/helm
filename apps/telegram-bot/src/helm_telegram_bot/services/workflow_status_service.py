@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from helm_api.services.replay_service import request_workflow_run_replay
-from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
+from helm_api.services.workflow_status_service import (
+    WorkflowStatusService,
+    build_workflow_run_create_input,
+)
 from helm_storage.db import SessionLocal
 
 
@@ -9,9 +12,9 @@ class TelegramWorkflowStatusService:
     def start_run(self, *, request_text: str, submitted_by: str, chat_id: str) -> dict[str, object]:
         with SessionLocal() as session:
             return WorkflowStatusService(session).create_run(
-                WorkflowRunCreateInput(
-                    workflow_type="weekly_digest",
-                    first_step_name="normalize_request",
+                build_workflow_run_create_input(
+                    workflow_type="weekly_scheduling",
+                    first_step_name="dispatch_task_agent",
                     request_text=request_text,
                     submitted_by=submitted_by,
                     channel="telegram",

@@ -44,12 +44,16 @@ def _format_run(run: dict[str, object]) -> str:
             f"{proposal_summary}\n"
             "Actions: approve/reject/request_revision must name this artifact id."
         )
+        for extra_line in _proposal_detail_lines(approval_checkpoint):
+            lines.append(extra_line)
     latest_proposal = run.get("latest_proposal_version")
     if isinstance(latest_proposal, dict) and approval_checkpoint is None:
         lines.append(
             f"Latest proposal: v{latest_proposal.get('version_number')} "
             f"artifact={latest_proposal.get('artifact_id')}"
         )
+        for extra_line in _proposal_detail_lines(latest_proposal):
+            lines.append(extra_line)
     latest_decision = run.get("latest_decision")
     if isinstance(latest_decision, dict):
         decision = latest_decision.get("decision")
@@ -73,6 +77,29 @@ def _format_run(run: dict[str, object]) -> str:
         if version_labels:
             lines.append(f"History: {', '.join(version_labels)}")
     return "\n".join(lines)
+
+
+def _proposal_detail_lines(proposal: dict[str, object]) -> list[str]:
+    lines: list[str] = []
+    time_blocks = proposal.get("time_blocks")
+    if isinstance(time_blocks, list) and time_blocks:
+        preview = []
+        for block in time_blocks[:2]:
+            if not isinstance(block, dict):
+                continue
+            preview.append(f"{block.get('title')} [{block.get('start')} -> {block.get('end')}]")
+        if preview:
+            lines.append(f"Blocks: {'; '.join(preview)}")
+    for key, label in (
+        ("honored_constraints", "Constraints"),
+        ("assumptions", "Assumptions"),
+        ("carry_forward_tasks", "Carry forward"),
+        ("proposed_changes", "Planned changes"),
+    ):
+        items = proposal.get(key)
+        if isinstance(items, list) and items:
+            lines.append(f"{label}: {', '.join(str(item) for item in items[:3])}")
+    return lines
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

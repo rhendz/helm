@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 
-from helm_orchestration import ApprovalAction, ApprovalDecision, WorkflowOrchestrationService
+from helm_orchestration import (
+    ApprovalAction,
+    ApprovalDecision,
+    WeeklySchedulingRequest,
+    WeeklyTaskRequest,
+    WorkflowOrchestrationService,
+)
 from helm_storage.models import WorkflowArtifactORM, WorkflowRunORM
 from helm_storage.repositories import (
     RawRequestArtifactPayload,
@@ -29,7 +36,7 @@ class WorkflowRunCreateInput:
     request_text: str
     submitted_by: str
     channel: str
-    metadata: dict[str, str]
+    metadata: dict[str, Any]
 
 
 class WorkflowStatusService:
@@ -41,14 +48,22 @@ class WorkflowStatusService:
         self._orchestration = WorkflowOrchestrationService(session)
 
     def create_run(self, payload: WorkflowRunCreateInput) -> dict[str, object]:
-        state = self._orchestration.create_run(
+        normalized_payload = build_workflow_run_create_input(
             workflow_type=payload.workflow_type,
             first_step_name=payload.first_step_name,
+            request_text=payload.request_text,
+            submitted_by=payload.submitted_by,
+            channel=payload.channel,
+            metadata=payload.metadata,
+        )
+        state = self._orchestration.create_run(
+            workflow_type=normalized_payload.workflow_type,
+            first_step_name=normalized_payload.first_step_name,
             request_payload=RawRequestArtifactPayload(
-                request_text=payload.request_text,
-                submitted_by=payload.submitted_by,
-                channel=payload.channel,
-                metadata=payload.metadata,
+                request_text=normalized_payload.request_text,
+                submitted_by=normalized_payload.submitted_by,
+                channel=normalized_payload.channel,
+                metadata=normalized_payload.metadata,
             ),
         )
         return self._build_summary(state)
@@ -187,6 +202,7 @@ class WorkflowStatusService:
             "latest_decision": approval_projection["latest_decision"],
             "latest_proposal_version": proposal_versions[0] if proposal_versions else None,
             "proposal_versions": proposal_versions,
+            "weekly_request": self._weekly_request_projection(state),
             "effect_summary": sync_projection["effect_summary"],
             "sync": sync_projection["sync"],
             "started_at": state.run.started_at,
@@ -330,15 +346,16 @@ class WorkflowStatusService:
         checkpoint_payload = None
         if checkpoint is not None:
             checkpoint_proposal = self._artifact_repo.get_by_id(checkpoint.target_artifact_id)
+            proposal_detail = self._proposal_projection(
+                checkpoint_proposal.payload
+                if checkpoint_proposal is not None
+                else (schedule_proposal.payload if schedule_proposal is not None else {})
+            )
             checkpoint_payload = {
                 "checkpoint_id": checkpoint.id,
                 "target_artifact_id": checkpoint.target_artifact_id,
                 "target_version_number": checkpoint_proposal.version_number if checkpoint_proposal is not None else 0,
-                "proposal_summary": (
-                    checkpoint_proposal.payload.get("proposal_summary")
-                    if checkpoint_proposal is not None
-                    else (schedule_proposal.payload.get("proposal_summary") if schedule_proposal is not None else None)
-                ),
+                **proposal_detail,
                 "pause_reason": "Awaiting operator approval before downstream changes.",
                 "allowed_actions": list(checkpoint.allowed_actions),
             }
@@ -574,7 +591,7 @@ class WorkflowStatusService:
             {
                 "artifact_id": artifact.id,
                 "version_number": artifact.version_number,
-                "proposal_summary": artifact.payload.get("proposal_summary"),
+                **self._proposal_projection(artifact.payload),
                 "created_at": artifact.created_at,
                 "producer_step_name": artifact.producer_step_name,
                 "is_latest": artifact.id == latest_proposal_id,
@@ -588,6 +605,55 @@ class WorkflowStatusService:
             }
             for artifact in proposals
         ]
+
+    def _weekly_request_projection(self, state: WorkflowRunState) -> dict[str, object] | None:
+        raw_request = state.latest_artifacts.get(WorkflowArtifactType.RAW_REQUEST.value)
+        if raw_request is None:
+            return None
+        weekly_request = raw_request.payload.get("metadata", {}).get("weekly_request")
+        if not isinstance(weekly_request, dict):
+            return None
+        return {
+            "raw_request_text": weekly_request.get("raw_request_text"),
+            "planning_goal": weekly_request.get("planning_goal"),
+            "tasks": [
+                {
+                    "title": task.get("title"),
+                    "details": task.get("details"),
+                    "priority": task.get("priority"),
+                    "deadline": task.get("deadline"),
+                    "estimated_minutes": task.get("estimated_minutes"),
+                    "source_line": task.get("source_line"),
+                    "warnings": list(task.get("warnings", [])),
+                }
+                for task in weekly_request.get("tasks", [])
+                if isinstance(task, dict)
+            ],
+            "protected_time": list(weekly_request.get("protected_time", [])),
+            "no_meeting_windows": list(weekly_request.get("no_meeting_windows", [])),
+            "assumptions": list(weekly_request.get("assumptions", [])),
+            "warnings": list(weekly_request.get("warnings", [])),
+        }
+
+    def _proposal_projection(self, payload: dict[str, Any]) -> dict[str, object]:
+        return {
+            "proposal_summary": payload.get("proposal_summary"),
+            "time_blocks": [
+                {
+                    "title": block.get("title"),
+                    "task_title": block.get("task_title"),
+                    "start": block.get("start"),
+                    "end": block.get("end"),
+                }
+                for block in payload.get("time_blocks", [])
+                if isinstance(block, dict)
+            ],
+            "proposed_changes": list(payload.get("proposed_changes", [])),
+            "honored_constraints": list(payload.get("honored_constraints", [])),
+            "assumptions": list(payload.get("assumptions", [])),
+            "carry_forward_tasks": list(payload.get("carry_forward_tasks", [])),
+            "rationale": list(payload.get("rationale", [])),
+        }
 
     def _artifact_payload(self, artifact: WorkflowArtifactORM) -> dict[str, object]:
         return {
@@ -640,3 +706,167 @@ def _approval_action_label(action: str) -> str:
         "request_revision": "Request revision and regenerate proposal",
     }
     return labels.get(action, action.replace("_", " ").title())
+
+
+def build_workflow_run_create_input(
+    *,
+    workflow_type: str,
+    first_step_name: str,
+    request_text: str,
+    submitted_by: str,
+    channel: str,
+    metadata: dict[str, Any] | None = None,
+) -> WorkflowRunCreateInput:
+    normalized_metadata = dict(metadata or {})
+    normalized_workflow_type = workflow_type
+    normalized_first_step = first_step_name
+    if workflow_type == "weekly_scheduling":
+        normalized_first_step = "dispatch_task_agent"
+        weekly_request = parse_weekly_scheduling_request(request_text)
+        normalized_metadata["weekly_request"] = weekly_request.model_dump(mode="json")
+    return WorkflowRunCreateInput(
+        workflow_type=normalized_workflow_type,
+        first_step_name=normalized_first_step,
+        request_text=request_text,
+        submitted_by=submitted_by,
+        channel=channel,
+        metadata=normalized_metadata,
+    )
+
+
+def parse_weekly_scheduling_request(request_text: str) -> WeeklySchedulingRequest:
+    text = " ".join(request_text.strip().split())
+    sections = _extract_labeled_sections(text)
+    warnings: list[str] = []
+    assumptions: list[str] = []
+
+    task_lines = _split_items(sections.get("tasks"))
+    tasks = tuple(_parse_weekly_task(item) for item in task_lines if item)
+    if not tasks:
+        fallback_title = _infer_planning_goal(text) or "Weekly planning request"
+        tasks = (
+            WeeklyTaskRequest(
+                title=fallback_title,
+                details=text,
+                source_line=text,
+                warnings=("Parsed no explicit task list; treating the full brief as one planning item.",),
+            ),
+        )
+        warnings.append("No explicit tasks parsed; Helm will plan around one synthesized planning item.")
+
+    protected_time = tuple(_split_items(sections.get("protected time")))
+    no_meeting_windows = tuple(_split_items(sections.get("no meeting windows")))
+
+    constraints = _split_items(sections.get("constraints"))
+    for item in constraints:
+        lowered = item.lower()
+        if any(token in lowered for token in ("protect", "deep work", "focus", "morning")):
+            protected_time += (item,)
+            continue
+        if any(token in lowered for token in ("no meeting", "keep", "open", "avoid")):
+            no_meeting_windows += (item,)
+            continue
+        assumptions.append(item)
+
+    if not protected_time:
+        assumptions.append("No protected-time windows were supplied; schedule uses default daytime focus blocks.")
+    if not no_meeting_windows:
+        assumptions.append("No no-meeting windows were supplied; only explicit protected blocks constrain placement.")
+
+    return WeeklySchedulingRequest(
+        raw_request_text=text,
+        planning_goal=_infer_planning_goal(text),
+        tasks=tasks,
+        protected_time=tuple(dict.fromkeys(protected_time)),
+        no_meeting_windows=tuple(dict.fromkeys(no_meeting_windows)),
+        assumptions=tuple(dict.fromkeys(assumptions)),
+        warnings=tuple(warnings),
+    )
+
+
+def _extract_labeled_sections(text: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    matches = list(
+        re.finditer(
+            r"(?i)\b(tasks?|constraints?|protected time|no meeting windows?)\s*:\s*",
+            text,
+        )
+    )
+    if not matches:
+        return sections
+    for index, match in enumerate(matches):
+        key = match.group(1).lower().rstrip("s")
+        if key == "task":
+            key = "tasks"
+        if key == "constraint":
+            key = "constraints"
+        if key == "no meeting window":
+            key = "no meeting windows"
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections[key] = text[start:end].strip(" ;")
+    return sections
+
+
+def _split_items(section: str | None) -> list[str]:
+    if not section:
+        return []
+    raw_items = re.split(r"(?:\s*[;\n]\s*|\s*,\s*(?=[A-Z0-9-]))", section)
+    return [item.strip(" -") for item in raw_items if item and item.strip(" -")]
+
+
+def _parse_weekly_task(item: str) -> WeeklyTaskRequest:
+    warnings: list[str] = []
+    lowered = item.lower()
+
+    priority = None
+    for label in ("high", "medium", "low"):
+        if re.search(rf"\b{label}\b", lowered):
+            priority = label
+            break
+    if priority is None:
+        warnings.append("Priority not provided.")
+
+    deadline_match = re.search(r"\b(?:due|deadline|by)\s+([^,;()]+)", item, flags=re.IGNORECASE)
+    deadline = deadline_match.group(1).strip() if deadline_match else None
+    if deadline is not None:
+        deadline = re.sub(r"\b\d+\s*(?:m|min|minutes|h|hr|hours)\b", "", deadline, flags=re.IGNORECASE).strip()
+    if deadline is None:
+        warnings.append("Deadline not provided.")
+
+    estimate_match = re.search(r"\b(\d+)\s*(m|min|minutes|h|hr|hours)\b", item, flags=re.IGNORECASE)
+    estimated_minutes = None
+    if estimate_match:
+        amount = int(estimate_match.group(1))
+        unit = estimate_match.group(2).lower()
+        estimated_minutes = amount * 60 if unit.startswith("h") else amount
+    else:
+        warnings.append("Estimate not provided; default scheduling block will be used.")
+
+    cleaned = re.sub(r"\([^)]*\)", "", item)
+    cleaned = re.sub(r"\b(high|medium|low)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:due|deadline|by)\s+[^,;()]+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b\d+\s*(?:m|min|minutes|h|hr|hours)\b", "", cleaned, flags=re.IGNORECASE)
+    title = re.sub(r"\s+", " ", cleaned).strip(" ,;-.")
+    if not title:
+        title = item.strip()
+
+    return WeeklyTaskRequest(
+        title=title,
+        details=item,
+        priority=priority,
+        deadline=deadline,
+        estimated_minutes=estimated_minutes,
+        source_line=item,
+        warnings=tuple(warnings),
+    )
+
+
+def _infer_planning_goal(text: str) -> str | None:
+    if not text:
+        return None
+    match = re.match(r"(?i)(plan my week|plan the week|schedule my week)\b[:\- ]*(.*)", text)
+    if match:
+        detail = match.group(2).strip(" .")
+        return detail or "Plan the week"
+    return text.split(".")[0].strip() or None

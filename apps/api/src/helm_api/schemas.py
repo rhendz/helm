@@ -185,13 +185,33 @@ class ArtifactTraceResponse(BaseModel):
     reason: str | None = None
 
 
+class WeeklyTaskRequestResponse(BaseModel):
+    title: str
+    details: str | None = None
+    priority: str | None = None
+    deadline: str | None = None
+    estimated_minutes: int | None = None
+    source_line: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class WeeklySchedulingRequestResponse(BaseModel):
+    raw_request_text: str
+    planning_goal: str | None = None
+    tasks: list[WeeklyTaskRequestResponse] = Field(default_factory=list)
+    protected_time: list[str] = Field(default_factory=list)
+    no_meeting_windows: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class WorkflowRunCreateRequest(BaseModel):
-    workflow_type: str = "weekly_digest"
-    first_step_name: str = "normalize_request"
+    workflow_type: str = "weekly_scheduling"
+    first_step_name: str = "dispatch_task_agent"
     request_text: str
     submitted_by: str
     channel: str
-    metadata: dict[str, str] = Field(default_factory=dict)
+    metadata: dict[str, object] = Field(default_factory=dict)
 
 
 class WorkflowRunActionRequest(BaseModel):
@@ -214,6 +234,12 @@ class WorkflowApprovalCheckpointResponse(BaseModel):
     target_artifact_id: int
     target_version_number: int
     proposal_summary: str | None = None
+    time_blocks: list[dict[str, object]] = Field(default_factory=list)
+    proposed_changes: list[str] = Field(default_factory=list)
+    honored_constraints: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    carry_forward_tasks: list[str] = Field(default_factory=list)
+    rationale: list[str] = Field(default_factory=list)
     pause_reason: str
     allowed_actions: list[str] = Field(default_factory=list)
 
@@ -231,6 +257,12 @@ class WorkflowProposalVersionResponse(BaseModel):
     artifact_id: int
     version_number: int
     proposal_summary: str | None = None
+    time_blocks: list[dict[str, object]] = Field(default_factory=list)
+    proposed_changes: list[str] = Field(default_factory=list)
+    honored_constraints: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    carry_forward_tasks: list[str] = Field(default_factory=list)
+    rationale: list[str] = Field(default_factory=list)
     created_at: datetime
     producer_step_name: str | None = None
     is_latest: bool = False
@@ -264,6 +296,11 @@ class WorkflowRunSummaryResponse(BaseModel):
     latest_decision: WorkflowApprovalDecisionResponse | None = None
     latest_proposal_version: WorkflowProposalVersionResponse | None = None
     proposal_versions: list[WorkflowProposalVersionResponse] = Field(default_factory=list)
+    weekly_request: WeeklySchedulingRequestResponse | None = None
+    effect_summary: dict[str, object] | None = None
+    sync: dict[str, object] = Field(default_factory=dict)
+    safe_next_actions: list[WorkflowAvailableActionResponse] = Field(default_factory=list)
+    recovery_class: str | None = None
     started_at: datetime
     updated_at: datetime
     completed_at: datetime | None = None

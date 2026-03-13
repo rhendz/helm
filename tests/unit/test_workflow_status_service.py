@@ -1,6 +1,10 @@
 from datetime import UTC, datetime
 
-from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
+from helm_api.services.workflow_status_service import (
+    WorkflowRunCreateInput,
+    WorkflowStatusService,
+    build_workflow_run_create_input,
+)
 from helm_telegram_bot import main as telegram_main
 from helm_telegram_bot.services.workflow_status_service import TelegramWorkflowStatusService
 from helm_orchestration import (
@@ -56,7 +60,7 @@ def _session() -> Session:
 
 
 def _create_input() -> WorkflowRunCreateInput:
-    return WorkflowRunCreateInput(
+    return build_workflow_run_create_input(
         workflow_type="weekly_digest",
         first_step_name="normalize_request",
         request_text="Plan my week around deep work.",
@@ -303,15 +307,30 @@ def test_create_run_summary_answers_operator_triage_question() -> None:
     with _session() as session:
         service = WorkflowStatusService(session)
 
-        created = service.create_run(_create_input())
+        created = service.create_run(
+            build_workflow_run_create_input(
+                workflow_type="weekly_scheduling",
+                first_step_name="dispatch_task_agent",
+                request_text=(
+                    "Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; "
+                    "Prep interviews medium 120m. Constraints: protect deep work mornings; keep Friday afternoon open."
+                ),
+                submitted_by="telegram:user",
+                channel="telegram",
+                metadata={"chat_id": "123"},
+            )
+        )
 
-        assert created["workflow_type"] == "weekly_digest"
+        assert created["workflow_type"] == "weekly_scheduling"
         assert created["status"] == WorkflowRunStatus.PENDING.value
-        assert created["current_step"] == "normalize_request"
+        assert created["current_step"] == "dispatch_task_agent"
         assert created["paused_state"] is None
         assert created["needs_action"] is False
         assert created["last_event_summary"] == "Workflow run created"
         assert created["available_actions"] == []
+        assert created["weekly_request"]["tasks"][0]["title"] == "Finish roadmap draft"
+        assert created["weekly_request"]["protected_time"] == ["protect deep work mornings"]
+        assert created["weekly_request"]["no_meeting_windows"] == ["keep Friday afternoon open."]
 
 
 def test_blocked_run_summary_distinguishes_validation_failure() -> None:
@@ -357,6 +376,10 @@ def test_approval_blocked_run_summary_projects_checkpoint_state() -> None:
         assert summary["approval_checkpoint"]["proposal_summary"] == (
             "Hold deep work blocks and review windows this week."
         )
+        assert summary["approval_checkpoint"]["time_blocks"][0]["title"] == "Deep work"
+        assert summary["approval_checkpoint"]["proposed_changes"] == [
+            "Reserve Monday and Tuesday mornings for deep work."
+        ]
         assert summary["approval_checkpoint"]["target_version_number"] == 1
         assert summary["approval_checkpoint"]["allowed_actions"] == [
             "approve",
@@ -625,6 +648,10 @@ def test_run_detail_projects_latest_first_proposal_versions_and_decision_lineage
         assert [item["version_number"] for item in detail["proposal_versions"]] == [2, 1]
         assert detail["proposal_versions"][0]["approved"] is True
         assert detail["proposal_versions"][0]["latest_decision"]["target_artifact_id"] == latest_artifact_id
+        assert detail["proposal_versions"][0]["proposed_changes"] == [
+            "Keep Friday afternoon open.",
+            "Reserve Monday and Tuesday mornings for deep work.",
+        ]
         assert detail["proposal_versions"][1]["superseded"] is True
         assert detail["proposal_versions"][1]["revision_feedback_summary"] == "Keep Friday afternoon open."
 

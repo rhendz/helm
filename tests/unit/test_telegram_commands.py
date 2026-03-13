@@ -410,6 +410,20 @@ async def test_workflow_lists_needs_action_runs(monkeypatch: pytest.MonkeyPatch)
                         "target_artifact_id": 17,
                         "target_version_number": 2,
                         "proposal_summary": "Hold deep work blocks and review windows this week.",
+                        "time_blocks": [
+                            {
+                                "title": "Roadmap draft",
+                                "start": "2026-03-16T09:00:00Z",
+                                "end": "2026-03-16T10:30:00Z",
+                            }
+                        ],
+                        "honored_constraints": [
+                            "Protect deep work mornings.",
+                            "Keep Friday afternoon open.",
+                        ],
+                        "assumptions": ["Missing estimates default to a single 60 minute block."],
+                        "carry_forward_tasks": ["Clear inbox"],
+                        "proposed_changes": ["Schedule Roadmap draft on Monday 09:00 UTC."],
                         "pause_reason": "Awaiting operator approval before downstream changes.",
                         "allowed_actions": ["approve", "reject", "request_revision"],
                     },
@@ -436,6 +450,11 @@ async def test_workflow_lists_needs_action_runs(monkeypatch: pytest.MonkeyPatch)
         "Latest proposal: v2 artifact=17\n"
         "Proposal: Hold deep work blocks and review windows this week.\n"
         "Actions: approve/reject/request_revision must name this artifact id.\n"
+        "Blocks: Roadmap draft [2026-03-16T09:00:00Z -> 2026-03-16T10:30:00Z]\n"
+        "Constraints: Protect deep work mornings., Keep Friday afternoon open.\n"
+        "Assumptions: Missing estimates default to a single 60 minute block.\n"
+        "Carry forward: Clear inbox\n"
+        "Planned changes: Schedule Roadmap draft on Monday 09:00 UTC.\n"
         "History: v2:current, v1:superseded"
     ]
 

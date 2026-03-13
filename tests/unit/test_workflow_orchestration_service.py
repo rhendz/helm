@@ -1,4 +1,5 @@
 from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
+from helm_api.services.workflow_status_service import build_workflow_run_create_input
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -41,6 +42,7 @@ from helm_orchestration import (
     WorkflowSummaryArtifact,
     WorkflowStepExecutionError,
 )
+from helm_worker.jobs.workflow_runs import _build_specialist_steps
 from helm_storage.db import Base
 from helm_storage.repositories import (
     SQLAlchemyWorkflowEventRepository,
@@ -780,6 +782,114 @@ def test_schedule_proposal_creates_approval_checkpoint_and_blocks_run() -> None:
         assert validation["outcome"] == ValidationOutcome.PASSED_WITH_WARNINGS.value
         approval_request = completed.latest_artifacts[WorkflowArtifactType.APPROVAL_REQUEST.value].payload
         assert approval_request["allowed_actions"] == ["approve", "reject", "request_revision"]
+
+
+def test_weekly_scheduling_worker_flow_uses_shared_request_contract() -> None:
+    with _session() as session:
+        service = _service(session)
+        create_input = build_workflow_run_create_input(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_text=(
+                "Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; "
+                "Prep interviews medium 120m; Clear inbox; Review metrics; Write follow-ups. "
+                "Constraints: protect deep work mornings; keep Friday afternoon open."
+            ),
+            submitted_by="telegram:user",
+            channel="telegram",
+            metadata={"chat_id": "123"},
+        )
+        created = service.create_run(
+            workflow_type=create_input.workflow_type,
+            first_step_name=create_input.first_step_name,
+            request_payload={
+                "request_text": create_input.request_text,
+                "submitted_by": create_input.submitted_by,
+                "channel": create_input.channel,
+                "metadata": create_input.metadata,
+            },
+        )
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps=_build_specialist_steps(),
+        )
+
+        task_advanced = resume_service.resume_run(created.run.id)
+        blocked = resume_service.resume_run(created.run.id)
+
+        normalized = task_advanced.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload
+        proposal = blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload
+
+        assert blocked.run.status == WorkflowRunStatus.BLOCKED.value
+        assert blocked.current_step is not None
+        assert blocked.current_step.step_name == "await_schedule_approval"
+        assert normalized["tasks"][0]["title"] == "Finish roadmap draft"
+        assert normalized["tasks"][0]["deadline"] == "Wednesday"
+        assert normalized["protected_time"] == ["protect deep work mornings"]
+        assert proposal["honored_constraints"] == [
+            "protect deep work mornings",
+            "keep Friday afternoon open.",
+        ]
+        assert proposal["carry_forward_tasks"] == ["Write follow-ups"]
+        assert proposal["time_blocks"][0]["title"] == "Finish roadmap draft"
+        assert proposal["rationale"]
+
+
+def test_weekly_scheduling_revision_generates_new_proposal_version_from_feedback() -> None:
+    with _session() as session:
+        service = _service(session)
+        create_input = build_workflow_run_create_input(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_text=(
+                "Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; "
+                "Prep interviews medium 120m. Constraints: protect deep work mornings."
+            ),
+            submitted_by="telegram:user",
+            channel="telegram",
+            metadata={"chat_id": "123"},
+        )
+        created = service.create_run(
+            workflow_type=create_input.workflow_type,
+            first_step_name=create_input.first_step_name,
+            request_payload={
+                "request_text": create_input.request_text,
+                "submitted_by": create_input.submitted_by,
+                "channel": create_input.channel,
+                "metadata": create_input.metadata,
+            },
+        )
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps=_build_specialist_steps(),
+        )
+
+        resume_service.resume_run(created.run.id)
+        blocked = resume_service.resume_run(created.run.id)
+        first_target = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.REQUEST_REVISION,
+                actor="telegram:user",
+                target_artifact_id=first_target,
+                revision_feedback="Move interview prep earlier in the week.",
+            ),
+        )
+
+        revised = resume_service.resume_run(created.run.id)
+        proposals = [
+            artifact
+            for artifact in service.get_run_state(created.run.id).run.artifacts
+            if artifact.artifact_type == WorkflowArtifactType.SCHEDULE_PROPOSAL.value
+        ]
+
+        assert revised.run.status == WorkflowRunStatus.BLOCKED.value
+        assert len(proposals) == 2
+        assert proposals[-1].supersedes_artifact_id == proposals[0].id
+        assert "Revision focus: Move interview prep earlier in the week." in proposals[-1].payload["assumptions"]
 
 
 def test_specialist_resume_service_is_restart_safe_between_task_agent_and_calendar_agent() -> None:

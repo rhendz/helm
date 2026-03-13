@@ -210,6 +210,29 @@ def _client() -> Generator[tuple[TestClient, Session], None, None]:
         session.close()
 
 
+def test_create_workflow_route_defaults_to_weekly_scheduling_contract() -> None:
+    for client, _session in _client():
+        created = client.post(
+            "/v1/workflow-runs",
+            json={
+                "request_text": (
+                    "Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; "
+                    "Prep interviews medium 120m. Constraints: protect deep work mornings; keep Friday afternoon open."
+                ),
+                "submitted_by": "telegram:user",
+                "channel": "telegram",
+                "metadata": {"chat_id": "999"},
+            },
+        )
+
+        assert created.status_code == 200
+        payload = created.json()
+        assert payload["workflow_type"] == "weekly_scheduling"
+        assert payload["current_step"] == "dispatch_task_agent"
+        assert payload["weekly_request"]["tasks"][1]["title"] == "Prep interviews"
+        assert payload["weekly_request"]["no_meeting_windows"] == ["keep Friday afternoon open."]
+
+
 def test_workflow_routes_cover_operator_states() -> None:
     for client, session in _client():
         empty = client.get("/v1/workflow-runs")
@@ -221,9 +244,10 @@ def test_workflow_routes_cover_operator_states() -> None:
         created = client.post(
             "/v1/workflow-runs",
             json={
-                "workflow_type": "weekly_digest",
-                "first_step_name": "normalize_request",
-                "request_text": "Plan my week from Telegram.",
+                "request_text": (
+                    "Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; "
+                    "Prep interviews medium 120m. Constraints: protect deep work mornings; keep Friday afternoon open."
+                ),
                 "submitted_by": "telegram:user",
                 "channel": "telegram",
                 "metadata": {"chat_id": "999"},
@@ -231,7 +255,10 @@ def test_workflow_routes_cover_operator_states() -> None:
         )
         assert created.status_code == 200
         assert created.json()["status"] == WorkflowRunStatus.PENDING.value
-        assert created.json()["current_step"] == "normalize_request"
+        assert created.json()["workflow_type"] == "weekly_scheduling"
+        assert created.json()["current_step"] == "dispatch_task_agent"
+        assert created.json()["weekly_request"]["tasks"][0]["title"] == "Finish roadmap draft"
+        assert created.json()["weekly_request"]["protected_time"] == ["protect deep work mornings"]
 
         non_empty = client.get("/v1/workflow-runs?limit=1")
         assert non_empty.status_code == 200
