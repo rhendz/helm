@@ -19,7 +19,25 @@ from helm_storage.repositories.contracts import (
     NewEmailDraft,
     NewEmailThread,
     NewScheduledThreadTask,
+    NewWorkflowArtifact,
+    NewWorkflowEvent,
+    NewWorkflowRun,
+    NewWorkflowStep,
     ScheduledThreadTaskRepository,
+    ValidationArtifactPayload,
+    WorkflowArtifactRepository,
+    WorkflowArtifactType,
+    WorkflowEventRepository,
+    WorkflowRunPatch,
+    WorkflowRunRepository,
+    WorkflowRunState,
+    WorkflowRunStatus,
+    WorkflowStepPatch,
+    WorkflowStepRepository,
+    WorkflowStepStatus,
+    WorkflowSummaryArtifactPayload,
+    RawRequestArtifactPayload,
+    NormalizedTaskArtifactPayload,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
 from helm_storage.repositories.draft_replies import SQLAlchemyDraftReplyRepository
@@ -35,6 +53,10 @@ from helm_storage.repositories.opportunities import SQLAlchemyOpportunityReposit
 from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
 from helm_storage.repositories.study_ingest import SQLAlchemyStudyIngestRepository
+from helm_storage.repositories.workflow_artifacts import SQLAlchemyWorkflowArtifactRepository
+from helm_storage.repositories.workflow_events import SQLAlchemyWorkflowEventRepository
+from helm_storage.repositories.workflow_runs import SQLAlchemyWorkflowRunRepository
+from helm_storage.repositories.workflow_steps import SQLAlchemyWorkflowStepRepository
 
 __all__ = [
     "ActionItemRepository",
@@ -52,6 +74,12 @@ __all__ = [
     "NewEmailDraft",
     "NewEmailThread",
     "NewScheduledThreadTask",
+    "NewWorkflowArtifact",
+    "NewWorkflowEvent",
+    "NewWorkflowRun",
+    "NewWorkflowStep",
+    "NormalizedTaskArtifactPayload",
+    "RawRequestArtifactPayload",
     "ScheduledThreadTaskRepository",
     "SQLAlchemyActionProposalRepository",
     "SQLAlchemyActionItemRepository",
@@ -69,4 +97,20 @@ __all__ = [
     "SQLAlchemyReplayQueueRepository",
     "SQLAlchemyScheduledThreadTaskRepository",
     "SQLAlchemyStudyIngestRepository",
+    "SQLAlchemyWorkflowArtifactRepository",
+    "SQLAlchemyWorkflowEventRepository",
+    "SQLAlchemyWorkflowRunRepository",
+    "SQLAlchemyWorkflowStepRepository",
+    "ValidationArtifactPayload",
+    "WorkflowArtifactRepository",
+    "WorkflowArtifactType",
+    "WorkflowEventRepository",
+    "WorkflowRunPatch",
+    "WorkflowRunRepository",
+    "WorkflowRunState",
+    "WorkflowRunStatus",
+    "WorkflowStepPatch",
+    "WorkflowStepRepository",
+    "WorkflowStepStatus",
+    "WorkflowSummaryArtifactPayload",
 ]

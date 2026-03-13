@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from enum import StrEnum
+from typing import Any, Protocol, runtime_checkable
 
 from helm_storage.models import (
     ActionItemORM,
@@ -13,6 +14,10 @@ from helm_storage.models import (
     EmailDraftORM,
     EmailThreadORM,
     ScheduledThreadTaskORM,
+    WorkflowArtifactORM,
+    WorkflowEventORM,
+    WorkflowRunORM,
+    WorkflowStepORM,
 )
 
 
@@ -97,6 +102,197 @@ class EmailAgentConfigPatch:
     approval_required_before_send: bool | None = None
     default_follow_up_business_days: int | None = None
     last_history_cursor: str | None = None
+
+
+class WorkflowRunStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    COMPLETED = "completed"
+    TERMINATED = "terminated"
+
+
+class WorkflowStepStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    VALIDATION_FAILED = "validation_failed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class WorkflowArtifactType(StrEnum):
+    RAW_REQUEST = "raw_request"
+    NORMALIZED_TASK = "normalized_task"
+    VALIDATION_RESULT = "validation_result"
+    FINAL_SUMMARY = "final_summary"
+
+
+@dataclass(frozen=True, slots=True)
+class RawRequestArtifactPayload:
+    request_text: str
+    submitted_by: str
+    channel: str
+    metadata: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "request_text": self.request_text,
+            "submitted_by": self.submitted_by,
+            "channel": self.channel,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedTaskArtifactPayload:
+    title: str
+    summary: str
+    tasks: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "title": self.title,
+            "summary": self.summary,
+            "tasks": list(self.tasks),
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ValidationArtifactPayload:
+    outcome: str
+    summary: str
+    validator_name: str
+    schema_version: str
+    issues: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "outcome": self.outcome,
+            "summary": self.summary,
+            "validator_name": self.validator_name,
+            "schema_version": self.schema_version,
+            "issues": list(self.issues),
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowSummaryArtifactPayload:
+    request_artifact_id: int
+    intermediate_artifact_ids: tuple[int, ...]
+    validation_artifact_ids: tuple[int, ...]
+    final_summary_text: str
+    approval_decision: str | None = None
+    approval_decision_artifact_id: int | None = None
+    downstream_sync_status: str | None = None
+    downstream_sync_artifact_ids: tuple[int, ...] = ()
+    downstream_sync_reference_ids: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "request_artifact_id": self.request_artifact_id,
+            "intermediate_artifact_ids": list(self.intermediate_artifact_ids),
+            "validation_artifact_ids": list(self.validation_artifact_ids),
+            "final_summary_text": self.final_summary_text,
+            "approval_decision": self.approval_decision,
+            "approval_decision_artifact_id": self.approval_decision_artifact_id,
+            "downstream_sync_status": self.downstream_sync_status,
+            "downstream_sync_artifact_ids": list(self.downstream_sync_artifact_ids),
+            "downstream_sync_reference_ids": list(self.downstream_sync_reference_ids),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class NewWorkflowRun:
+    workflow_type: str
+    status: str = WorkflowRunStatus.PENDING.value
+    current_step_name: str | None = None
+    needs_action: bool = False
+    current_step_attempt: int = 0
+    attempt_count: int = 0
+    validation_outcome_summary: str | None = None
+    execution_error_summary: str | None = None
+    failure_class: str | None = None
+    retry_state: str | None = None
+    last_event_summary: str | None = None
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowRunPatch:
+    status: str | None = None
+    current_step_name: str | None = None
+    needs_action: bool | None = None
+    current_step_attempt: int | None = None
+    attempt_count: int | None = None
+    validation_outcome_summary: str | None = None
+    execution_error_summary: str | None = None
+    failure_class: str | None = None
+    retry_state: str | None = None
+    last_event_summary: str | None = None
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewWorkflowStep:
+    run_id: int
+    step_name: str
+    status: str = WorkflowStepStatus.RUNNING.value
+    attempt_number: int = 1
+    validation_outcome_summary: str | None = None
+    execution_error_summary: str | None = None
+    failure_class: str | None = None
+    retry_state: str | None = None
+    retryable: bool = False
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowStepPatch:
+    status: str | None = None
+    validation_outcome_summary: str | None = None
+    execution_error_summary: str | None = None
+    failure_class: str | None = None
+    retry_state: str | None = None
+    retryable: bool | None = None
+    completed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewWorkflowArtifact:
+    run_id: int
+    artifact_type: str
+    schema_version: str
+    payload: dict[str, Any]
+    step_id: int | None = None
+    version_number: int | None = None
+    producer_step_name: str | None = None
+    lineage_parent_id: int | None = None
+    supersedes_artifact_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NewWorkflowEvent:
+    run_id: int
+    event_type: str
+    summary: str
+    step_id: int | None = None
+    run_status: str | None = None
+    step_status: str | None = None
+    details: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowRunState:
+    run: WorkflowRunORM
+    current_step: WorkflowStepORM | None
+    latest_artifacts: dict[str, WorkflowArtifactORM]
+    last_event: WorkflowEventORM | None
 
 
 @runtime_checkable
@@ -224,3 +420,49 @@ class EmailAgentConfigRepository(Protocol):
     def get_or_create(self) -> EmailAgentConfigORM: ...
 
     def update(self, patch: EmailAgentConfigPatch) -> EmailAgentConfigORM: ...
+
+
+@runtime_checkable
+class WorkflowRunRepository(Protocol):
+    def create(self, run: NewWorkflowRun) -> WorkflowRunORM: ...
+
+    def get_by_id(self, run_id: int) -> WorkflowRunORM | None: ...
+
+    def update(self, run_id: int, patch: WorkflowRunPatch) -> WorkflowRunORM | None: ...
+
+    def get_with_current_state(self, run_id: int) -> WorkflowRunState | None: ...
+
+    def list_needing_action(self, *, limit: int | None = None) -> list[WorkflowRunState]: ...
+
+    def list_runnable(self, *, limit: int | None = None) -> list[WorkflowRunState]: ...
+
+
+@runtime_checkable
+class WorkflowStepRepository(Protocol):
+    def create(self, step: NewWorkflowStep) -> WorkflowStepORM: ...
+
+    def update(self, step_id: int, patch: WorkflowStepPatch) -> WorkflowStepORM | None: ...
+
+    def list_for_run(self, run_id: int) -> list[WorkflowStepORM]: ...
+
+    def get_last_for_run(self, run_id: int, *, step_name: str | None = None) -> WorkflowStepORM | None: ...
+
+    def get_last_failed_for_run(self, run_id: int) -> WorkflowStepORM | None: ...
+
+
+@runtime_checkable
+class WorkflowArtifactRepository(Protocol):
+    def create(self, artifact: NewWorkflowArtifact) -> WorkflowArtifactORM: ...
+
+    def list_for_run(self, run_id: int) -> list[WorkflowArtifactORM]: ...
+
+    def get_latest_for_run(self, run_id: int, *, artifact_type: str | None = None) -> WorkflowArtifactORM | None: ...
+
+    def get_latest_by_type(self, run_id: int) -> dict[str, WorkflowArtifactORM]: ...
+
+
+@runtime_checkable
+class WorkflowEventRepository(Protocol):
+    def create(self, event: NewWorkflowEvent) -> WorkflowEventORM: ...
+
+    def list_for_run(self, run_id: int) -> list[WorkflowEventORM]: ...
