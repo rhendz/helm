@@ -14,9 +14,9 @@
 
 ### Specialist Dispatch
 
-- [ ] **AGNT-01**: Helm can invoke `TaskAgent` with typed input derived from raw workflow input.
-- [ ] **AGNT-02**: Helm can invoke `CalendarAgent` with typed scheduling input derived from validated task artifacts and calendar constraints.
-- [ ] **AGNT-03**: Helm persists an invocation record for each specialist execution, including input reference, output reference, timing, and result status.
+- [x] **AGNT-01**: Helm can invoke `TaskAgent` with typed input derived from raw workflow input.
+- [x] **AGNT-02**: Helm can invoke `CalendarAgent` with typed scheduling input derived from validated task artifacts and calendar constraints.
+- [x] **AGNT-03**: Helm persists an invocation record for each specialist execution, including input reference, output reference, timing, and result status.
 - [x] **AGNT-04**: Helm validates specialist outputs before any downstream workflow step or adapter write consumes them.
 - [x] **AGNT-05**: Helm marks a workflow step as validation-failed when a specialist output is malformed, incomplete, or ambiguous enough to violate the step schema.
 - [x] **AGNT-06**: Helm persists validation-failure details and prevents downstream execution until the workflow is explicitly retried, revised, or terminated.
@@ -26,7 +26,7 @@
 - [x] **ARTF-01**: Helm persists the raw user input that created a workflow run.
 - [x] **ARTF-02**: Helm persists structured task artifacts produced from the user request, including task priority, estimated duration, deadlines, and dependencies when available.
 - [x] **ARTF-03**: Helm persists validation results, including warnings and ambiguity flags, for intermediate workflow artifacts.
-- [ ] **ARTF-04**: Helm persists schedule proposal artifacts produced by `CalendarAgent`, including proposed time blocks and proposed calendar changes.
+- [x] **ARTF-04**: Helm persists schedule proposal artifacts produced by `CalendarAgent`, including proposed time blocks and proposed calendar changes.
 - [x] **ARTF-05**: Helm persists a final workflow summary artifact that links the request, specialist outputs, approval decisions, and downstream sync results.
 
 ### Approval And Resume
@@ -57,8 +57,8 @@
 ### Representative Workflow
 
 - [ ] **DEMO-01**: User can submit a weekly scheduling request containing multiple tasks and Helm creates a workflow run for that request.
-- [ ] **DEMO-02**: Helm converts the weekly scheduling request into normalized task artifacts through `TaskAgent`.
-- [ ] **DEMO-03**: Helm converts normalized tasks into a schedule proposal through `CalendarAgent`.
+- [x] **DEMO-02**: Helm converts the weekly scheduling request into normalized task artifacts through `TaskAgent`.
+- [x] **DEMO-03**: Helm converts normalized tasks into a schedule proposal through `CalendarAgent`.
 - [ ] **DEMO-04**: Helm pauses for approval before any downstream create, update, or delete of tasks or calendar blocks.
 - [ ] **DEMO-05**: Helm can create a revised scheduling proposal as a new version after user feedback at the approval checkpoint.
 - [ ] **DEMO-06**: Helm completes the representative scheduling workflow with full lineage from raw request to downstream sync results.
@@ -99,16 +99,16 @@
 | FLOW-02 | Phase 1 | Complete |
 | FLOW-03 | Phase 1 | Complete |
 | FLOW-04 | Phase 1 | Complete |
-| AGNT-01 | Phase 2 | Pending |
-| AGNT-02 | Phase 2 | Pending |
-| AGNT-03 | Phase 2 | Pending |
+| AGNT-01 | Phase 2 | Complete |
+| AGNT-02 | Phase 2 | Complete |
+| AGNT-03 | Phase 2 | Complete |
 | AGNT-04 | Phase 1 | Complete |
 | AGNT-05 | Phase 1 | Complete |
 | AGNT-06 | Phase 1 | Complete |
 | ARTF-01 | Phase 1 | Complete |
 | ARTF-02 | Phase 1 | Complete |
 | ARTF-03 | Phase 1 | Complete |
-| ARTF-04 | Phase 2 | Pending |
+| ARTF-04 | Phase 2 | Complete |
 | ARTF-05 | Phase 1 | Complete |
 | APRV-01 | Phase 2 | Pending |
 | APRV-02 | Phase 2 | Pending |
@@ -127,8 +127,8 @@
 | RCVR-03 | Phase 3 | Pending |
 | RCVR-04 | Phase 3 | Pending |
 | DEMO-01 | Phase 4 | Pending |
-| DEMO-02 | Phase 2 | Pending |
-| DEMO-03 | Phase 2 | Pending |
+| DEMO-02 | Phase 2 | Complete |
+| DEMO-03 | Phase 2 | Complete |
 | DEMO-04 | Phase 4 | Pending |
 | DEMO-05 | Phase 4 | Pending |
 | DEMO-06 | Phase 4 | Pending |
