@@ -1,11 +1,11 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-representative-scheduling-workflow
 source:
   - 04-01-SUMMARY.md
   - 04-02-SUMMARY.md
 started: 2026-03-13T03:20:00Z
-updated: 2026-03-13T03:32:00Z
+updated: 2026-03-13T03:40:00Z
 ---
 
 ## Current Test
@@ -52,7 +52,20 @@ skipped: 0
   reason: "User reported: /workflow_replay 1 Check replay recovery summary. left /workflows showing the run as an ordinary completed run with no recovery-oriented summary."
   severity: major
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "The shared workflow status projection prioritizes stale successful final-summary state over live replay-requested recovery state, so completed-then-replayed runs still render as ordinary completed runs."
+  artifacts:
+    - path: "apps/api/src/helm_api/services/workflow_status_service.py"
+      issue: "Completion headline and summary logic prefer persisted final-summary success over live sync recovery classification."
+    - path: "packages/orchestration/src/helm_orchestration/workflow_service.py"
+      issue: "Final summary is created at sync completion and not refreshed when replay later changes downstream follow-up state."
+    - path: "tests/unit/test_replay_service.py"
+      issue: "Missing completed-then-replay coverage for representative runs."
+    - path: "tests/unit/test_workflow_status_service.py"
+      issue: "Missing shared projection coverage for completed representative runs that later become replay-requested."
+    - path: "tests/unit/test_telegram_commands.py"
+      issue: "Missing `/workflows` replay-summary coverage for completed representative runs."
+  missing:
+    - "Make live replay/recovery classification override stale completed-success messaging in shared completion summaries."
+    - "Project downstream sync status and attention items from live sync recovery state when replay is active."
+    - "Add representative tests for completed -> replay-requested summaries in API/status and Telegram `/workflows` output."
+  debug_session: ".planning/debug/phase-04-replay-recovery-summary-gap.md"
