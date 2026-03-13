@@ -14,6 +14,7 @@ Recovery notes:
 - Blocked runs stay out of the worker runnable query until an explicit retry action creates a new pending attempt for the failed step.
 - Ordinary execution failures persist the failed step, error summary, failure class, and retryability on the run and step without being collapsed into blocked validation semantics.
 - Terminating a run closes it durably and prevents downstream advancement from the failed or blocked boundary.
+- The `workflow_runs` worker job only resumes persisted runnable runs when step handlers are registered for the current workflow boundary.
 
 Manual verification:
 
