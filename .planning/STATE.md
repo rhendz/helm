@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
+status: in_progress
 stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-13T07:48:54.218Z"
+last_updated: "2026-03-13T07:51:27.431Z"
 last_activity: 2026-03-13 — Completed phase 1 plan 02 typed orchestration and validation foundation
 progress:
   total_phases: 4
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 1 of 4 (Durable Workflow Foundation)
-Plan: 2 of 3 in current phase
+Plan: 3 of 3 in current phase
 Status: In progress
 Last activity: 2026-03-13 — Completed phase 1 plan 02 typed orchestration and validation foundation
 
@@ -66,7 +66,7 @@ Recent decisions affecting current work:
 - [2026-03-13]: Freeze the final summary artifact contract early with nullable approval and downstream sync linkage fields.
 - [Phase 01]: Model workflow artifacts and failures as explicit Pydantic schemas so storage payloads stay typed before specialist adapters exist.
 - [Phase 01]: Treat validation failures as blocked runs that require an explicit retry or terminate action instead of implicit worker progression.
-- [Phase 01]: Fail runnable steps durably when no step handler exists so adapter-free execution errors are visible in persisted state.
+- [Phase 01]: Worker polling must skip runnable workflow runs until concrete step handlers are registered.
 
 ### Pending Todos
 
@@ -79,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T07:48:54.216Z
+Last session: 2026-03-13T07:51:27.430Z
 Stopped at: Completed 01-02-PLAN.md
 Resume file: .planning/phases/01-durable-workflow-foundation/01-03-PLAN.md

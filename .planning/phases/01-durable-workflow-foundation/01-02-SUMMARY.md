@@ -48,7 +48,7 @@ completed: 2026-03-13
 
 - **Duration:** 6 min
 - **Started:** 2026-03-13T07:40:56Z
-- **Completed:** 2026-03-13T07:47:03Z
+- **Completed:** 2026-03-13T07:50:38Z
 - **Tasks:** 3
 - **Files modified:** 11
 
@@ -65,6 +65,10 @@ Each task was committed atomically:
 1. **Task 1: Define typed workflow schemas and validation outcomes** - `3c9e256` (feat)
 2. **Task 2: Implement orchestration services for run creation, step transitions, and blocked validation failures** - `84f8f43` (feat)
 3. **Task 3: Add worker resume entrypoint, blocked-run action handling, and execution notes** - `ede0410` (feat)
+
+Post-task auto-fix:
+
+- `e22bdde` (fix): guard workflow worker without handlers
 
 ## Files Created/Modified
 
@@ -84,7 +88,20 @@ Each task was committed atomically:
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 1 - Bug] Prevented the new workflow worker job from failing runs when no handlers are configured**
+- **Found during:** Final verification after Task 3
+- **Issue:** The newly added `workflow_runs` job instantiated `WorkflowResumeService` with an empty handler map, which would convert any runnable workflow into a durable `missing_step_handler` failure instead of safely waiting for later specialist wiring.
+- **Fix:** Guarded the job so it skips polling until handlers are registered, added an injectable resume-service builder for testability, and covered both the safe skip path and the injected resume path in unit tests.
+- **Files modified:** `apps/worker/src/helm_worker/jobs/workflow_runs.py`, `tests/unit/test_worker_registry.py`, `packages/orchestration/README.md`
+- **Verification:** `uv run --frozen --extra dev pytest tests/unit/test_workflow_orchestration_service.py tests/unit/test_worker_registry.py`
+- **Committed in:** `e22bdde`
+
+---
+
+**Total deviations:** 1 auto-fixed (Rule 1: bug)
+**Impact on plan:** The fix preserves the intended durable semantics of Task 3 without changing plan scope or storage contracts.
 
 ## Issues Encountered
 
