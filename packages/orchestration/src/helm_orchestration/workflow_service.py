@@ -4,6 +4,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from helm_orchestration.schemas import (
+    ApprovalAction,
+    ApprovalCheckpointStatus,
+    ApprovalDecision,
+    ApprovalDecisionResult,
+    ApprovalRequest,
     ExecutionFailurePayload,
     RetryState,
     SCHEMA_VERSION,
@@ -14,17 +19,23 @@ from helm_orchestration.schemas import (
 from helm_orchestration.contracts import WorkflowSpecialistStep, WorkflowStepExecutionError
 from helm_orchestration.validators import ValidatorRegistry
 from helm_storage.repositories import (
+    ApprovalDecisionArtifactPayload,
+    ApprovalRequestArtifactPayload,
+    NewWorkflowApprovalCheckpoint,
     NewWorkflowArtifact,
     NewWorkflowEvent,
     NewWorkflowRun,
     NewWorkflowSpecialistInvocation,
     NewWorkflowStep,
+    SQLAlchemyWorkflowApprovalCheckpointRepository,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowRunRepository,
     SQLAlchemyWorkflowSpecialistInvocationRepository,
     SQLAlchemyWorkflowStepRepository,
     WorkflowArtifactType,
+    WorkflowBlockedReason,
+    WorkflowApprovalCheckpointPatch,
     WorkflowRunPatch,
     WorkflowRunState,
     WorkflowRunStatus,
@@ -46,6 +57,7 @@ class WorkflowOrchestrationService:
         self._run_repo = SQLAlchemyWorkflowRunRepository(session)
         self._step_repo = SQLAlchemyWorkflowStepRepository(session)
         self._artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
+        self._approval_repo = SQLAlchemyWorkflowApprovalCheckpointRepository(session)
         self._event_repo = SQLAlchemyWorkflowEventRepository(session)
         self._invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
         self._validator_registry = validator_registry or ValidatorRegistry()
@@ -201,6 +213,98 @@ class WorkflowOrchestrationService:
             invocation_id=invocation.id,
         )
 
+    def submit_approval_decision(
+        self,
+        run_id: int,
+        *,
+        decision: ApprovalDecision,
+        checkpoint_id: int | None = None,
+    ) -> WorkflowRunState:
+        state = self.get_run_state(run_id)
+        checkpoint = state.active_approval_checkpoint
+        if checkpoint_id is not None:
+            checkpoint = self._approval_repo.get_by_id(checkpoint_id)
+        if checkpoint is None or checkpoint.run_id != run_id or checkpoint.status != ApprovalCheckpointStatus.PENDING.value:
+            raise ValueError(f"Workflow run {run_id} has no pending approval checkpoint.")
+        if decision.action.value not in checkpoint.allowed_actions:
+            raise ValueError(
+                f"Approval action {decision.action.value} is not allowed for checkpoint {checkpoint.id}."
+            )
+        if decision.action is ApprovalAction.REQUEST_REVISION and not decision.revision_feedback:
+            raise ValueError("Revision feedback is required when requesting a revision.")
+
+        current_step = self._require_current_step(state)
+        decision_time = _now()
+        resolved = self._approval_repo.update(
+            checkpoint.id,
+            WorkflowApprovalCheckpointPatch(
+                status=ApprovalCheckpointStatus.RESOLVED.value,
+                decision=decision.action.value,
+                decision_actor=decision.actor,
+                decision_at=decision_time,
+                revision_feedback=decision.revision_feedback,
+                resolved_at=decision_time,
+            ),
+        )
+        if resolved is None:
+            raise ValueError(f"Approval checkpoint {checkpoint.id} no longer exists.")
+
+        approval_request_artifact = self._artifact_repo.get_latest_for_run(
+            run_id,
+            artifact_type=WorkflowArtifactType.APPROVAL_REQUEST.value,
+        )
+        if approval_request_artifact is None:
+            raise ValueError(f"Workflow run {run_id} has no approval request artifact.")
+
+        self._artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run_id,
+                step_id=current_step.id,
+                artifact_type=WorkflowArtifactType.APPROVAL_DECISION.value,
+                schema_version=SCHEMA_VERSION,
+                producer_step_name=current_step.step_name,
+                lineage_parent_id=approval_request_artifact.id,
+                payload=ApprovalDecisionArtifactPayload(
+                    checkpoint_id=resolved.id,
+                    target_artifact_id=resolved.target_artifact_id,
+                    decision=decision.action.value,
+                    actor=decision.actor,
+                    decision_at=decision_time,
+                    revision_feedback=decision.revision_feedback,
+                ).to_dict(),
+            )
+        )
+
+        result = ApprovalDecisionResult(
+            checkpoint_id=resolved.id,
+            action=decision.action,
+            actor=decision.actor,
+            decision_at=decision_time.isoformat(),
+            resumed_step_name=None,
+        )
+        if decision.action is ApprovalAction.APPROVE:
+            result = result.model_copy(update={"resumed_step_name": checkpoint.resume_step_name})
+            return self._resume_from_approval_approval(
+                run_id,
+                current_step=current_step,
+                checkpoint=resolved,
+                result=result,
+            )
+        if decision.action is ApprovalAction.REJECT:
+            return self._reject_after_approval(
+                run_id,
+                current_step=current_step,
+                checkpoint=resolved,
+                result=result,
+            )
+        result = result.model_copy(update={"resumed_step_name": checkpoint.step.step_name})
+        return self._request_revision_after_approval(
+            run_id,
+            current_step=current_step,
+            checkpoint=resolved,
+            result=result,
+        )
+
     def _complete_started_step(
         self,
         run_id: int,
@@ -264,8 +368,11 @@ class WorkflowOrchestrationService:
                     current_step_attempt=step.attempt_number,
                     needs_action=True,
                     validation_outcome_summary=validation_report.summary,
+                    blocked_reason=WorkflowBlockedReason.VALIDATION_FAILED.value,
                     failure_class="schema_validation_failed",
                     retry_state=RetryState.AWAITING_OPERATOR.value,
+                    resume_step_name=None,
+                    resume_step_attempt=None,
                     last_event_summary=f"Validation blocked run at step {step.step_name}",
                 ),
             )
@@ -301,6 +408,17 @@ class WorkflowOrchestrationService:
             ),
         )
 
+        if artifact_type == WorkflowArtifactType.SCHEDULE_PROPOSAL.value:
+            return self._create_approval_checkpoint(
+                run_id,
+                step=step,
+                proposal_artifact_id=candidate_artifact.id,
+                proposal_payload=artifact_payload,
+                next_step_name=next_step_name,
+                validation_artifact_id=validation_artifact_id,
+                invocation_id=invocation_id,
+            )
+
         if next_step_name is None:
             self._run_repo.update(
                 run_id,
@@ -310,6 +428,7 @@ class WorkflowOrchestrationService:
                     current_step_attempt=step.attempt_number,
                     needs_action=False,
                     validation_outcome_summary=validation_report.outcome.value if validation_report else None,
+                    blocked_reason=None,
                     last_event_summary=f"Completed step {step.step_name}",
                     completed_at=_now(),
                 ),
@@ -348,8 +467,11 @@ class WorkflowOrchestrationService:
                 needs_action=False,
                 validation_outcome_summary=validation_report.outcome.value if validation_report else None,
                 execution_error_summary="",
+                blocked_reason=None,
                 failure_class="",
                 retry_state="",
+                resume_step_name=None,
+                resume_step_attempt=None,
                 last_event_summary=f"Advanced to step {next_step_name}",
                 completed_at=None,
             ),
@@ -397,8 +519,11 @@ class WorkflowOrchestrationService:
                 current_step_attempt=step.attempt_number,
                 needs_action=True,
                 execution_error_summary=failure.message,
+                blocked_reason=WorkflowBlockedReason.EXECUTION_FAILED.value,
                 failure_class=failure.error_type,
                 retry_state=failure.retry_state.value,
+                resume_step_name=None,
+                resume_step_attempt=None,
                 last_event_summary=f"Execution failed at step {step.step_name}",
             ),
         )
@@ -442,8 +567,11 @@ class WorkflowOrchestrationService:
                 needs_action=False,
                 validation_outcome_summary="",
                 execution_error_summary="",
+                blocked_reason=None,
                 failure_class="",
                 retry_state=RetryState.RETRYABLE.value,
+                resume_step_name=None,
+                resume_step_attempt=None,
                 last_event_summary=reason,
                 completed_at=None,
             ),
@@ -484,7 +612,10 @@ class WorkflowOrchestrationService:
             WorkflowRunPatch(
                 status=WorkflowRunStatus.TERMINATED.value,
                 needs_action=False,
+                blocked_reason=None,
                 retry_state=RetryState.TERMINAL.value,
+                resume_step_name=None,
+                resume_step_attempt=None,
                 last_event_summary=reason,
                 completed_at=_now(),
             ),
@@ -498,6 +629,268 @@ class WorkflowOrchestrationService:
                 step_status=WorkflowStepStatus.CANCELLED.value if current_step is not None else None,
                 summary=reason,
                 details={"reason": reason},
+            )
+        )
+        return self.get_run_state(run_id)
+
+    def _create_approval_checkpoint(
+        self,
+        run_id: int,
+        *,
+        step,
+        proposal_artifact_id: int,
+        proposal_payload: object,
+        next_step_name: str | None,
+        validation_artifact_id: int | None,
+        invocation_id: int | None,
+    ) -> WorkflowRunState:
+        if next_step_name is None:
+            raise ValueError("Schedule proposal steps must declare the persisted step after approval.")
+
+        approval_step = self._step_repo.create(
+            NewWorkflowStep(
+                run_id=run_id,
+                step_name="await_schedule_approval",
+                status=WorkflowStepStatus.PENDING.value,
+                attempt_number=1,
+            )
+        )
+        checkpoint = self._approval_repo.create(
+            NewWorkflowApprovalCheckpoint(
+                run_id=run_id,
+                step_id=approval_step.id,
+                target_artifact_id=proposal_artifact_id,
+                resume_step_name=next_step_name,
+                allowed_actions=(
+                    ApprovalAction.APPROVE.value,
+                    ApprovalAction.REJECT.value,
+                    ApprovalAction.REQUEST_REVISION.value,
+                ),
+            )
+        )
+        proposal = _payload_dict(proposal_payload)
+        pause_reason = "Awaiting operator approval before downstream changes."
+        self._artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run_id,
+                step_id=approval_step.id,
+                artifact_type=WorkflowArtifactType.APPROVAL_REQUEST.value,
+                schema_version=SCHEMA_VERSION,
+                producer_step_name=approval_step.step_name,
+                lineage_parent_id=proposal_artifact_id,
+                payload=ApprovalRequestArtifactPayload(
+                    checkpoint_id=checkpoint.id,
+                    target_artifact_id=proposal_artifact_id,
+                    allowed_actions=(
+                        ApprovalAction.APPROVE.value,
+                        ApprovalAction.REJECT.value,
+                        ApprovalAction.REQUEST_REVISION.value,
+                    ),
+                    pause_reason=pause_reason,
+                ).to_dict(),
+            )
+        )
+        self._run_repo.update(
+            run_id,
+            WorkflowRunPatch(
+                status=WorkflowRunStatus.BLOCKED.value,
+                current_step_name=approval_step.step_name,
+                current_step_attempt=approval_step.attempt_number,
+                needs_action=True,
+                validation_outcome_summary=None,
+                execution_error_summary=None,
+                blocked_reason=WorkflowBlockedReason.APPROVAL_REQUIRED.value,
+                failure_class=None,
+                retry_state=RetryState.AWAITING_OPERATOR.value,
+                resume_step_name=next_step_name,
+                resume_step_attempt=1,
+                last_event_summary="Awaiting approval for schedule proposal.",
+                completed_at=None,
+            ),
+        )
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=approval_step.id,
+                event_type="approval_checkpoint_created",
+                run_status=WorkflowRunStatus.BLOCKED.value,
+                step_status=WorkflowStepStatus.PENDING.value,
+                summary="Awaiting approval for schedule proposal.",
+                details={
+                    "checkpoint_id": checkpoint.id,
+                    "proposal_artifact_id": proposal_artifact_id,
+                    "validation_artifact_id": validation_artifact_id,
+                    "specialist_invocation_id": invocation_id,
+                    "proposal_summary": proposal.get("proposal_summary"),
+                    "resume_step_name": next_step_name,
+                },
+            )
+        )
+        return self.get_run_state(run_id)
+
+    def _resume_from_approval_approval(
+        self,
+        run_id: int,
+        *,
+        current_step,
+        checkpoint,
+        result: ApprovalDecisionResult,
+    ) -> WorkflowRunState:
+        self._step_repo.update(
+            current_step.id,
+            WorkflowStepPatch(status=WorkflowStepStatus.SUCCEEDED.value, completed_at=_now()),
+        )
+        next_step = self._step_repo.create(
+            NewWorkflowStep(
+                run_id=run_id,
+                step_name=checkpoint.resume_step_name,
+                status=WorkflowStepStatus.PENDING.value,
+                attempt_number=checkpoint.resume_step_attempt,
+            )
+        )
+        self._run_repo.update(
+            run_id,
+            WorkflowRunPatch(
+                status=WorkflowRunStatus.PENDING.value,
+                current_step_name=next_step.step_name,
+                current_step_attempt=next_step.attempt_number,
+                needs_action=False,
+                validation_outcome_summary=None,
+                execution_error_summary=None,
+                blocked_reason=None,
+                failure_class=None,
+                retry_state=RetryState.RETRYABLE.value,
+                resume_step_name=None,
+                resume_step_attempt=None,
+                last_event_summary="Approval granted and workflow resumed.",
+                completed_at=None,
+            ),
+        )
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=current_step.id,
+                event_type="approval_decision_recorded",
+                run_status=WorkflowRunStatus.PENDING.value,
+                step_status=WorkflowStepStatus.SUCCEEDED.value,
+                summary="Approval granted and workflow resumed.",
+                details=result.model_dump(mode="json"),
+            )
+        )
+        return self.get_run_state(run_id)
+
+    def _reject_after_approval(
+        self,
+        run_id: int,
+        *,
+        current_step,
+        checkpoint,
+        result: ApprovalDecisionResult,
+    ) -> WorkflowRunState:
+        self._step_repo.update(
+            current_step.id,
+            WorkflowStepPatch(status=WorkflowStepStatus.CANCELLED.value, completed_at=_now()),
+        )
+        self._run_repo.update(
+            run_id,
+            WorkflowRunPatch(
+                status=WorkflowRunStatus.TERMINATED.value,
+                current_step_name=current_step.step_name,
+                current_step_attempt=current_step.attempt_number,
+                needs_action=False,
+                validation_outcome_summary=None,
+                execution_error_summary=None,
+                blocked_reason=None,
+                failure_class=None,
+                retry_state=RetryState.TERMINAL.value,
+                resume_step_name=None,
+                resume_step_attempt=None,
+                last_event_summary="Approval rejected and workflow closed.",
+                completed_at=_now(),
+            ),
+        )
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=current_step.id,
+                event_type="approval_decision_recorded",
+                run_status=WorkflowRunStatus.TERMINATED.value,
+                step_status=WorkflowStepStatus.CANCELLED.value,
+                summary="Approval rejected and workflow closed.",
+                details=result.model_dump(mode="json"),
+            )
+        )
+        return self.get_run_state(run_id)
+
+    def _request_revision_after_approval(
+        self,
+        run_id: int,
+        *,
+        current_step,
+        checkpoint,
+        result: ApprovalDecisionResult,
+    ) -> WorkflowRunState:
+        self._step_repo.update(
+            current_step.id,
+            WorkflowStepPatch(status=WorkflowStepStatus.CANCELLED.value, completed_at=_now()),
+        )
+        proposal_artifact = self._artifact_repo.get_by_id(checkpoint.target_artifact_id)
+        if proposal_artifact is None:
+            raise ValueError(f"Schedule proposal artifact {checkpoint.target_artifact_id} does not exist.")
+        self._artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run_id,
+                step_id=current_step.id,
+                artifact_type=WorkflowArtifactType.REVISION_REQUEST.value,
+                schema_version=SCHEMA_VERSION,
+                producer_step_name=current_step.step_name,
+                lineage_parent_id=checkpoint.target_artifact_id,
+                payload={
+                    "checkpoint_id": checkpoint.id,
+                    "target_artifact_id": checkpoint.target_artifact_id,
+                    "feedback": checkpoint.revision_feedback,
+                    "superseded_proposal_version": proposal_artifact.version_number,
+                },
+            )
+        )
+        prior_attempt = self._step_repo.get_last_for_run(run_id, step_name=proposal_artifact.producer_step_name)
+        next_attempt = 1 if prior_attempt is None else prior_attempt.attempt_number + 1
+        revision_step = self._step_repo.create(
+            NewWorkflowStep(
+                run_id=run_id,
+                step_name=proposal_artifact.producer_step_name or checkpoint.resume_step_name,
+                status=WorkflowStepStatus.PENDING.value,
+                attempt_number=next_attempt,
+            )
+        )
+        self._run_repo.update(
+            run_id,
+            WorkflowRunPatch(
+                status=WorkflowRunStatus.PENDING.value,
+                current_step_name=revision_step.step_name,
+                current_step_attempt=revision_step.attempt_number,
+                attempt_count=max(self.get_run_state(run_id).run.attempt_count + 1, revision_step.attempt_number),
+                needs_action=False,
+                validation_outcome_summary=None,
+                execution_error_summary=None,
+                blocked_reason=None,
+                failure_class=None,
+                retry_state=RetryState.RETRYABLE.value,
+                resume_step_name=None,
+                resume_step_attempt=None,
+                last_event_summary="Revision requested and workflow resumed at proposal generation.",
+                completed_at=None,
+            ),
+        )
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=current_step.id,
+                event_type="approval_decision_recorded",
+                run_status=WorkflowRunStatus.PENDING.value,
+                step_status=WorkflowStepStatus.CANCELLED.value,
+                summary="Revision requested and workflow resumed at proposal generation.",
+                details=result.model_dump(mode="json"),
             )
         )
         return self.get_run_state(run_id)

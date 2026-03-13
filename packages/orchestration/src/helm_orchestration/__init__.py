@@ -11,6 +11,11 @@ from helm_orchestration.contracts import (
     WorkflowStepExecutionError,
 )
 from helm_orchestration.schemas import (
+    ApprovalAction,
+    ApprovalCheckpointStatus,
+    ApprovalDecision,
+    ApprovalDecisionResult,
+    ApprovalRequest,
     CalendarAgentInput,
     CalendarAgentOutput,
     ExecutionFailurePayload,
@@ -42,6 +47,11 @@ __all__ = [
     "ExecutionFailurePayload",
     "NormalizedTaskArtifact",
     "NormalizedTaskValidator",
+    "ApprovalAction",
+    "ApprovalCheckpointStatus",
+    "ApprovalDecision",
+    "ApprovalDecisionResult",
+    "ApprovalRequest",
     "PreparedSpecialistInput",
     "RawWorkflowRequest",
     "RegisteredValidator",

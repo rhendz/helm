@@ -23,6 +23,8 @@ class WorkflowResumeService:
 
     def resume_run(self, run_id: int) -> WorkflowRunState:
         state = self._workflow_service.get_run_state(run_id)
+        if state.run.needs_action:
+            raise ValueError(f"Workflow run {run_id} is awaiting operator action.")
         current_step = state.current_step
         if current_step is None:
             raise ValueError(f"Workflow run {run_id} has no runnable current step.")

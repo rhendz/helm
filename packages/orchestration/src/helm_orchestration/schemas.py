@@ -21,6 +21,17 @@ class RetryState(StrEnum):
     TERMINAL = "terminal"
 
 
+class ApprovalAction(StrEnum):
+    APPROVE = "approve"
+    REJECT = "reject"
+    REQUEST_REVISION = "request_revision"
+
+
+class ApprovalCheckpointStatus(StrEnum):
+    PENDING = "pending"
+    RESOLVED = "resolved"
+
+
 class ValidationIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -113,6 +124,35 @@ class ScheduleProposalArtifact(BaseModel):
 
 class CalendarAgentOutput(ScheduleProposalArtifact):
     model_config = ConfigDict(extra="forbid")
+
+
+class ApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_id: int
+    run_id: int
+    target_artifact_id: int
+    proposal_summary: str
+    allowed_actions: tuple[ApprovalAction, ...]
+    pause_reason: str
+
+
+class ApprovalDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: ApprovalAction
+    actor: str
+    revision_feedback: str | None = None
+
+
+class ApprovalDecisionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_id: int
+    action: ApprovalAction
+    actor: str
+    decision_at: str
+    resumed_step_name: str | None = None
 
 
 class ValidationReport(BaseModel):

@@ -1,4 +1,6 @@
 from helm_orchestration import (
+    ApprovalAction,
+    ApprovalDecision,
     CalendarAgentInput,
     CalendarAgentOutput,
     ExecutionFailurePayload,
@@ -29,6 +31,7 @@ from helm_storage.db import Base
 from helm_storage.repositories import (
     SQLAlchemyWorkflowSpecialistInvocationRepository,
     WorkflowArtifactType,
+    WorkflowBlockedReason,
     WorkflowRunStatus,
     WorkflowStepStatus,
 )
@@ -293,7 +296,7 @@ def _calendar_agent_step(*, valid_output: bool = True) -> WorkflowSpecialistStep
         input_builder=_build_input,
         handler=_handler,
         artifact_type=WorkflowArtifactKind.SCHEDULE_PROPOSAL,
-        next_step_name=None,
+        next_step_name="apply_schedule",
     )
 
 
@@ -535,7 +538,7 @@ def test_calendar_agent_specialist_validation_failure_blocks_after_output() -> N
         assert invocations[-1].status == WorkflowStepStatus.VALIDATION_FAILED.value
 
 
-def test_calendar_agent_specialist_persists_schedule_proposal_with_warnings() -> None:
+def test_schedule_proposal_creates_approval_checkpoint_and_blocks_run() -> None:
     with _session() as session:
         service = _service(session)
         created = service.create_run(
@@ -552,13 +555,20 @@ def test_calendar_agent_specialist_persists_schedule_proposal_with_warnings() ->
 
         completed = resume_service.resume_run(created.run.id)
 
-        assert completed.run.status == WorkflowRunStatus.COMPLETED.value
+        assert completed.run.status == WorkflowRunStatus.BLOCKED.value
+        assert completed.run.blocked_reason == WorkflowBlockedReason.APPROVAL_REQUIRED.value
+        assert completed.run.needs_action is True
+        assert completed.run.current_step_name == "await_schedule_approval"
+        assert completed.active_approval_checkpoint is not None
+        assert completed.active_approval_checkpoint.resume_step_name == "apply_schedule"
         proposal = ScheduleProposalArtifact.model_validate(
             completed.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload
         )
         assert proposal.warnings == ("Calendar still needs a final conflict scan.",)
         validation = completed.latest_artifacts[WorkflowArtifactType.VALIDATION_RESULT.value].payload
         assert validation["outcome"] == ValidationOutcome.PASSED_WITH_WARNINGS.value
+        approval_request = completed.latest_artifacts[WorkflowArtifactType.APPROVAL_REQUEST.value].payload
+        assert approval_request["allowed_actions"] == ["approve", "reject", "request_revision"]
 
 
 def test_specialist_resume_service_is_restart_safe_between_task_agent_and_calendar_agent() -> None:
@@ -581,15 +591,105 @@ def test_specialist_resume_service_is_restart_safe_between_task_agent_and_calend
         )
 
         after_task = first_resume.resume_run(created.run.id)
+        after_task_step_name = after_task.current_step.step_name if after_task.current_step is not None else None
         after_calendar = second_resume.resume_run(created.run.id)
         invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
 
-        assert after_task.run.current_step_name == "dispatch_calendar_agent"
-        assert after_calendar.run.status == WorkflowRunStatus.COMPLETED.value
+        assert after_task_step_name == "dispatch_calendar_agent"
+        assert after_calendar.run.status == WorkflowRunStatus.BLOCKED.value
+        assert after_calendar.run.current_step_name == "await_schedule_approval"
         assert [record.specialist_name for record in invocation_repo.list_for_run(created.run.id)] == [
             SpecialistName.TASK_AGENT.value,
             SpecialistName.CALENDAR_AGENT.value,
         ]
+
+
+def test_approval_decision_approve_resumes_next_persisted_step() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+
+        resumed = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(action=ApprovalAction.APPROVE, actor="telegram:1"),
+        )
+
+        assert resumed.run.status == WorkflowRunStatus.PENDING.value
+        assert resumed.run.needs_action is False
+        assert resumed.run.current_step_name == "apply_schedule"
+        assert resumed.active_approval_checkpoint is None
+        assert resumed.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].payload["decision"] == (
+            ApprovalAction.APPROVE.value
+        )
+
+
+def test_approval_decision_reject_closes_run_cleanly() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+
+        terminated = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(action=ApprovalAction.REJECT, actor="telegram:1"),
+        )
+
+        assert terminated.run.status == WorkflowRunStatus.TERMINATED.value
+        assert terminated.run.needs_action is False
+        assert terminated.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].payload["decision"] == (
+            ApprovalAction.REJECT.value
+        )
+
+
+def test_approval_decision_request_revision_returns_to_proposal_step() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+
+        revised = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.REQUEST_REVISION,
+                actor="telegram:1",
+                revision_feedback="Keep Friday afternoon open.",
+            ),
+        )
+
+        assert revised.run.status == WorkflowRunStatus.PENDING.value
+        assert revised.run.current_step_name == "dispatch_calendar_agent"
+        assert revised.run.current_step_attempt == 2
+        assert revised.latest_artifacts[WorkflowArtifactType.REVISION_REQUEST.value].payload["feedback"] == (
+            "Keep Friday afternoon open."
+        )
 
 
 def test_specialist_resume_service_records_handler_exceptions_as_failed_runs() -> None:
