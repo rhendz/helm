@@ -1296,26 +1296,81 @@ class WorkflowOrchestrationService:
         state = self.get_run_state(run_id)
         latest_artifacts = state.latest_artifacts
         request_artifact = latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
+        run_artifacts = self._artifact_repo.list_for_run(run_id)
         validation_ids = tuple(
             artifact.id
-            for artifact in self._artifact_repo.list_for_run(run_id)
+            for artifact in run_artifacts
             if artifact.artifact_type == WorkflowArtifactType.VALIDATION_RESULT.value
         )
         intermediate_ids = tuple(
             artifact.id
-            for artifact in self._artifact_repo.list_for_run(run_id)
+            for artifact in run_artifacts
             if artifact.artifact_type
             in {
                 WorkflowArtifactType.NORMALIZED_TASK.value,
                 WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
             }
         )
+        approval_decision_artifact = max(
+            (
+                artifact
+                for artifact in run_artifacts
+                if artifact.artifact_type == WorkflowArtifactType.APPROVAL_DECISION.value
+            ),
+            key=lambda artifact: artifact.id,
+            default=None,
+        )
+        sync_records = []
+        approval_decision = None
+        approval_decision_artifact_id = None
+        if approval_decision_artifact is not None:
+            approval_decision = approval_decision_artifact.payload.get("decision")
+            approval_decision_artifact_id = approval_decision_artifact.id
+            target_artifact_id = approval_decision_artifact.payload.get("target_artifact_id")
+            if isinstance(target_artifact_id, int):
+                sync_records = self._sync_repo.list_for_proposal(target_artifact_id)
+
         return WorkflowSummaryArtifact(
             request_artifact_id=request_artifact.id,
             intermediate_artifact_ids=intermediate_ids,
             validation_artifact_ids=validation_ids,
             final_summary_text=final_summary_text,
+            approval_decision=approval_decision,
+            approval_decision_artifact_id=approval_decision_artifact_id,
+            downstream_sync_status=self._downstream_sync_status(sync_records),
+            downstream_sync_artifact_ids=tuple(record.id for record in self._sorted_sync_records(sync_records)),
+            downstream_sync_reference_ids=tuple(
+                self._downstream_sync_reference_id(record)
+                for record in self._sorted_sync_records(sync_records)
+            ),
         )
+
+    def _downstream_sync_status(self, sync_records: list[object]) -> str | None:
+        if not sync_records:
+            return None
+        statuses = {record.status for record in sync_records}
+        if statuses == {WorkflowSyncStatus.SUCCEEDED.value}:
+            return "succeeded"
+        if statuses == {WorkflowSyncStatus.CANCELLED.value}:
+            return "cancelled"
+        if statuses & {WorkflowSyncStatus.PENDING.value, WorkflowSyncStatus.IN_PROGRESS.value}:
+            return "pending"
+        if statuses & {
+            WorkflowSyncStatus.FAILED_RETRYABLE.value,
+            WorkflowSyncStatus.FAILED_TERMINAL.value,
+            WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
+        }:
+            if WorkflowSyncStatus.SUCCEEDED.value in statuses or WorkflowSyncStatus.CANCELLED.value in statuses:
+                return "partial"
+            return "failed"
+        return "mixed"
+
+    def _sorted_sync_records(self, sync_records: list[object]) -> list[object]:
+        return sorted(sync_records, key=lambda record: (record.execution_order, record.id))
+
+    def _downstream_sync_reference_id(self, sync_record) -> str:  # noqa: ANN001
+        reference = sync_record.external_object_id or sync_record.planned_item_key
+        return f"{sync_record.target_system}:{reference}"
 
     def _build_approved_sync_items(self, *, proposal_artifact_id: int) -> tuple[ApprovedSyncItem, ...]:
         proposal_artifact = self._require_artifact(proposal_artifact_id)
@@ -1371,6 +1426,20 @@ class WorkflowOrchestrationService:
 
     def _complete_sync_execution(self, run_id: int, *, step) -> WorkflowRunState:
         sync_records = self._sync_repo.list_for_run(run_id)
+        if self.get_run_state(run_id).run.workflow_type == "weekly_scheduling":
+            summary_text = self._build_representative_completion_summary_text(sync_records)
+            final_summary = self.build_final_summary_artifact(run_id, final_summary_text=summary_text)
+            if self._artifact_repo.get_latest_for_run(run_id, artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value) is None:
+                self._artifact_repo.create(
+                    NewWorkflowArtifact(
+                        run_id=run_id,
+                        step_id=step.id,
+                        artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
+                        schema_version=SCHEMA_VERSION,
+                        producer_step_name=step.step_name,
+                        payload=final_summary.model_dump(mode="json"),
+                    )
+                )
         self._step_repo.update(
             step.id,
             WorkflowStepPatch(
@@ -1414,6 +1483,35 @@ class WorkflowOrchestrationService:
             )
         )
         return self.get_run_state(run_id)
+
+    def _build_representative_completion_summary_text(self, sync_records: list[object]) -> str:
+        sorted_sync_records = self._sorted_sync_records(sync_records)
+        if not sorted_sync_records:
+            return "Approved schedule finished without persisted downstream sync lineage."
+
+        proposal_artifact = self._require_artifact(sorted_sync_records[0].proposal_artifact_id)
+        proposal = ScheduleProposalArtifact.model_validate(proposal_artifact.payload)
+        scheduled_highlights = tuple(
+            dict.fromkeys(block.task_title or block.title for block in proposal.time_blocks)
+        )
+        task_writes = len(
+            [record for record in sorted_sync_records if record.target_system == WorkflowTargetSystem.TASK_SYSTEM.value]
+        )
+        calendar_writes = len(
+            [
+                record
+                for record in sorted_sync_records
+                if record.target_system == WorkflowTargetSystem.CALENDAR_SYSTEM.value
+            ]
+        )
+        summary = (
+            f"Scheduled {len(proposal.time_blocks)} block(s) across {len(scheduled_highlights)} focus area(s) "
+            f"and synced {len(sorted_sync_records)} approved write(s) "
+            f"({task_writes} task, {calendar_writes} calendar)."
+        )
+        if proposal.carry_forward_tasks:
+            return f"{summary} Carry forward: {', '.join(proposal.carry_forward_tasks[:3])}."
+        return summary
 
     def _record_recovery_transition(self, run_id: int, *, step_id: int, transition: RecoveryTransition) -> None:
         self._event_repo.create(

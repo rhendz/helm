@@ -33,6 +33,30 @@ def _format_run(run: dict[str, object]) -> str:
         f"Last: {last_event}\n"
         f"Needs action: {'yes' if run.get('needs_action') else 'no'} | Next: {next_action}"
     ]
+    completion_summary = run.get("completion_summary")
+    if isinstance(completion_summary, dict):
+        headline = completion_summary.get("headline")
+        if isinstance(headline, str) and headline:
+            lines.append(f"Outcome: {headline}")
+        scheduled_highlights = completion_summary.get("scheduled_highlights")
+        if isinstance(scheduled_highlights, list) and scheduled_highlights:
+            lines.append(
+                "Scheduled: " + ", ".join(str(item) for item in scheduled_highlights[:3])
+            )
+        if completion_summary.get("total_sync_writes"):
+            lines.append(
+                "Sync: "
+                f"{completion_summary.get('total_sync_writes')} writes "
+                f"({completion_summary.get('task_sync_writes')} task, "
+                f"{completion_summary.get('calendar_sync_writes')} calendar) "
+                f"status={completion_summary.get('downstream_sync_status') or 'n/a'}"
+            )
+        carry_forward = completion_summary.get("carry_forward_tasks")
+        if isinstance(carry_forward, list) and carry_forward:
+            lines.append(f"Carry forward: {', '.join(str(item) for item in carry_forward[:3])}")
+        attention_items = completion_summary.get("attention_items")
+        if isinstance(attention_items, list) and attention_items:
+            lines.append(f"Attention: {'; '.join(str(item) for item in attention_items[:3])}")
     approval_checkpoint = run.get("approval_checkpoint")
     if isinstance(approval_checkpoint, dict):
         proposal_summary = approval_checkpoint.get("proposal_summary") or "Proposal summary unavailable."
@@ -47,7 +71,7 @@ def _format_run(run: dict[str, object]) -> str:
         for extra_line in _proposal_detail_lines(approval_checkpoint):
             lines.append(extra_line)
     latest_proposal = run.get("latest_proposal_version")
-    if isinstance(latest_proposal, dict) and approval_checkpoint is None:
+    if isinstance(latest_proposal, dict) and approval_checkpoint is None and not isinstance(completion_summary, dict):
         lines.append(
             f"Latest proposal: v{latest_proposal.get('version_number')} "
             f"artifact={latest_proposal.get('artifact_id')}"

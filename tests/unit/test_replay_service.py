@@ -224,6 +224,9 @@ def test_api_workflow_replay_endpoint_requests_explicit_replay(monkeypatch) -> N
     assert payload["run"]["safe_next_actions"] == [
         {"action": "await_replay", "label": "Await replay processing"}
     ]
+    assert payload["run"]["completion_summary"]["headline"] == (
+        "Approved schedule needs downstream follow-up after 3 planned write(s)."
+    )
     assert payload["run"]["sync"]["replay_lineage"]["source_sync_record_ids"] == [failed_record.id]
 
 

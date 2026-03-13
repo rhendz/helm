@@ -39,8 +39,6 @@ from helm_orchestration import (
 )
 from helm_storage.db import Base
 from helm_storage.repositories import (
-    NewWorkflowArtifact,
-    SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
     WorkflowSyncRecoveryClassification,
@@ -419,6 +417,8 @@ def test_effect_summary_projects_pending_approved_write_counts_before_execution(
         assert summary["safe_next_actions"] == [
             {"action": "await_execution", "label": "Await approved write execution"}
         ]
+        assert summary["completion_summary"]["headline"] == "Approved schedule is queued to sync 2 planned write(s)."
+        assert summary["completion_summary"]["scheduled_highlights"] == ["Triage inbox"]
 
 
 def test_sync_summary_projects_recoverable_failure_and_replay_lineage() -> None:
@@ -696,54 +696,22 @@ def test_failed_run_detail_exposes_lineage_without_validation_artifact() -> None
 
 def test_completed_run_detail_exposes_final_summary_contract() -> None:
     with _session() as session:
-        orchestration = _orchestration(session)
-        created = orchestration.create_run(
-            workflow_type="weekly_digest",
-            first_step_name="normalize_request",
-            request_payload={
-                "request_text": "Plan my week around deep work.",
-                "submitted_by": "telegram:user",
-                "channel": "telegram",
-                "metadata": {"chat_id": "123"},
-            },
-        )
-        advanced = orchestration.complete_current_step(
-            created.run.id,
-            artifact_type=WorkflowArtifactType.NORMALIZED_TASK.value,
-            artifact_payload={
-                "title": "Weekly planning",
-                "summary": "Focus on deep work blocks.",
-                "tasks": [{"title": "Deep work", "summary": "Plan", "priority": "high", "estimated_minutes": 90}],
-            },
-            next_step_name="summarize",
-        )
-        summary_payload = orchestration.build_final_summary_artifact(
-            advanced.run.id,
-            final_summary_text="Plan normalized and ready for review.",
-        )
-        SQLAlchemyWorkflowArtifactRepository(session).create(
-            NewWorkflowArtifact(
-                run_id=advanced.run.id,
-                artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
-                schema_version="2026-03-13",
-                payload=summary_payload.model_dump(mode="json"),
-            )
-        )
-        completed = orchestration.complete_current_step(
-            advanced.run.id,
-            artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
-            artifact_payload=summary_payload.model_dump(mode="json"),
-            next_step_name=None,
-        )
+        run_id, orchestration, _calendar_adapter = _approved_sync_run(session)
+        completed = orchestration.execute_pending_sync_step(run_id)
 
         detail = WorkflowStatusService(session).get_run_detail(completed.run.id)
 
         assert detail is not None
         assert detail["status"] == WorkflowRunStatus.COMPLETED.value
         assert detail["lineage"]["final_summary"]["request_artifact_id"] is not None
-        assert detail["lineage"]["final_summary"]["approval_decision"] is None
-        assert detail["lineage"]["final_summary"]["downstream_sync_status"] is None
-        assert detail["lineage"]["final_summary"]["downstream_sync_artifact_ids"] == []
+        assert detail["lineage"]["final_summary"]["approval_decision"] == ApprovalAction.APPROVE.value
+        assert detail["lineage"]["final_summary"]["approval_decision_artifact_id"] is not None
+        assert detail["lineage"]["final_summary"]["downstream_sync_status"] == "succeeded"
+        assert len(detail["lineage"]["final_summary"]["downstream_sync_artifact_ids"]) == 2
+        assert detail["lineage"]["final_summary"]["downstream_sync_reference_ids"][0].startswith("task_system:")
+        assert detail["completion_summary"]["headline"] == "Scheduled 1 block(s) and synced 2 approved write(s)."
+        assert detail["completion_summary"]["total_sync_writes"] == 2
+        assert detail["completion_summary"]["attention_items"] == []
 
 
 def test_telegram_service_replay_wrapper_uses_shared_replay_request(monkeypatch) -> None:  # noqa: ANN001

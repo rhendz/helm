@@ -190,6 +190,49 @@ async def test_request_revision_calls_service_with_feedback(monkeypatch: pytest.
     ]
 
 
+def test_format_run_prefers_compact_completion_summary_for_representative_runs() -> None:
+    formatted = workflows._format_run(
+        {
+            "id": 14,
+            "status": "completed",
+            "current_step": "apply_schedule",
+            "paused_state": None,
+            "last_event_summary": "Completed step apply_schedule",
+            "needs_action": False,
+            "available_actions": [],
+            "safe_next_actions": [],
+            "completion_summary": {
+                "headline": "Scheduled 2 block(s) and synced 3 approved write(s).",
+                "scheduled_highlights": ["Finish roadmap draft", "Prep interviews"],
+                "total_sync_writes": 3,
+                "task_sync_writes": 1,
+                "calendar_sync_writes": 2,
+                "downstream_sync_status": "succeeded",
+                "carry_forward_tasks": ["Clear inbox"],
+                "attention_items": ["Clear inbox"],
+            },
+            "latest_proposal_version": {"version_number": 2, "artifact_id": 41},
+            "latest_decision": {
+                "decision": "approve",
+                "actor": "telegram:1",
+                "target_artifact_id": 41,
+            },
+        }
+    )
+
+    assert formatted == (
+        "Run 14 [completed] step=apply_schedule paused=active\n"
+        "Last: Completed step apply_schedule\n"
+        "Needs action: no | Next: none\n"
+        "Outcome: Scheduled 2 block(s) and synced 3 approved write(s).\n"
+        "Scheduled: Finish roadmap draft, Prep interviews\n"
+        "Sync: 3 writes (1 task, 2 calendar) status=succeeded\n"
+        "Carry forward: Clear inbox\n"
+        "Attention: Clear inbox\n"
+        "Latest decision: approve by telegram:1 on artifact 41"
+    )
+
+
 @pytest.mark.asyncio
 async def test_snooze_usage_message_when_id_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     async def _allow(_update: _Update, _context: _Context) -> bool:

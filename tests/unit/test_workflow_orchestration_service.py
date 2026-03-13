@@ -1077,14 +1077,69 @@ def test_sync_execution_processes_records_in_deterministic_task_then_calendar_or
 
         completed = service.execute_pending_sync_step(approved.run.id)
         sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(completed.run.id)
+        final_summary = completed.latest_artifacts[WorkflowArtifactType.FINAL_SUMMARY.value].payload
 
         assert completed.run.status == WorkflowRunStatus.COMPLETED.value
         assert [record.status for record in sync_records] == [
             WorkflowSyncStatus.SUCCEEDED.value,
             WorkflowSyncStatus.SUCCEEDED.value,
         ]
+        assert final_summary["approval_decision"] == ApprovalAction.APPROVE.value
+        assert final_summary["approval_decision_artifact_id"] == (
+            completed.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].id
+        )
+        assert final_summary["downstream_sync_status"] == "succeeded"
+        assert final_summary["downstream_sync_artifact_ids"] == [record.id for record in sync_records]
+        assert final_summary["downstream_sync_reference_ids"] == [
+            f"task_system:{sync_records[0].external_object_id}",
+            f"calendar_system:{sync_records[1].external_object_id}",
+        ]
         assert task_adapter.calls == [("upsert", "task:triage-inbox")]
         assert calendar_adapter.calls == [("upsert", "calendar:inbox-triage:1")]
+
+
+def test_build_final_summary_artifact_uses_persisted_approval_and_sync_lineage() -> None:
+    with _session() as session:
+        task_adapter = RecordingTaskAdapter()
+        calendar_adapter = RecordingCalendarAdapter()
+        service = _service(
+            session,
+            task_system_adapter=task_adapter,
+            calendar_system_adapter=calendar_adapter,
+        )
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        blocked = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        ).resume_run(created.run.id)
+        target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+        approved = service.submit_approval_decision(
+            blocked.run.id,
+            decision=ApprovalDecision(
+                action=ApprovalAction.APPROVE,
+                actor="telegram:1",
+                target_artifact_id=target_artifact_id,
+            ),
+        )
+
+        service.execute_pending_sync_step(approved.run.id)
+        summary = service.build_final_summary_artifact(
+            approved.run.id,
+            final_summary_text="Representative workflow completed.",
+        )
+
+        assert summary.approval_decision == ApprovalAction.APPROVE.value
+        assert summary.approval_decision_artifact_id is not None
+        assert summary.downstream_sync_status == "succeeded"
+        assert len(summary.downstream_sync_artifact_ids) == 2
+        assert summary.downstream_sync_reference_ids[0].startswith("task_system:")
+        assert summary.downstream_sync_reference_ids[1].startswith("calendar_system:")
 
 
 def test_sync_reconciliation_runs_before_retrying_uncertain_write() -> None:

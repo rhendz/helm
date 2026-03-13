@@ -1,9 +1,12 @@
 from collections.abc import Generator
 
 from fastapi.testclient import TestClient
+from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_api.dependencies import get_db
 from helm_api.main import app
 from helm_orchestration import (
+    ApprovalAction,
+    ApprovalDecision,
     ExecutionFailurePayload,
     NormalizedTaskValidator,
     RegisteredValidator,
@@ -29,24 +32,28 @@ from sqlalchemy.pool import StaticPool
 def _service(session: Session) -> WorkflowOrchestrationService:
     return WorkflowOrchestrationService(
         session,
-        validator_registry=ValidatorRegistry(
-            [
-                RegisteredValidator(
-                    target=ValidatorTarget(
-                        kind=ValidationTargetKind.STEP_NAME,
-                        value="normalize_request",
-                    ),
-                    validator=NormalizedTaskValidator(),
+        validator_registry=_validator_registry(),
+    )
+
+
+def _validator_registry() -> ValidatorRegistry:
+    return ValidatorRegistry(
+        [
+            RegisteredValidator(
+                target=ValidatorTarget(
+                    kind=ValidationTargetKind.STEP_NAME,
+                    value="normalize_request",
                 ),
-                RegisteredValidator(
-                    target=ValidatorTarget(
-                        kind=ValidationTargetKind.ARTIFACT_TYPE,
-                        value=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
-                    ),
-                    validator=ScheduleProposalValidator(),
+                validator=NormalizedTaskValidator(),
+            ),
+            RegisteredValidator(
+                target=ValidatorTarget(
+                    kind=ValidationTargetKind.ARTIFACT_TYPE,
+                    value=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
                 ),
-            ]
-        ),
+                validator=ScheduleProposalValidator(),
+            ),
+        ]
     )
 
 
@@ -187,6 +194,56 @@ def _seed_states(session: Session) -> dict[str, int]:
         "terminated": terminated.run.id,
         "completed": completed.run.id,
     }
+
+
+def _representative_completed_run(session: Session) -> int:
+    orchestration = WorkflowOrchestrationService(
+        session,
+        validator_registry=_validator_registry(),
+        task_system_adapter=StubTaskSystemAdapter(),
+        calendar_system_adapter=StubCalendarSystemAdapter(),
+    )
+    created = orchestration.create_run(
+        workflow_type="weekly_scheduling",
+        first_step_name="dispatch_task_agent",
+        request_payload=_request_payload(),
+    )
+    orchestration.complete_current_step(
+        created.run.id,
+        artifact_type=WorkflowArtifactType.NORMALIZED_TASK.value,
+        artifact_payload=_normalized_payload(),
+        next_step_name="dispatch_calendar_agent",
+    )
+    blocked = orchestration.complete_current_step(
+        created.run.id,
+        artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+        artifact_payload={
+            "proposal_summary": "Hold deep work blocks and review windows this week.",
+            "calendar_id": "primary",
+            "time_blocks": [
+                {
+                    "title": "Deep work",
+                    "task_title": "Deep work",
+                    "start": "2026-03-16T09:00:00Z",
+                    "end": "2026-03-16T11:00:00Z",
+                }
+            ],
+            "proposed_changes": ["Reserve Monday and Tuesday mornings for deep work."],
+            "carry_forward_tasks": ["Clear inbox"],
+        },
+        next_step_name="apply_schedule",
+    )
+    target_artifact_id = blocked.active_approval_checkpoint.target_artifact_id  # type: ignore[union-attr]
+    approved = orchestration.submit_approval_decision(
+        blocked.run.id,
+        decision=ApprovalDecision(
+            action=ApprovalAction.APPROVE,
+            actor="api:test",
+            target_artifact_id=target_artifact_id,
+        ),
+    )
+    completed = orchestration.execute_pending_sync_step(approved.run.id)
+    return completed.run.id
 
 
 def _client() -> Generator[tuple[TestClient, Session], None, None]:
@@ -357,3 +414,15 @@ def test_workflow_routes_cover_operator_states() -> None:
         assert completed.json()["status"] == WorkflowRunStatus.COMPLETED.value
         assert completed.json()["lineage"]["final_summary"]["approval_decision_artifact_id"] is None
         assert completed.json()["lineage"]["final_summary"]["downstream_sync_reference_ids"] == []
+
+        representative_completed_id = _representative_completed_run(session)
+        representative_completed = client.get(f"/v1/workflow-runs/{representative_completed_id}")
+        assert representative_completed.status_code == 200
+        assert representative_completed.json()["status"] == WorkflowRunStatus.COMPLETED.value
+        assert representative_completed.json()["completion_summary"]["headline"] == (
+            "Scheduled 1 block(s) and synced 2 approved write(s)."
+        )
+        assert representative_completed.json()["completion_summary"]["carry_forward_tasks"] == ["Clear inbox"]
+        assert representative_completed.json()["lineage"]["final_summary"]["approval_decision"] == "approve"
+        assert representative_completed.json()["lineage"]["final_summary"]["approval_decision_artifact_id"] is not None
+        assert len(representative_completed.json()["lineage"]["final_summary"]["downstream_sync_reference_ids"]) == 2

@@ -162,6 +162,11 @@ class WorkflowStatusService:
         latest_validation_artifact = state.latest_artifacts.get(WorkflowArtifactType.VALIDATION_RESULT.value)
         approval_projection = self._approval_projection(state)
         proposal_versions = self._build_proposal_versions(state.run)
+        final_summary_artifact = self._artifact_repo.get_latest_for_run(
+            state.run.id,
+            artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
+        )
+        final_summary = self._final_summary(final_summary_artifact)
         latest_validation_outcome = None
         if latest_validation_artifact is not None:
             latest_validation_outcome = str(latest_validation_artifact.payload.get("outcome"))
@@ -203,6 +208,13 @@ class WorkflowStatusService:
             "latest_proposal_version": proposal_versions[0] if proposal_versions else None,
             "proposal_versions": proposal_versions,
             "weekly_request": self._weekly_request_projection(state),
+            "completion_summary": self._completion_summary(
+                state,
+                failed_step=failed_step,
+                sync_projection=sync_projection,
+                proposal_versions=proposal_versions,
+                final_summary=final_summary,
+            ),
             "effect_summary": sync_projection["effect_summary"],
             "sync": sync_projection["sync"],
             "started_at": state.run.started_at,
@@ -697,6 +709,101 @@ class WorkflowStatusService:
             "downstream_sync_artifact_ids": list(payload.get("downstream_sync_artifact_ids", [])),
             "downstream_sync_reference_ids": list(payload.get("downstream_sync_reference_ids", [])),
         }
+
+    def _completion_summary(
+        self,
+        state: WorkflowRunState,
+        *,
+        failed_step,
+        sync_projection: dict[str, object],
+        proposal_versions: list[dict[str, object]],
+        final_summary: dict[str, object],
+    ) -> dict[str, object] | None:  # noqa: ANN001
+        if state.run.workflow_type != "weekly_scheduling":
+            return None
+        if not proposal_versions:
+            return None
+
+        latest_proposal = proposal_versions[0]
+        counts_by_target = sync_projection["sync"].get("counts_by_target", {})
+        counts_by_state = sync_projection["sync"].get("counts_by_state", {})
+        total_sync_writes = sum(counts_by_state.values())
+        scheduled_highlights = [
+            value
+            for value in dict.fromkeys(
+                block.get("task_title") or block.get("title")
+                for block in latest_proposal.get("time_blocks", [])
+                if isinstance(block, dict)
+            )
+            if isinstance(value, str)
+        ]
+        carry_forward_tasks = [
+            str(item) for item in latest_proposal.get("carry_forward_tasks", []) if isinstance(item, str)
+        ]
+        attention_items: list[str] = []
+        failure_summary = self._failure_summary(state, failed_step, sync_projection)
+        if failure_summary and state.run.status in {
+            WorkflowRunStatus.FAILED.value,
+            WorkflowRunStatus.TERMINATED.value,
+        }:
+            attention_items.append(failure_summary)
+        elif final_summary.get("downstream_sync_status") not in {None, "succeeded"} and isinstance(
+            sync_projection.get("failure_summary"), str
+        ):
+            attention_items.append(sync_projection["failure_summary"])
+        attention_items.extend(carry_forward_tasks[:3])
+        if sync_projection["safe_next_actions"]:
+            labels = ", ".join(
+                item["label"]
+                for item in sync_projection["safe_next_actions"]
+                if isinstance(item, dict) and isinstance(item.get("label"), str)
+            )
+            if labels:
+                attention_items.append(f"Next: {labels}.")
+
+        return {
+            "headline": self._completion_headline(
+                state,
+                final_summary=final_summary,
+                sync_projection=sync_projection,
+                scheduled_block_count=len(latest_proposal.get("time_blocks", [])),
+                total_sync_writes=total_sync_writes,
+            ),
+            "approval_decision": final_summary.get("approval_decision"),
+            "downstream_sync_status": final_summary.get("downstream_sync_status"),
+            "scheduled_block_count": len(latest_proposal.get("time_blocks", [])),
+            "scheduled_highlights": scheduled_highlights[:3],
+            "total_sync_writes": total_sync_writes,
+            "task_sync_writes": counts_by_target.get(WorkflowTargetSystem.TASK_SYSTEM.value, 0),
+            "calendar_sync_writes": counts_by_target.get(WorkflowTargetSystem.CALENDAR_SYSTEM.value, 0),
+            "carry_forward_tasks": carry_forward_tasks,
+            "attention_items": attention_items,
+        }
+
+    def _completion_headline(
+        self,
+        state: WorkflowRunState,
+        *,
+        final_summary: dict[str, object],
+        sync_projection: dict[str, object],
+        scheduled_block_count: int,
+        total_sync_writes: int,
+    ) -> str:
+        downstream_sync_status = final_summary.get("downstream_sync_status")
+        if state.run.status == WorkflowRunStatus.COMPLETED.value and downstream_sync_status == "succeeded":
+            return f"Scheduled {scheduled_block_count} block(s) and synced {total_sync_writes} approved write(s)."
+        if state.run.status == WorkflowRunStatus.COMPLETED.value:
+            return (
+                f"Completed scheduling with downstream sync status "
+                f"{downstream_sync_status or 'unknown'}."
+            )
+        if sync_projection.get("recovery_class") is not None:
+            return f"Approved schedule needs downstream follow-up after {total_sync_writes} planned write(s)."
+        if state.run.status in {WorkflowRunStatus.FAILED.value, WorkflowRunStatus.TERMINATED.value}:
+            return f"Approved schedule needs downstream follow-up after {total_sync_writes} planned write(s)."
+        if total_sync_writes:
+            return f"Approved schedule is queued to sync {total_sync_writes} planned write(s)."
+        return f"Prepared a proposal with {scheduled_block_count} scheduled block(s)."
 
 
 def _approval_action_label(action: str) -> str:

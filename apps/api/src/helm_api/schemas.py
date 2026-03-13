@@ -275,6 +275,19 @@ class WorkflowProposalVersionResponse(BaseModel):
     supersedes_artifact_id: int | None = None
 
 
+class WorkflowCompletionSummaryResponse(BaseModel):
+    headline: str
+    approval_decision: str | None = None
+    downstream_sync_status: str | None = None
+    scheduled_block_count: int = 0
+    scheduled_highlights: list[str] = Field(default_factory=list)
+    total_sync_writes: int = 0
+    task_sync_writes: int = 0
+    calendar_sync_writes: int = 0
+    carry_forward_tasks: list[str] = Field(default_factory=list)
+    attention_items: list[str] = Field(default_factory=list)
+
+
 class WorkflowRunSummaryResponse(BaseModel):
     id: int
     workflow_type: str
@@ -297,6 +310,7 @@ class WorkflowRunSummaryResponse(BaseModel):
     latest_proposal_version: WorkflowProposalVersionResponse | None = None
     proposal_versions: list[WorkflowProposalVersionResponse] = Field(default_factory=list)
     weekly_request: WeeklySchedulingRequestResponse | None = None
+    completion_summary: WorkflowCompletionSummaryResponse | None = None
     effect_summary: dict[str, object] | None = None
     sync: dict[str, object] = Field(default_factory=dict)
     safe_next_actions: list[WorkflowAvailableActionResponse] = Field(default_factory=list)
