@@ -561,6 +561,37 @@ def test_calendar_agent_specialist_persists_schedule_proposal_with_warnings() ->
         assert validation["outcome"] == ValidationOutcome.PASSED_WITH_WARNINGS.value
 
 
+def test_specialist_resume_service_is_restart_safe_between_task_agent_and_calendar_agent() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        first_resume = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_task_agent_step().key: _task_agent_step()},
+        )
+        second_resume = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        )
+
+        after_task = first_resume.resume_run(created.run.id)
+        after_calendar = second_resume.resume_run(created.run.id)
+        invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
+
+        assert after_task.run.current_step_name == "dispatch_calendar_agent"
+        assert after_calendar.run.status == WorkflowRunStatus.COMPLETED.value
+        assert [record.specialist_name for record in invocation_repo.list_for_run(created.run.id)] == [
+            SpecialistName.TASK_AGENT.value,
+            SpecialistName.CALENDAR_AGENT.value,
+        ]
+
+
 def test_specialist_resume_service_records_handler_exceptions_as_failed_runs() -> None:
     with _session() as session:
         service = _service(session)
