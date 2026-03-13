@@ -11,20 +11,24 @@ from helm_orchestration.schemas import (
     ValidationReport,
     WorkflowSummaryArtifact,
 )
+from helm_orchestration.contracts import WorkflowSpecialistStep, WorkflowStepExecutionError
 from helm_orchestration.validators import ValidatorRegistry
 from helm_storage.repositories import (
     NewWorkflowArtifact,
     NewWorkflowEvent,
     NewWorkflowRun,
+    NewWorkflowSpecialistInvocation,
     NewWorkflowStep,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowRunRepository,
+    SQLAlchemyWorkflowSpecialistInvocationRepository,
     SQLAlchemyWorkflowStepRepository,
     WorkflowArtifactType,
     WorkflowRunPatch,
     WorkflowRunState,
     WorkflowRunStatus,
+    WorkflowSpecialistInvocationPatch,
     WorkflowStepPatch,
     WorkflowStepStatus,
 )
@@ -43,6 +47,7 @@ class WorkflowOrchestrationService:
         self._step_repo = SQLAlchemyWorkflowStepRepository(session)
         self._artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
         self._event_repo = SQLAlchemyWorkflowEventRepository(session)
+        self._invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
         self._validator_registry = validator_registry or ValidatorRegistry()
 
     def create_run(self, *, workflow_type: str, first_step_name: str, request_payload: object) -> WorkflowRunState:
@@ -128,7 +133,84 @@ class WorkflowOrchestrationService:
     ) -> WorkflowRunState:
         state = self.start_current_step(run_id)
         step = self._require_current_step(state)
+        return self._complete_started_step(
+            run_id,
+            step=step,
+            artifact_type=artifact_type,
+            artifact_payload=artifact_payload,
+            next_step_name=next_step_name,
+        )
 
+    def execute_specialist_step(
+        self,
+        run_id: int,
+        specialist_step: WorkflowSpecialistStep,
+    ) -> WorkflowRunState:
+        state = self.start_current_step(run_id)
+        step = self._require_current_step(state)
+        prepared_input = specialist_step.input_builder(state)
+        invocation = self._invocation_repo.create(
+            NewWorkflowSpecialistInvocation(
+                run_id=run_id,
+                step_id=step.id,
+                specialist_name=specialist_step.specialist.value,
+                input_artifact_id=prepared_input.input_artifact_id,
+            )
+        )
+
+        try:
+            output_payload = specialist_step.handler(prepared_input.payload)
+        except WorkflowStepExecutionError as exc:
+            self._invocation_repo.update(
+                invocation.id,
+                WorkflowSpecialistInvocationPatch(
+                    status=WorkflowStepStatus.FAILED.value,
+                    completed_at=_now(),
+                    error_summary=exc.failure.message,
+                ),
+            )
+            return self._fail_started_step(run_id, step=step, failure=exc.failure)
+        except Exception as exc:  # noqa: BLE001
+            failure = ExecutionFailurePayload(
+                error_type="unhandled_step_exception",
+                message=str(exc),
+                retry_state=RetryState.RETRYABLE,
+                retryable=True,
+                details={
+                    "step_name": step.step_name,
+                    "workflow_type": state.run.workflow_type,
+                    "specialist_name": specialist_step.specialist.value,
+                },
+            )
+            self._invocation_repo.update(
+                invocation.id,
+                WorkflowSpecialistInvocationPatch(
+                    status=WorkflowStepStatus.FAILED.value,
+                    completed_at=_now(),
+                    error_summary=failure.message,
+                ),
+            )
+            return self._fail_started_step(run_id, step=step, failure=failure)
+
+        return self._complete_started_step(
+            run_id,
+            step=step,
+            artifact_type=specialist_step.artifact_type.value,
+            artifact_payload=output_payload,
+            next_step_name=specialist_step.next_step_name,
+            invocation_id=invocation.id,
+        )
+
+    def _complete_started_step(
+        self,
+        run_id: int,
+        *,
+        step,
+        artifact_type: str,
+        artifact_payload: object,
+        next_step_name: str | None = None,
+        invocation_id: int | None = None,
+    ) -> WorkflowRunState:
         candidate_artifact = self._artifact_repo.create(
             NewWorkflowArtifact(
                 run_id=run_id,
@@ -157,6 +239,12 @@ class WorkflowOrchestrationService:
             validation_artifact_id = validation_artifact.id
 
         if validation_report is not None and validation_report.outcome is ValidationOutcome.FAILED:
+            self._mark_invocation(
+                invocation_id,
+                output_artifact_id=candidate_artifact.id,
+                status=WorkflowStepStatus.VALIDATION_FAILED.value,
+                error_summary=validation_report.summary,
+            )
             self._step_repo.update(
                 step.id,
                 WorkflowStepPatch(
@@ -192,12 +280,18 @@ class WorkflowOrchestrationService:
                     details={
                         "artifact_id": candidate_artifact.id,
                         "validation_artifact_id": validation_artifact_id,
+                        "specialist_invocation_id": invocation_id,
                         "validation_report": validation_report.model_dump(mode="json"),
                     },
                 )
             )
             return self.get_run_state(run_id)
 
+        self._mark_invocation(
+            invocation_id,
+            output_artifact_id=candidate_artifact.id,
+            status=WorkflowStepStatus.SUCCEEDED.value,
+        )
         self._step_repo.update(
             step.id,
             WorkflowStepPatch(
@@ -231,6 +325,7 @@ class WorkflowOrchestrationService:
                     details={
                         "artifact_id": candidate_artifact.id,
                         "validation_artifact_id": validation_artifact_id,
+                        "specialist_invocation_id": invocation_id,
                     },
                 )
             )
@@ -266,19 +361,23 @@ class WorkflowOrchestrationService:
                 event_type="step_completed",
                 run_status=WorkflowRunStatus.RUNNING.value,
                 step_status=WorkflowStepStatus.SUCCEEDED.value,
-                summary=f"Advanced to step {next_step_name}",
-                details={
-                    "artifact_id": candidate_artifact.id,
-                    "validation_artifact_id": validation_artifact_id,
-                    "next_step_name": next_step_name,
-                },
+                    summary=f"Advanced to step {next_step_name}",
+                    details={
+                        "artifact_id": candidate_artifact.id,
+                        "validation_artifact_id": validation_artifact_id,
+                        "specialist_invocation_id": invocation_id,
+                        "next_step_name": next_step_name,
+                    },
+                )
             )
-        )
         return self.get_run_state(run_id)
 
     def fail_current_step(self, run_id: int, failure: ExecutionFailurePayload) -> WorkflowRunState:
         state = self.start_current_step(run_id)
         step = self._require_current_step(state)
+        return self._fail_started_step(run_id, step=step, failure=failure)
+
+    def _fail_started_step(self, run_id: int, *, step, failure: ExecutionFailurePayload) -> WorkflowRunState:
         self._step_repo.update(
             step.id,
             WorkflowStepPatch(
@@ -418,6 +517,7 @@ class WorkflowOrchestrationService:
             if artifact.artifact_type
             in {
                 WorkflowArtifactType.NORMALIZED_TASK.value,
+                WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
             }
         )
         return WorkflowSummaryArtifact(
@@ -461,6 +561,26 @@ class WorkflowOrchestrationService:
         if validator is None:
             return None
         return validator.validate(payload)
+
+    def _mark_invocation(
+        self,
+        invocation_id: int | None,
+        *,
+        output_artifact_id: int | None,
+        status: str,
+        error_summary: str | None = None,
+    ) -> None:
+        if invocation_id is None:
+            return
+        self._invocation_repo.update(
+            invocation_id,
+            WorkflowSpecialistInvocationPatch(
+                output_artifact_id=output_artifact_id,
+                status=status,
+                completed_at=_now(),
+                error_summary=error_summary,
+            ),
+        )
 
 
 def _payload_dict(payload: object) -> dict[str, Any]:

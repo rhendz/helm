@@ -51,6 +51,20 @@ class RawWorkflowRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class TaskAgentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_type: str
+    run_id: int
+    step_name: str
+    request_artifact_id: int
+    request_text: str
+    submitted_by: str
+    channel: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    constraints: tuple[str, ...] = ()
+
+
 class NormalizedTaskArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -58,6 +72,47 @@ class NormalizedTaskArtifact(BaseModel):
     summary: str
     tasks: tuple[TaskArtifact, ...]
     warnings: tuple[str, ...] = ()
+
+
+class TaskAgentOutput(NormalizedTaskArtifact):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ScheduleBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    start: str
+    end: str
+    task_title: str | None = None
+
+
+class CalendarAgentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workflow_type: str
+    run_id: int
+    step_name: str
+    normalized_task_artifact_id: int
+    tasks: tuple[TaskArtifact, ...]
+    scheduling_constraints: tuple[str, ...] = ()
+    source_context: dict[str, Any] = Field(default_factory=dict)
+    request_text: str | None = None
+    warnings: tuple[str, ...] = ()
+
+
+class ScheduleProposalArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal_summary: str
+    calendar_id: str | None = None
+    time_blocks: tuple[ScheduleBlock, ...]
+    proposed_changes: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+
+
+class CalendarAgentOutput(ScheduleProposalArtifact):
+    model_config = ConfigDict(extra="forbid")
 
 
 class ValidationReport(BaseModel):

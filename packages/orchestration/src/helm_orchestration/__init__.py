@@ -1,37 +1,58 @@
 """Workflow orchestration with explicit durable workflow state."""
 
 from helm_orchestration.contracts import (
+    PreparedSpecialistInput,
     RegisteredValidator,
-    StepExecutionResult,
+    SpecialistName,
     ValidationTargetKind,
     ValidatorTarget,
+    WorkflowSpecialistStep,
     WorkflowArtifactKind,
+    WorkflowStepExecutionError,
 )
 from helm_orchestration.schemas import (
+    CalendarAgentInput,
+    CalendarAgentOutput,
     ExecutionFailurePayload,
     NormalizedTaskArtifact,
     RawWorkflowRequest,
     RetryState,
     SCHEMA_VERSION,
+    ScheduleBlock,
+    ScheduleProposalArtifact,
+    TaskAgentInput,
+    TaskAgentOutput,
     TaskArtifact,
     ValidationIssue,
     ValidationOutcome,
     ValidationReport,
     WorkflowSummaryArtifact,
 )
-from helm_orchestration.validators import NormalizedTaskValidator, ValidatorRegistry
+from helm_orchestration.validators import (
+    NormalizedTaskValidator,
+    ScheduleProposalValidator,
+    ValidatorRegistry,
+)
 from helm_orchestration.workflow_service import WorkflowOrchestrationService
-from helm_orchestration.resume_service import WorkflowResumeService, WorkflowStepExecutionError
+from helm_orchestration.resume_service import WorkflowResumeService
 
 __all__ = [
+    "CalendarAgentInput",
+    "CalendarAgentOutput",
     "ExecutionFailurePayload",
     "NormalizedTaskArtifact",
     "NormalizedTaskValidator",
+    "PreparedSpecialistInput",
     "RawWorkflowRequest",
     "RegisteredValidator",
     "RetryState",
     "SCHEMA_VERSION",
-    "StepExecutionResult",
+    "ScheduleBlock",
+    "ScheduleProposalArtifact",
+    "ScheduleProposalValidator",
+    "SpecialistName",
+    "TaskAgentInput",
+    "TaskAgentOutput",
     "TaskArtifact",
     "ValidationIssue",
     "ValidationOutcome",
@@ -42,6 +63,7 @@ __all__ = [
     "WorkflowArtifactKind",
     "WorkflowOrchestrationService",
     "WorkflowResumeService",
+    "WorkflowSpecialistStep",
     "WorkflowSummaryArtifact",
     "WorkflowStepExecutionError",
 ]

@@ -1,10 +1,18 @@
 from helm_orchestration import (
+    CalendarAgentInput,
+    CalendarAgentOutput,
     ExecutionFailurePayload,
     NormalizedTaskArtifact,
     NormalizedTaskValidator,
+    PreparedSpecialistInput,
     RegisteredValidator,
     RetryState,
-    StepExecutionResult,
+    ScheduleBlock,
+    ScheduleProposalArtifact,
+    ScheduleProposalValidator,
+    SpecialistName,
+    TaskAgentInput,
+    TaskAgentOutput,
     TaskArtifact,
     ValidationOutcome,
     ValidationTargetKind,
@@ -13,11 +21,17 @@ from helm_orchestration import (
     WorkflowArtifactKind,
     WorkflowOrchestrationService,
     WorkflowResumeService,
+    WorkflowSpecialistStep,
     WorkflowSummaryArtifact,
     WorkflowStepExecutionError,
 )
 from helm_storage.db import Base
-from helm_storage.repositories import WorkflowArtifactType, WorkflowRunStatus, WorkflowStepStatus
+from helm_storage.repositories import (
+    SQLAlchemyWorkflowSpecialistInvocationRepository,
+    WorkflowArtifactType,
+    WorkflowRunStatus,
+    WorkflowStepStatus,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -157,10 +171,130 @@ def _service(session: Session) -> WorkflowOrchestrationService:
                     value="normalize_request",
                 ),
                 validator=NormalizedTaskValidator(),
-            )
+            ),
+            RegisteredValidator(
+                target=ValidatorTarget(
+                    kind=ValidationTargetKind.ARTIFACT_TYPE,
+                    value=WorkflowArtifactKind.NORMALIZED_TASK.value,
+                ),
+                validator=NormalizedTaskValidator(),
+            ),
+            RegisteredValidator(
+                target=ValidatorTarget(
+                    kind=ValidationTargetKind.ARTIFACT_TYPE,
+                    value=WorkflowArtifactKind.SCHEDULE_PROPOSAL.value,
+                ),
+                validator=ScheduleProposalValidator(),
+            ),
         ]
     )
     return WorkflowOrchestrationService(session, validator_registry=registry)
+
+
+def _task_agent_step() -> WorkflowSpecialistStep:
+    def _build_input(state) -> PreparedSpecialistInput:  # type: ignore[no-untyped-def]
+        request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
+        request = TaskAgentInput(
+            workflow_type=state.run.workflow_type,
+            run_id=state.run.id,
+            step_name="dispatch_task_agent",
+            request_artifact_id=request_artifact.id,
+            request_text=request_artifact.payload["request_text"],
+            submitted_by=request_artifact.payload["submitted_by"],
+            channel=request_artifact.payload["channel"],
+            metadata=request_artifact.payload["metadata"],
+            constraints=tuple(request_artifact.payload["metadata"].get("constraints", [])),
+        )
+        return PreparedSpecialistInput(input_artifact_id=request_artifact.id, payload=request)
+
+    def _handler(payload: object) -> TaskAgentOutput:
+        request = TaskAgentInput.model_validate(payload)
+        return TaskAgentOutput(
+            title="Weekly planning",
+            summary=f"Normalize request: {request.request_text}",
+            tasks=(
+                TaskArtifact(
+                    title="Triage inbox",
+                    summary="Clear pending email and categorize follow-ups.",
+                    priority="high",
+                    estimated_minutes=30,
+                ),
+                TaskArtifact(
+                    title="Draft priorities",
+                    summary="Prepare top work items for the week.",
+                    priority="medium",
+                    estimated_minutes=45,
+                ),
+            ),
+            warnings=("Clarify whether Friday should remain meeting-light.",),
+        )
+
+    return WorkflowSpecialistStep(
+        workflow_type="weekly_scheduling",
+        step_name="dispatch_task_agent",
+        specialist=SpecialistName.TASK_AGENT,
+        input_builder=_build_input,
+        handler=_handler,
+        artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
+        next_step_name="dispatch_calendar_agent",
+    )
+
+
+def _calendar_agent_step(*, valid_output: bool = True) -> WorkflowSpecialistStep:
+    def _build_input(state) -> PreparedSpecialistInput:  # type: ignore[no-untyped-def]
+        normalized_artifact = state.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value]
+        request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
+        normalized = NormalizedTaskArtifact.model_validate(normalized_artifact.payload)
+        request = CalendarAgentInput(
+            workflow_type=state.run.workflow_type,
+            run_id=state.run.id,
+            step_name="dispatch_calendar_agent",
+            normalized_task_artifact_id=normalized_artifact.id,
+            tasks=normalized.tasks,
+            scheduling_constraints=("Protect deep work mornings.", "Avoid lunch meetings."),
+            source_context={"chat_id": request_artifact.payload["metadata"]["chat_id"]},
+            request_text=request_artifact.payload["request_text"],
+            warnings=normalized.warnings,
+        )
+        return PreparedSpecialistInput(
+            input_artifact_id=normalized_artifact.id,
+            payload=request,
+        )
+
+    def _handler(payload: object) -> CalendarAgentOutput:
+        request = CalendarAgentInput.model_validate(payload)
+        time_blocks = (
+            ScheduleBlock(
+                title="Inbox triage",
+                task_title=request.tasks[0].title,
+                start="2026-03-16T09:00:00Z",
+                end="2026-03-16T09:30:00Z",
+            ),
+        )
+        if not valid_output:
+            time_blocks = ()
+        return CalendarAgentOutput(
+            proposal_summary="Draft a focused weekly schedule from validated tasks."
+            if valid_output
+            else "",
+            calendar_id="primary",
+            time_blocks=time_blocks,
+            proposed_changes=(
+                "Create a Monday morning triage block.",
+                "Reserve one review slot for drafting priorities.",
+            ),
+            warnings=("Calendar still needs a final conflict scan.",),
+        )
+
+    return WorkflowSpecialistStep(
+        workflow_type="weekly_scheduling",
+        step_name="dispatch_calendar_agent",
+        specialist=SpecialistName.CALENDAR_AGENT,
+        input_builder=_build_input,
+        handler=_handler,
+        artifact_type=WorkflowArtifactKind.SCHEDULE_PROPOSAL,
+        next_step_name=None,
+    )
 
 
 def test_validation_failure_blocks_run_durably() -> None:
@@ -302,97 +436,161 @@ def test_terminate_marks_run_terminal_without_downstream_advance() -> None:
         assert state.run.retry_state == RetryState.TERMINAL.value
 
 
-def test_resume_service_uses_persisted_state_after_interruption() -> None:
+def test_task_agent_specialist_dispatch_persists_typed_input_and_advances() -> None:
     with _session() as session:
         service = _service(session)
         created = service.create_run(
-            workflow_type="weekly_digest",
-            first_step_name="normalize_request",
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
             request_payload=_request_payload(),
         )
         resume_service = WorkflowResumeService(
             session,
             workflow_service=service,
-            handlers={
-                "normalize_request": lambda _state: StepExecutionResult(
-                    artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
-                    payload=_normalized_task(priority="high"),
-                    next_step_name="summarize",
-                )
-            },
+            specialist_steps={_task_agent_step().key: _task_agent_step()},
         )
 
         resumed = resume_service.resume_run(created.run.id)
+        invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
+        invocation = invocation_repo.list_for_run(created.run.id)[0]
 
-        assert resumed.run.current_step_name == "summarize"
+        assert resumed.run.current_step_name == "dispatch_calendar_agent"
         assert resumed.run.status == WorkflowRunStatus.RUNNING.value
-        assert resumed.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload["title"] == (
-            "Weekly planning"
-        )
+        assert resumed.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload["title"] == "Weekly planning"
+        assert invocation.specialist_name == SpecialistName.TASK_AGENT.value
+        assert invocation.status == WorkflowStepStatus.SUCCEEDED.value
+        assert invocation.output_artifact_id == resumed.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].id
 
 
-def test_resume_service_skips_blocked_runs_until_explicit_retry() -> None:
+def test_specialist_resume_service_skips_blocked_runs_until_explicit_retry() -> None:
     with _session() as session:
         service = _service(session)
         blocked = service.create_run(
-            workflow_type="weekly_digest",
-            first_step_name="normalize_request",
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
             request_payload=_request_payload(),
         )
         runnable = service.create_run(
-            workflow_type="weekly_digest",
-            first_step_name="normalize_request",
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
             request_payload=_request_payload(),
-        )
-        service.complete_current_step(
-            blocked.run.id,
-            artifact_type=WorkflowArtifactType.NORMALIZED_TASK.value,
-            artifact_payload={"title": "Weekly planning", "summary": "", "tasks": []},
-            next_step_name="summarize",
         )
         resume_service = WorkflowResumeService(
             session,
             workflow_service=service,
-            handlers={
-                "normalize_request": lambda _state: StepExecutionResult(
-                    artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
-                    payload=_normalized_task(),
-                    next_step_name="summarize",
-                )
-            },
+            specialist_steps={_task_agent_step().key: _task_agent_step()},
+        )
+        blocked_state = service.execute_specialist_step(
+            blocked.run.id,
+            WorkflowSpecialistStep(
+                workflow_type="weekly_scheduling",
+                step_name="dispatch_task_agent",
+                specialist=SpecialistName.TASK_AGENT,
+                input_builder=_task_agent_step().input_builder,
+                handler=lambda _payload: TaskAgentOutput(title="Weekly planning", summary="", tasks=()),
+                artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
+                next_step_name="dispatch_calendar_agent",
+            ),
+        )
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_task_agent_step().key: _task_agent_step()},
         )
 
         initial_runnable = resume_service.list_runnable_runs()
         assert [state.run.id for state in initial_runnable] == [runnable.run.id]
+        assert blocked_state.run.status == WorkflowRunStatus.BLOCKED.value
 
         service.retry_current_step(blocked.run.id, reason="Operator requested retry.")
         retried_runnable = resume_service.list_runnable_runs()
         assert [state.run.id for state in retried_runnable] == [blocked.run.id, runnable.run.id]
 
 
-def test_resume_service_records_handler_exceptions_as_failed_runs() -> None:
+def test_calendar_agent_specialist_validation_failure_blocks_after_output() -> None:
     with _session() as session:
         service = _service(session)
         created = service.create_run(
-            workflow_type="weekly_digest",
-            first_step_name="normalize_request",
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
             request_payload=_request_payload(),
+        )
+        task_state = service.execute_specialist_step(created.run.id, _task_agent_step())
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step(valid_output=False).key: _calendar_agent_step(valid_output=False)},
+        )
+
+        blocked = resume_service.resume_run(task_state.run.id)
+        invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
+        invocations = invocation_repo.list_for_run(created.run.id)
+
+        assert blocked.run.status == WorkflowRunStatus.BLOCKED.value
+        assert blocked.current_step is not None
+        assert blocked.current_step.step_name == "dispatch_calendar_agent"
+        assert blocked.current_step.status == WorkflowStepStatus.VALIDATION_FAILED.value
+        assert blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload["proposal_summary"] == ""
+        assert invocations[-1].specialist_name == SpecialistName.CALENDAR_AGENT.value
+        assert invocations[-1].status == WorkflowStepStatus.VALIDATION_FAILED.value
+
+
+def test_calendar_agent_specialist_persists_schedule_proposal_with_warnings() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        service.execute_specialist_step(created.run.id, _task_agent_step())
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={_calendar_agent_step().key: _calendar_agent_step()},
+        )
+
+        completed = resume_service.resume_run(created.run.id)
+
+        assert completed.run.status == WorkflowRunStatus.COMPLETED.value
+        proposal = ScheduleProposalArtifact.model_validate(
+            completed.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload
+        )
+        assert proposal.warnings == ("Calendar still needs a final conflict scan.",)
+        validation = completed.latest_artifacts[WorkflowArtifactType.VALIDATION_RESULT.value].payload
+        assert validation["outcome"] == ValidationOutcome.PASSED_WITH_WARNINGS.value
+
+
+def test_specialist_resume_service_records_handler_exceptions_as_failed_runs() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        failing_step = WorkflowSpecialistStep(
+            workflow_type="weekly_scheduling",
+            step_name="dispatch_task_agent",
+            specialist=SpecialistName.TASK_AGENT,
+            input_builder=_task_agent_step().input_builder,
+            handler=lambda _payload: (_ for _ in ()).throw(
+                WorkflowStepExecutionError(
+                    ExecutionFailurePayload(
+                        error_type="specialist_timeout",
+                        message="Task agent timed out.",
+                        retry_state=RetryState.RETRYABLE,
+                        retryable=True,
+                    )
+                )
+            ),
+            artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
+            next_step_name="dispatch_calendar_agent",
         )
         resume_service = WorkflowResumeService(
             session,
             workflow_service=service,
-            handlers={
-                "normalize_request": lambda _state: (_ for _ in ()).throw(
-                    WorkflowStepExecutionError(
-                        ExecutionFailurePayload(
-                            error_type="specialist_timeout",
-                            message="Task agent timed out.",
-                            retry_state=RetryState.RETRYABLE,
-                            retryable=True,
-                        )
-                    )
-                )
-            },
+            specialist_steps={failing_step.key: failing_step},
         )
 
         failed = resume_service.resume_run(created.run.id)
@@ -400,6 +598,26 @@ def test_resume_service_records_handler_exceptions_as_failed_runs() -> None:
         assert failed.run.status == WorkflowRunStatus.FAILED.value
         assert failed.current_step is not None
         assert failed.current_step.status == WorkflowStepStatus.FAILED.value
+
+
+def test_specialist_resume_service_uses_workflow_semantic_keys() -> None:
+    with _session() as session:
+        service = _service(session)
+        created = service.create_run(
+            workflow_type="weekly_scheduling",
+            first_step_name="dispatch_task_agent",
+            request_payload=_request_payload(),
+        )
+        resume_service = WorkflowResumeService(
+            session,
+            workflow_service=service,
+            specialist_steps={("other_workflow", "dispatch_task_agent"): _task_agent_step()},
+        )
+
+        failed = resume_service.resume_run(created.run.id)
+
+        assert failed.run.status == WorkflowRunStatus.FAILED.value
+        assert failed.run.failure_class == "missing_step_handler"
 
 
 def test_final_summary_artifact_creation_completes_workflow() -> None:

@@ -8,7 +8,13 @@ from helm_orchestration.contracts import (
     ValidatorTarget,
     WorkflowValidator,
 )
-from helm_orchestration.schemas import NormalizedTaskArtifact, ValidationIssue, ValidationOutcome, ValidationReport
+from helm_orchestration.schemas import (
+    NormalizedTaskArtifact,
+    ScheduleProposalArtifact,
+    ValidationIssue,
+    ValidationOutcome,
+    ValidationReport,
+)
 
 
 class ValidatorRegistry:
@@ -115,6 +121,76 @@ class NormalizedTaskValidator:
         return ValidationReport(
             outcome=ValidationOutcome.PASSED,
             summary="Normalized task artifact passed validation.",
+            validator_name=self.name,
+        )
+
+
+class ScheduleProposalValidator:
+    name = "schedule-proposal-validator"
+
+    def validate(self, payload: object) -> ValidationReport:
+        artifact = (
+            payload
+            if isinstance(payload, ScheduleProposalArtifact)
+            else ScheduleProposalArtifact.model_validate(payload)
+        )
+
+        issues: list[ValidationIssue] = []
+        warnings: list[str] = list(artifact.warnings)
+
+        if not artifact.proposal_summary.strip():
+            issues.append(
+                ValidationIssue(
+                    code="missing_summary",
+                    message="Schedule proposal requires a summary.",
+                    path=("proposal_summary",),
+                )
+            )
+        if not artifact.time_blocks:
+            issues.append(
+                ValidationIssue(
+                    code="missing_time_blocks",
+                    message="Schedule proposal must include at least one time block.",
+                    path=("time_blocks",),
+                )
+            )
+
+        for index, block in enumerate(artifact.time_blocks):
+            if not block.title.strip():
+                issues.append(
+                    ValidationIssue(
+                        code="block_missing_title",
+                        message="Each schedule block requires a title.",
+                        path=("time_blocks", str(index), "title"),
+                    )
+                )
+            if not block.start.strip() or not block.end.strip():
+                issues.append(
+                    ValidationIssue(
+                        code="block_missing_window",
+                        message="Each schedule block requires start and end timestamps.",
+                        path=("time_blocks", str(index)),
+                    )
+                )
+
+        if issues:
+            return ValidationReport(
+                outcome=ValidationOutcome.FAILED,
+                summary="Schedule proposal failed validation.",
+                validator_name=self.name,
+                issues=tuple(issues),
+                warnings=tuple(warnings),
+            )
+        if warnings:
+            return ValidationReport(
+                outcome=ValidationOutcome.PASSED_WITH_WARNINGS,
+                summary="Schedule proposal passed with warnings.",
+                validator_name=self.name,
+                warnings=tuple(warnings),
+            )
+        return ValidationReport(
+            outcome=ValidationOutcome.PASSED,
+            summary="Schedule proposal passed validation.",
             validator_name=self.name,
         )
 
