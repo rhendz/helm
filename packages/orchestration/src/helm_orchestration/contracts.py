@@ -35,3 +35,10 @@ class WorkflowValidator(Protocol):
 class RegisteredValidator:
     target: ValidatorTarget
     validator: WorkflowValidator
+
+
+@dataclass(frozen=True, slots=True)
+class StepExecutionResult:
+    artifact_type: WorkflowArtifactKind
+    payload: object
+    next_step_name: str | None = None

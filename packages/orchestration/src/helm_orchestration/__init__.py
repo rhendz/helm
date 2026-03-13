@@ -2,6 +2,7 @@
 
 from helm_orchestration.contracts import (
     RegisteredValidator,
+    StepExecutionResult,
     ValidationTargetKind,
     ValidatorTarget,
     WorkflowArtifactKind,
@@ -19,6 +20,8 @@ from helm_orchestration.schemas import (
     WorkflowSummaryArtifact,
 )
 from helm_orchestration.validators import NormalizedTaskValidator, ValidatorRegistry
+from helm_orchestration.workflow_service import WorkflowOrchestrationService
+from helm_orchestration.resume_service import WorkflowResumeService, WorkflowStepExecutionError
 
 __all__ = [
     "ExecutionFailurePayload",
@@ -28,6 +31,7 @@ __all__ = [
     "RegisteredValidator",
     "RetryState",
     "SCHEMA_VERSION",
+    "StepExecutionResult",
     "TaskArtifact",
     "ValidationIssue",
     "ValidationOutcome",
@@ -36,5 +40,8 @@ __all__ = [
     "ValidatorRegistry",
     "ValidatorTarget",
     "WorkflowArtifactKind",
+    "WorkflowOrchestrationService",
+    "WorkflowResumeService",
     "WorkflowSummaryArtifact",
+    "WorkflowStepExecutionError",
 ]
