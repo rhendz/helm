@@ -78,11 +78,12 @@ Plans:
   2. The workflow produces normalized task artifacts, scheduling proposals, approval checkpoints, and approved adapter writes using the shared kernel.
   3. Revision feedback at the approval gate produces a new proposal version without losing lineage to earlier attempts.
   4. The completed run exposes full lineage from raw input to external sync results and final summary.
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
 - [x] 04-01: Implement the fixed weekly scheduling workflow on top of the kernel primitives.
 - [x] 04-02: Add end-to-end verification, restart/recovery checks, and operator-facing completion summaries for the representative flow.
+- [x] 04-03: Fix replay-recovery status precedence for completed representative runs and add focused replay/status/Telegram regressions.
 
 ## Progress
 
@@ -94,4 +95,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Durable Workflow Foundation | 3/3 | Complete | 2026-03-13 |
 | 2. Specialist Dispatch And Approval Semantics | 3/3 | Complete | 2026-03-12 |
 | 3. Adapter Writes And Recovery Guarantees | 5/5 | Complete | 2026-03-12 |
-| 4. Representative Scheduling Workflow | 2/2 | Complete | 2026-03-13 |
+| 4. Representative Scheduling Workflow | 3/3 | Complete | 2026-03-13 |

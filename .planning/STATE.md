@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Phase 4 plan 04-02 complete
-last_updated: "2026-03-13T03:05:00Z"
-last_activity: 2026-03-13 — Completed phase 4 plan 02 representative final-summary lineage, completion projections, and verification
+stopped_at: Phase 4 plan 04-03 complete
+last_updated: "2026-03-13T23:08:13Z"
+last_activity: 2026-03-13 — Completed phase 4 plan 03 replay-recovery status precedence fix and focused regression coverage
 progress:
   total_phases: 4
   completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 14
+  completed_plans: 14
   percent: 100
 ---
 
@@ -26,18 +26,18 @@ See: .planning/PROJECT.md (updated 2026-03-11)
 ## Current Position
 
 Phase: 4 of 4 (Representative Scheduling Workflow)
-Plan: 2 of 2 in current phase
+Plan: 3 of 3 in current phase
 Status: Complete
-Last activity: 2026-03-13 — Completed phase 4 plan 02 representative final-summary lineage, completion projections, and verification
+Last activity: 2026-03-13 — Completed phase 4 plan 03 replay-recovery status precedence fix and focused regression coverage
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
-- Average duration: 13 min
-- Total execution time: 5.1 hours
+- Total plans completed: 14
+- Average duration: 24 min
+- Total execution time: 5.5 hours
 
 **By Phase:**
 
@@ -46,11 +46,11 @@ Progress: [██████████] 100%
 | 1 | 3 | 30 min | 10 min |
 | 2 | 3 | 30 min | 10 min |
 | 3 | 5 | 80 min | 16 min |
-| 4 | 2 | 170 min | 85 min |
+| 4 | 3 | 193 min | 64 min |
 
 **Recent Trend:**
-- Last 5 plans: 10 min, 9 min, 24 min, 115 min, 55 min
-- Trend: Complete after heavier cross-boundary representative workflow work
+- Last 5 plans: 9 min, 24 min, 115 min, 55 min, 23 min
+- Trend: Complete with final representative workflow gap closure and regression hardening
 
 *Updated after each plan completion*
 | Phase 01 P02 | 6 min | 3 tasks | 11 files |
@@ -65,6 +65,7 @@ Progress: [██████████] 100%
 | Phase 03 P05 | 24 min | 3 tasks | 10 files |
 | Phase 04 P01 | 115 min | 3 tasks | 11 files |
 | Phase 04 P02 | 55 min | 3 tasks | 11 files |
+| Phase 04 P03 | 23 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,7 @@ Recent decisions affecting current work:
 - [Phase 04]: Representative completed runs persist a final summary artifact automatically when approved sync execution finishes.
 - [Phase 04]: Shared representative completion and recovery summaries derive from final-summary artifacts plus sync rows rather than stale event text.
 - [Phase 04]: Telegram representative completion messaging prefers compact outcome summaries and leaves deep lineage to run detail surfaces.
+- [Phase 04]: Live replay-requested recovery classification overrides stale successful final-summary messaging in the shared completion projection while lineage stays unchanged.
 
 ### Pending Todos
 
@@ -122,6 +124,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-13T02:10:00Z
-Stopped at: Phase 4 plan 04-02 complete
-Resume file: .planning/phases/04-representative-scheduling-workflow/04-02-SUMMARY.md
+Last session: 2026-03-13T22:45:00Z
+Stopped at: Phase 4 plan 04-03 complete
+Resume file: .planning/phases/04-representative-scheduling-workflow/04-03-SUMMARY.md
