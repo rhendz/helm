@@ -477,7 +477,20 @@ class WorkflowStatusService:
             WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value,
         }
         retry_state = "retryable" if retryable else None
-        safe_next_actions = self._safe_next_actions(recovery_class=recovery_class, last_record=last_failed_record)
+        successful_replay_sources = [
+            record
+            for record in sync_records
+            if record.status == WorkflowSyncStatus.SUCCEEDED.value
+            and record.replayed_from_sync_record_id is None
+            and record.replay_requested_at is None
+            and record.supersedes_sync_record_id is None
+            and not record.recovery_classification
+        ]
+        safe_next_actions = self._safe_next_actions(
+            recovery_class=recovery_class,
+            last_record=last_failed_record,
+            has_successful_replay_sources=bool(successful_replay_sources),
+        )
 
         return {
             "has_sync_records": True,
@@ -532,7 +545,15 @@ class WorkflowStatusService:
             "completed_at": sync_record.completed_at,
         }
 
-    def _safe_next_actions(self, *, recovery_class: str | None, last_record) -> list[dict[str, str]]:  # noqa: ANN001
+    def _safe_next_actions(
+        self,
+        *,
+        recovery_class: str | None,
+        last_record,
+        has_successful_replay_sources: bool,
+    ) -> list[dict[str, str]]:  # noqa: ANN001
+        if recovery_class is None and has_successful_replay_sources:
+            return [{"action": "request_replay", "label": "Request explicit replay after adapter fix"}]
         if last_record is None:
             return []
         if recovery_class == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value:
@@ -762,7 +783,15 @@ class WorkflowStatusService:
                 for item in sync_projection["safe_next_actions"]
                 if isinstance(item, dict) and isinstance(item.get("label"), str)
             )
-            if labels:
+            only_success_replay_option = (
+                sync_projection.get("recovery_class") is None
+                and state.run.status == WorkflowRunStatus.COMPLETED.value
+                and all(
+                    isinstance(item, dict) and item.get("action") == "request_replay"
+                    for item in sync_projection["safe_next_actions"]
+                )
+            )
+            if labels and not only_success_replay_option:
                 attention_items.append(f"Next: {labels}.")
 
         return {

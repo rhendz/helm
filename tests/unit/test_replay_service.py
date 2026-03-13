@@ -296,6 +296,40 @@ def test_completed_run_replay_leaves_durable_recovery_truth_for_shared_projectio
         )
 
 
+def test_api_workflow_replay_endpoint_accepts_completed_successful_representative_run(monkeypatch) -> None:  # noqa: ANN001
+    _engine, session_local = _session_factory()
+    monkeypatch.setattr(replay_service, "SessionLocal", session_local)
+
+    with session_local() as session:
+        run_id = _completed_sync_run(session)
+        source_sync_record_ids = [
+            record.id
+            for record in SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)
+            if record.replayed_from_sync_record_id is None
+        ]
+
+    client = TestClient(app)
+    response = client.post(
+        f"/v1/replay/workflow-runs/{run_id}",
+        json={"actor": "api:operator", "reason": "Replay completed run after adapter drift."},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "accepted"
+    assert payload["run_id"] == run_id
+    assert payload["source_sync_record_ids"] == source_sync_record_ids
+    assert payload["replay_queue_source_ids"] == [f"{run_id}:{sync_record_id}" for sync_record_id in source_sync_record_ids]
+    assert payload["run"]["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+    assert payload["run"]["safe_next_actions"] == [
+        {"action": "await_replay", "label": "Await replay processing"}
+    ]
+    assert payload["run"]["completion_summary"]["headline"] == (
+        "Approved schedule needs downstream follow-up after 4 planned write(s)."
+    )
+    assert payload["run"]["sync"]["replay_lineage"]["source_sync_record_ids"] == source_sync_record_ids
+
+
 def test_api_workflow_replay_endpoint_rejects_retryable_sync_failures(monkeypatch) -> None:  # noqa: ANN001
     _engine, session_local = _session_factory()
     monkeypatch.setattr(replay_service, "SessionLocal", session_local)

@@ -421,6 +421,24 @@ def test_effect_summary_projects_pending_approved_write_counts_before_execution(
         assert summary["completion_summary"]["scheduled_highlights"] == ["Triage inbox"]
 
 
+def test_completed_sync_summary_surfaces_explicit_replay_action_for_successful_lineage() -> None:
+    with _session() as session:
+        run_id, orchestration, _calendar_adapter = _approved_sync_run(session)
+        completed = orchestration.execute_pending_sync_step(run_id)
+
+        summary = WorkflowStatusService(session).get_run_detail(completed.run.id)
+
+        assert summary is not None
+        assert summary["status"] == WorkflowRunStatus.COMPLETED.value
+        assert summary["failure_kind"] is None
+        assert summary["recovery_class"] is None
+        assert summary["safe_next_actions"] == [
+            {"action": "request_replay", "label": "Request explicit replay after adapter fix"}
+        ]
+        assert summary["completion_summary"]["headline"] == "Scheduled 1 block(s) and synced 2 approved write(s)."
+        assert summary["completion_summary"]["downstream_sync_status"] == "succeeded"
+
+
 def test_sync_summary_projects_recoverable_failure_and_replay_lineage() -> None:
     with _session() as session:
         run_id, orchestration, _calendar_adapter = _approved_sync_run(session)

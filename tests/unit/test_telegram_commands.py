@@ -597,6 +597,54 @@ async def test_workflow_list_surfaces_safe_replay_action(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
+async def test_workflow_list_surfaces_replay_action_for_completed_successful_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Service:
+        def list_recent_runs(self) -> list[dict[str, object]]:
+            return [
+                {
+                    "id": 15,
+                    "status": "completed",
+                    "current_step": "apply_schedule",
+                    "paused_state": None,
+                    "last_event_summary": "Completed step apply_schedule",
+                    "needs_action": False,
+                    "available_actions": [],
+                    "safe_next_actions": [
+                        {"action": "request_replay", "label": "Request explicit replay after adapter fix"}
+                    ],
+                    "completion_summary": {
+                        "headline": "Scheduled 1 block(s) and synced 2 approved write(s).",
+                        "scheduled_highlights": ["Triage inbox"],
+                        "total_sync_writes": 2,
+                        "task_sync_writes": 1,
+                        "calendar_sync_writes": 1,
+                        "downstream_sync_status": "succeeded",
+                        "carry_forward_tasks": [],
+                        "attention_items": [],
+                    },
+                }
+            ]
+
+    async def _allow(_update: _Update, _context: _Context) -> bool:
+        return False
+
+    monkeypatch.setattr(workflows, "reject_if_unauthorized", _allow)
+    monkeypatch.setattr(workflows, "_service", _Service())
+    update = _Update()
+
+    await workflows.recent(update, _Context(args=[]))
+
+    assert update.message.replies == [
+        "Run 15 [completed] step=apply_schedule paused=active\n"
+        "Last: Completed step apply_schedule\n"
+        "Needs action: no | Next: request_replay\n"
+        "Outcome: Scheduled 1 block(s) and synced 2 approved write(s).\n"
+        "Scheduled: Triage inbox\n"
+        "Sync: 2 writes (1 task, 1 calendar) status=succeeded"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_workflow_replay_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
         def __init__(self) -> None:

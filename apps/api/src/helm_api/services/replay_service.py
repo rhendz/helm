@@ -190,6 +190,14 @@ def _select_replayable_sync_record_ids(sync_records: list[object]) -> list[int]:
     for record in sync_records:
         if record.replayed_from_sync_record_id is not None:
             continue
+        if record.replay_requested_at is not None or record.supersedes_sync_record_id is not None:
+            continue
+        if (
+            record.status == WorkflowSyncStatus.SUCCEEDED.value
+            and record.recovery_classification in {None, ""}
+        ):
+            replayable.append(record.id)
+            continue
         if record.recovery_classification == WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value and (
             record.status == WorkflowSyncStatus.FAILED_TERMINAL.value
         ):

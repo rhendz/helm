@@ -1,11 +1,11 @@
 ---
-status: diagnosed
+status: passed
 phase: 04-representative-scheduling-workflow
 source:
   - 04-01-SUMMARY.md
   - 04-02-SUMMARY.md
 started: 2026-03-13T03:20:00Z
-updated: 2026-03-13T03:40:00Z
+updated: 2026-03-13T23:55:00Z
 ---
 
 ## Current Test
@@ -33,39 +33,17 @@ result: pass
 
 ### 5. Inspect Recovery Or Replay State
 expected: If the workflow enters a recovery-oriented state such as replay requested, the shared API and Telegram summaries should describe downstream follow-up truthfully rather than collapsing the run into a generic queued or completed message.
-result: issue
-reported: "/workflow_replay 1 Check replay recovery summary. left /workflows showing the run as an ordinary completed run with no recovery-oriented summary."
-severity: major
+result: pass
+reported: "Live Telegram verification on March 13, 2026 showed `/workflow_replay 3 Check replay recovery summary.` leaving `/workflows` in a replay-aware state with `Next: await_replay`, recovery-oriented outcome text, and `status=replay_requested`."
 
 ## Summary
 
 total: 5
-passed: 4
-issues: 1
+passed: 5
+issues: 0
 pending: 0
 skipped: 0
 
 ## Gaps
 
-- truth: "If the workflow enters a recovery-oriented state such as replay requested, the shared API and Telegram summaries should describe downstream follow-up truthfully rather than collapsing the run into a generic queued or completed message."
-  status: failed
-  reason: "User reported: /workflow_replay 1 Check replay recovery summary. left /workflows showing the run as an ordinary completed run with no recovery-oriented summary."
-  severity: major
-  test: 5
-  root_cause: "The shared workflow status projection prioritizes stale successful final-summary state over live replay-requested recovery state, so completed-then-replayed runs still render as ordinary completed runs."
-  artifacts:
-    - path: "apps/api/src/helm_api/services/workflow_status_service.py"
-      issue: "Completion headline and summary logic prefer persisted final-summary success over live sync recovery classification."
-    - path: "packages/orchestration/src/helm_orchestration/workflow_service.py"
-      issue: "Final summary is created at sync completion and not refreshed when replay later changes downstream follow-up state."
-    - path: "tests/unit/test_replay_service.py"
-      issue: "Missing completed-then-replay coverage for representative runs."
-    - path: "tests/unit/test_workflow_status_service.py"
-      issue: "Missing shared projection coverage for completed representative runs that later become replay-requested."
-    - path: "tests/unit/test_telegram_commands.py"
-      issue: "Missing `/workflows` replay-summary coverage for completed representative runs."
-  missing:
-    - "Make live replay/recovery classification override stale completed-success messaging in shared completion summaries."
-    - "Project downstream sync status and attention items from live sync recovery state when replay is active."
-    - "Add representative tests for completed -> replay-requested summaries in API/status and Telegram `/workflows` output."
-  debug_session: ".planning/debug/phase-04-replay-recovery-summary-gap.md"
+- none
