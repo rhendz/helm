@@ -65,7 +65,7 @@ completed: 2026-03-13
 Each task was committed atomically where feasible:
 
 1. **Task 1-3: Representative weekly scheduling implementation and shared projections** - `3fbbfe5`
-2. **Plan metadata and summary updates** - pending commit
+2. **Plan metadata and summary updates** - `2145c46`
 
 ## Files Created/Modified
 - `apps/api/src/helm_api/services/workflow_status_service.py` - Shared weekly-request parsing, create-path normalization, and richer workflow status projection.
