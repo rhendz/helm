@@ -1,4 +1,3 @@
-
 from helm_api.services.workflow_status_service import (
     WorkflowRunCreateInput,
     WorkflowStatusService,
@@ -263,7 +262,9 @@ def _calendar_agent_step() -> WorkflowSpecialistStep:
     )
 
 
-def _approved_sync_run(session: Session) -> tuple[int, WorkflowOrchestrationService, _RecordingCalendarAdapter]:
+def _approved_sync_run(
+    session: Session,
+) -> tuple[int, WorkflowOrchestrationService, _RecordingCalendarAdapter]:
     task_adapter = _RecordingTaskAdapter()
     calendar_adapter = _RecordingCalendarAdapter()
     service = WorkflowOrchestrationService(
@@ -357,7 +358,10 @@ def test_blocked_run_summary_distinguishes_validation_failure() -> None:
         assert summary["failure_kind"] == "blocked_validation"
         assert summary["failure_summary"] == "Normalized task artifact failed validation."
         assert summary["retryable"] is True
-        assert [action["action"] for action in summary["available_actions"]] == ["retry", "terminate"]
+        assert [action["action"] for action in summary["available_actions"]] == [
+            "retry",
+            "terminate",
+        ]
 
 
 def test_approval_blocked_run_summary_projects_checkpoint_state() -> None:
@@ -390,7 +394,10 @@ def test_approval_blocked_run_summary_projects_checkpoint_state() -> None:
         ]
         assert summary["latest_validation_outcome"] == ValidationOutcome.PASSED.value
         assert summary["latest_decision"] is None
-        assert summary["latest_proposal_version"]["artifact_id"] == summary["approval_checkpoint"]["target_artifact_id"]
+        assert (
+            summary["latest_proposal_version"]["artifact_id"]
+            == summary["approval_checkpoint"]["target_artifact_id"]
+        )
         assert summary["proposal_versions"][0]["is_actionable"] is True
 
 
@@ -416,7 +423,10 @@ def test_effect_summary_projects_pending_approved_write_counts_before_execution(
         assert summary["safe_next_actions"] == [
             {"action": "await_execution", "label": "Await approved write execution"}
         ]
-        assert summary["completion_summary"]["headline"] == "Approved schedule is queued to sync 2 planned write(s)."
+        assert (
+            summary["completion_summary"]["headline"]
+            == "Approved schedule is queued to sync 2 planned write(s)."
+        )
         assert summary["completion_summary"]["scheduled_highlights"] == ["Triage inbox"]
 
 
@@ -434,7 +444,10 @@ def test_completed_sync_summary_surfaces_explicit_replay_action_for_successful_l
         assert summary["safe_next_actions"] == [
             {"action": "request_replay", "label": "Request explicit replay after adapter fix"}
         ]
-        assert summary["completion_summary"]["headline"] == "Scheduled 1 block(s) and synced 2 approved write(s)."
+        assert (
+            summary["completion_summary"]["headline"]
+            == "Scheduled 1 block(s) and synced 2 approved write(s)."
+        )
         assert summary["completion_summary"]["downstream_sync_status"] == "succeeded"
 
 
@@ -462,9 +475,14 @@ def test_sync_summary_projects_recoverable_failure_and_replay_lineage() -> None:
 
         assert summary is not None
         assert summary["failure_kind"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
-        assert summary["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        assert (
+            summary["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        )
         assert summary["retryable"] is True
-        assert summary["sync"]["last_failed_or_unresolved"]["planned_item_key"] == "calendar:inbox-triage:1"
+        assert (
+            summary["sync"]["last_failed_or_unresolved"]["planned_item_key"]
+            == "calendar:inbox-triage:1"
+        )
         assert summary["sync"]["replay_lineage"]["source_sync_record_ids"] == [failed_record.id]
         assert summary["sync"]["replay_lineage"]["latest_generation"] == 1
         assert summary["safe_next_actions"] == [
@@ -499,7 +517,10 @@ def test_terminal_sync_failure_projects_terminal_recovery_without_event_parsing(
             WorkflowSyncStatus.PENDING.value: 1,
             WorkflowSyncStatus.FAILED_TERMINAL.value: 1,
         }
-        assert summary["sync"]["last_failed_or_unresolved"]["status"] == WorkflowSyncStatus.FAILED_TERMINAL.value
+        assert (
+            summary["sync"]["last_failed_or_unresolved"]["status"]
+            == WorkflowSyncStatus.FAILED_TERMINAL.value
+        )
 
 
 def test_partial_sync_summary_stays_visible_after_termination() -> None:
@@ -526,7 +547,10 @@ def test_partial_sync_summary_stays_visible_after_termination() -> None:
         assert summary["failure_kind"] == (
             WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
         )
-        assert summary["failure_summary"] == "Remaining approved writes were cancelled after partial sync success."
+        assert (
+            summary["failure_summary"]
+            == "Remaining approved writes were cancelled after partial sync success."
+        )
         assert summary["retryable"] is False
         assert summary["safe_next_actions"] == [
             {"action": "request_replay", "label": "Request replay for cancelled writes"}
@@ -535,7 +559,10 @@ def test_partial_sync_summary_stays_visible_after_termination() -> None:
             WorkflowSyncStatus.SUCCEEDED.value: 1,
             WorkflowSyncStatus.CANCELLED.value: 1,
         }
-        assert summary["sync"]["last_failed_or_unresolved"]["planned_item_key"] == "calendar:inbox-triage:1"
+        assert (
+            summary["sync"]["last_failed_or_unresolved"]["planned_item_key"]
+            == "calendar:inbox-triage:1"
+        )
         assert summary["sync"]["last_failed_or_unresolved"]["recovery_class"] == (
             WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
         )
@@ -557,7 +584,9 @@ def test_status_projection_contract_stays_stable_after_replay_on_terminated_run(
             failed.run.id,
             reason="Operator froze remaining writes after partial sync.",
         )
-        cancelled_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(terminated.run.id)[1]
+        cancelled_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(
+            terminated.run.id
+        )[1]
         replay_state = orchestration.request_sync_replay(
             terminated.run.id,
             actor="telegram:user",
@@ -645,7 +674,10 @@ def test_run_detail_projects_latest_first_proposal_versions_and_decision_lineage
                         "end": "2026-03-16T11:00:00Z",
                     }
                 ],
-                "proposed_changes": ["Keep Friday afternoon open.", "Reserve Monday and Tuesday mornings for deep work."],
+                "proposed_changes": [
+                    "Keep Friday afternoon open.",
+                    "Reserve Monday and Tuesday mornings for deep work.",
+                ],
             },
             next_step_name="apply_schedule",
         )
@@ -664,13 +696,19 @@ def test_run_detail_projects_latest_first_proposal_versions_and_decision_lineage
         assert detail is not None
         assert [item["version_number"] for item in detail["proposal_versions"]] == [2, 1]
         assert detail["proposal_versions"][0]["approved"] is True
-        assert detail["proposal_versions"][0]["latest_decision"]["target_artifact_id"] == latest_artifact_id
+        assert (
+            detail["proposal_versions"][0]["latest_decision"]["target_artifact_id"]
+            == latest_artifact_id
+        )
         assert detail["proposal_versions"][0]["proposed_changes"] == [
             "Keep Friday afternoon open.",
             "Reserve Monday and Tuesday mornings for deep work.",
         ]
         assert detail["proposal_versions"][1]["superseded"] is True
-        assert detail["proposal_versions"][1]["revision_feedback_summary"] == "Keep Friday afternoon open."
+        assert (
+            detail["proposal_versions"][1]["revision_feedback_summary"]
+            == "Keep Friday afternoon open."
+        )
 
 
 def test_failed_run_detail_exposes_lineage_without_validation_artifact() -> None:
@@ -703,7 +741,10 @@ def test_failed_run_detail_exposes_lineage_without_validation_artifact() -> None
         assert detail["status"] == WorkflowRunStatus.FAILED.value
         assert detail["paused_state"] == "awaiting_retry"
         assert detail["failure_kind"] == "execution_failed"
-        assert detail["lineage"]["raw_request"]["artifact_type"] == WorkflowArtifactType.RAW_REQUEST.value
+        assert (
+            detail["lineage"]["raw_request"]["artifact_type"]
+            == WorkflowArtifactType.RAW_REQUEST.value
+        )
         assert detail["lineage"]["validation_artifacts"] == []
         assert detail["lineage"]["final_summary"]["approval_decision_artifact_id"] is None
         assert detail["lineage"]["final_summary"]["downstream_sync_reference_ids"] == []
@@ -721,12 +762,19 @@ def test_completed_run_detail_exposes_final_summary_contract() -> None:
         assert detail is not None
         assert detail["status"] == WorkflowRunStatus.COMPLETED.value
         assert detail["lineage"]["final_summary"]["request_artifact_id"] is not None
-        assert detail["lineage"]["final_summary"]["approval_decision"] == ApprovalAction.APPROVE.value
+        assert (
+            detail["lineage"]["final_summary"]["approval_decision"] == ApprovalAction.APPROVE.value
+        )
         assert detail["lineage"]["final_summary"]["approval_decision_artifact_id"] is not None
         assert detail["lineage"]["final_summary"]["downstream_sync_status"] == "succeeded"
         assert len(detail["lineage"]["final_summary"]["downstream_sync_artifact_ids"]) == 2
-        assert detail["lineage"]["final_summary"]["downstream_sync_reference_ids"][0].startswith("task_system:")
-        assert detail["completion_summary"]["headline"] == "Scheduled 1 block(s) and synced 2 approved write(s)."
+        assert detail["lineage"]["final_summary"]["downstream_sync_reference_ids"][0].startswith(
+            "task_system:"
+        )
+        assert (
+            detail["completion_summary"]["headline"]
+            == "Scheduled 1 block(s) and synced 2 approved write(s)."
+        )
         assert detail["completion_summary"]["total_sync_writes"] == 2
         assert detail["completion_summary"]["attention_items"] == []
 
@@ -735,7 +783,9 @@ def test_completed_then_replayed_run_projects_live_recovery_over_stale_success_s
     with _session() as session:
         run_id, orchestration, _calendar_adapter = _approved_sync_run(session)
         completed = orchestration.execute_pending_sync_step(run_id)
-        original_calendar_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(completed.run.id)[1]
+        original_calendar_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(
+            completed.run.id
+        )[1]
 
         replayed = orchestration.request_sync_replay(
             completed.run.id,
@@ -765,7 +815,9 @@ def test_completed_then_replayed_run_projects_live_recovery_over_stale_success_s
         assert detail["safe_next_actions"] == [
             {"action": "await_replay", "label": "Await replay processing"}
         ]
-        assert detail["sync"]["replay_lineage"]["source_sync_record_ids"] == [original_calendar_record.id]
+        assert detail["sync"]["replay_lineage"]["source_sync_record_ids"] == [
+            original_calendar_record.id
+        ]
 
 
 def test_telegram_service_replay_wrapper_uses_shared_replay_request(monkeypatch) -> None:  # noqa: ANN001

@@ -12,8 +12,9 @@ def test_worker_run_once_respects_paused_job(monkeypatch) -> None:  # noqa: ANN0
     monkeypatch.setattr(
         worker_main,
         "record_agent_run",
-        lambda *, agent_name, source_type, source_id, execute: executed.append(agent_name)
-        or execute(),
+        lambda *, agent_name, source_type, source_id, execute: (
+            executed.append(agent_name) or execute()
+        ),
     )
 
     jobs = {

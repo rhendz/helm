@@ -6,4 +6,3 @@ def test_get_artifact_trace_rejects_unsupported_artifact_type() -> None:
     assert payload["status"] == "not_found"
     assert payload["reason"] == "unsupported_artifact_type"
     assert payload["run_context"] == []
-

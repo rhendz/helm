@@ -30,9 +30,7 @@ class _Candidate:
 def choose_recommendation(courses: list[CourseState]) -> Recommendation:
     today = date.today()
     candidates = [
-        _build_candidate(course, topic, today)
-        for course in courses
-        for topic in course.topics
+        _build_candidate(course, topic, today) for course in courses for topic in course.topics
     ]
     if not candidates:
         raise ValueError("No active course recommendation could be created")
@@ -351,9 +349,7 @@ def _cooldown_penalty(topic: TopicState, today: date, recent_failures: int) -> f
 def _miss_pressure(course: CourseState) -> float:
     gap = max(
         0,
-        course.adherence.missed
-        + course.adherence.abandoned
-        - course.adherence.completed_total,
+        course.adherence.missed + course.adherence.abandoned - course.adherence.completed_total,
     )
     return float(course.adherence.miss_streak * 2 + gap)
 

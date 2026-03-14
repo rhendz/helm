@@ -40,8 +40,10 @@ class SQLAlchemyEmailSendAttemptRepository:
         return list(self._session.execute(stmt).scalars().all())
 
     def count_for_draft(self, *, draft_id: int) -> int:
-        stmt = select(func.count()).select_from(EmailSendAttemptORM).where(
-            EmailSendAttemptORM.draft_id == draft_id
+        stmt = (
+            select(func.count())
+            .select_from(EmailSendAttemptORM)
+            .where(EmailSendAttemptORM.draft_id == draft_id)
         )
         return int(self._session.execute(stmt).scalar_one())
 

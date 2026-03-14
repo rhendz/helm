@@ -50,7 +50,9 @@ class SQLAlchemyWorkflowStepRepository:
         )
         return list(self._session.execute(stmt).scalars().all())
 
-    def get_last_for_run(self, run_id: int, *, step_name: str | None = None) -> WorkflowStepORM | None:
+    def get_last_for_run(
+        self, run_id: int, *, step_name: str | None = None
+    ) -> WorkflowStepORM | None:
         stmt = select(WorkflowStepORM).where(WorkflowStepORM.run_id == run_id)
         if step_name is not None:
             stmt = stmt.where(WorkflowStepORM.step_name == step_name)

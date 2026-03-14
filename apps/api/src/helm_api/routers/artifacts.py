@@ -14,4 +14,3 @@ def get_artifact_trace_view(artifact_type: str, artifact_id: int) -> ArtifactTra
             artifact_id=artifact_id,
         )
     )
-

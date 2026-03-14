@@ -125,7 +125,9 @@ def _build_task_agent_input(state: WorkflowRunState) -> PreparedSpecialistInput:
     if isinstance(weekly_request_payload, dict):
         weekly_request = WeeklySchedulingRequest.model_validate(weekly_request_payload)
     else:
-        weekly_request = WeeklySchedulingRequest(raw_request_text=request_artifact.payload["request_text"])
+        weekly_request = WeeklySchedulingRequest(
+            raw_request_text=request_artifact.payload["request_text"]
+        )
     payload = TaskAgentInput(
         workflow_type=state.run.workflow_type,
         run_id=state.run.id,
@@ -143,7 +145,9 @@ def _build_task_agent_input(state: WorkflowRunState) -> PreparedSpecialistInput:
 
 def _run_task_agent(payload: object) -> TaskAgentOutput:
     request = TaskAgentInput.model_validate(payload)
-    weekly_request = request.weekly_request or WeeklySchedulingRequest(raw_request_text=request.request_text)
+    weekly_request = request.weekly_request or WeeklySchedulingRequest(
+        raw_request_text=request.request_text
+    )
     tasks = []
     warnings = list(weekly_request.warnings)
     assumptions = list(weekly_request.assumptions)
@@ -163,7 +167,9 @@ def _run_task_agent(payload: object) -> TaskAgentOutput:
             )
         )
     if not tasks:
-        assumptions.append("Weekly request did not yield structured tasks; proposal will stay high level.")
+        assumptions.append(
+            "Weekly request did not yield structured tasks; proposal will stay high level."
+        )
     return TaskAgentOutput(
         title="Weekly scheduling request",
         summary=f"Normalize weekly brief from {request.channel} into durable task artifacts.",
@@ -179,14 +185,20 @@ def _run_task_agent(payload: object) -> TaskAgentOutput:
 def _build_calendar_agent_input(state: WorkflowRunState) -> PreparedSpecialistInput:
     normalized_artifact = state.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value]
     request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
-    revision_request_artifact = state.latest_artifacts.get(WorkflowArtifactType.REVISION_REQUEST.value)
-    prior_proposal_artifact = state.latest_artifacts.get(WorkflowArtifactType.SCHEDULE_PROPOSAL.value)
+    revision_request_artifact = state.latest_artifacts.get(
+        WorkflowArtifactType.REVISION_REQUEST.value
+    )
+    prior_proposal_artifact = state.latest_artifacts.get(
+        WorkflowArtifactType.SCHEDULE_PROPOSAL.value
+    )
     normalized = TaskAgentOutput.model_validate(normalized_artifact.payload)
     weekly_request_payload = request_artifact.payload["metadata"].get("weekly_request")
     if isinstance(weekly_request_payload, dict):
         weekly_request = WeeklySchedulingRequest.model_validate(weekly_request_payload)
     else:
-        weekly_request = WeeklySchedulingRequest(raw_request_text=request_artifact.payload["request_text"])
+        weekly_request = WeeklySchedulingRequest(
+            raw_request_text=request_artifact.payload["request_text"]
+        )
     payload = CalendarAgentInput(
         workflow_type=state.run.workflow_type,
         run_id=state.run.id,
@@ -198,11 +210,17 @@ def _build_calendar_agent_input(state: WorkflowRunState) -> PreparedSpecialistIn
         request_text=request_artifact.payload["request_text"],
         weekly_request=weekly_request,
         warnings=normalized.warnings,
-        revision_request_artifact_id=revision_request_artifact.id if revision_request_artifact is not None else None,
+        revision_request_artifact_id=revision_request_artifact.id
+        if revision_request_artifact is not None
+        else None,
         revision_feedback=(
-            revision_request_artifact.payload["feedback"] if revision_request_artifact is not None else None
+            revision_request_artifact.payload["feedback"]
+            if revision_request_artifact is not None
+            else None
         ),
-        prior_proposal_artifact_id=prior_proposal_artifact.id if prior_proposal_artifact is not None else None,
+        prior_proposal_artifact_id=prior_proposal_artifact.id
+        if prior_proposal_artifact is not None
+        else None,
         prior_proposal_version=(
             prior_proposal_artifact.version_number if prior_proposal_artifact is not None else None
         ),
@@ -222,7 +240,13 @@ def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
         assumptions.append(f"Revision focus: {request.revision_feedback}")
 
     tasks = list(request.tasks)
-    tasks.sort(key=lambda task: (_priority_rank(task.priority), task.deadline or "zzzz", task.title.lower()))
+    tasks.sort(
+        key=lambda task: (
+            _priority_rank(task.priority),
+            task.deadline or "zzzz",
+            task.title.lower(),
+        )
+    )
     for task, slot in zip(tasks, slots, strict=False):
         end_time = slot + timedelta(minutes=task.estimated_minutes or 60)
         scheduled_blocks.append(
@@ -247,11 +271,15 @@ def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
     if any(task.deadline for task in tasks):
         rationale.append("Tasks with explicit deadlines were ordered before flexible work.")
     if request.revision_feedback:
-        rationale.append("Revision feedback was applied while preserving the same workflow run and proposal lineage.")
+        rationale.append(
+            "Revision feedback was applied while preserving the same workflow run and proposal lineage."
+        )
 
     honored_constraints = list(request.scheduling_constraints)
     if carry_forward:
-        assumptions.append("Not every task fit into the first-pass week; carry-forward work stays explicit.")
+        assumptions.append(
+            "Not every task fit into the first-pass week; carry-forward work stays explicit."
+        )
 
     summary = (
         f"Schedule {len(scheduled_blocks)} task blocks"

@@ -206,7 +206,9 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         # Capture source sync record IDs for later verification
         source_sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)
         source_sync_record_ids = [
-            record.id for record in source_sync_records if record.replayed_from_sync_record_id is None
+            record.id
+            for record in source_sync_records
+            if record.replayed_from_sync_record_id is None
         ]
         assert len(source_sync_record_ids) > 0, "Should have created sync records"
 

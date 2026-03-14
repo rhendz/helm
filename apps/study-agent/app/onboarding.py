@@ -169,10 +169,7 @@ def _write_course_pack(
     write_markdown(
         course_dir / "course.md",
         course_summary
-        or (
-            f"# {title}\n\nGoal: {goal}\n\n"
-            "Use this course for steady, consistency-first study."
-        ),
+        or (f"# {title}\n\nGoal: {goal}\n\nUse this course for steady, consistency-first study."),
     )
     write_json(
         course_dir / "topics.json",

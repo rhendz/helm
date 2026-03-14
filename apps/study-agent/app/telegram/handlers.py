@@ -200,8 +200,7 @@ async def status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"miss streak {course.adherence.miss_streak}"
         )
         lines.append(
-            "Weakest: "
-            + ", ".join(f"{topic.name} ({topic.mastery:.2f})" for topic in weakest)
+            "Weakest: " + ", ".join(f"{topic.name} ({topic.mastery:.2f})" for topic in weakest)
         )
         lines.append(
             "Upcoming reviews: "

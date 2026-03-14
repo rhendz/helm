@@ -12,7 +12,9 @@ class SQLAlchemyWorkflowSpecialistInvocationRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def create(self, invocation: NewWorkflowSpecialistInvocation) -> WorkflowSpecialistInvocationORM:
+    def create(
+        self, invocation: NewWorkflowSpecialistInvocation
+    ) -> WorkflowSpecialistInvocationORM:
         record = WorkflowSpecialistInvocationORM(
             run_id=invocation.run_id,
             step_id=invocation.step_id,

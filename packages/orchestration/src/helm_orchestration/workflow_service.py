@@ -100,7 +100,9 @@ class WorkflowOrchestrationService:
         self._task_system_adapter = task_system_adapter
         self._calendar_system_adapter = calendar_system_adapter
 
-    def create_run(self, *, workflow_type: str, first_step_name: str, request_payload: object) -> WorkflowRunState:
+    def create_run(
+        self, *, workflow_type: str, first_step_name: str, request_payload: object
+    ) -> WorkflowRunState:
         run = self._run_repo.create(
             NewWorkflowRun(
                 workflow_type=workflow_type,
@@ -149,7 +151,9 @@ class WorkflowOrchestrationService:
         state = self.get_run_state(run_id)
         step = self._ensure_current_step(state)
         if step.status == WorkflowStepStatus.PENDING.value:
-            self._step_repo.update(step.id, WorkflowStepPatch(status=WorkflowStepStatus.RUNNING.value))
+            self._step_repo.update(
+                step.id, WorkflowStepPatch(status=WorkflowStepStatus.RUNNING.value)
+            )
         self._run_repo.update(
             run_id,
             WorkflowRunPatch(
@@ -262,7 +266,11 @@ class WorkflowOrchestrationService:
         checkpoint = state.active_approval_checkpoint
         if checkpoint_id is not None:
             checkpoint = self._approval_repo.get_by_id(checkpoint_id)
-        if checkpoint is None or checkpoint.run_id != run_id or checkpoint.status != ApprovalCheckpointStatus.PENDING.value:
+        if (
+            checkpoint is None
+            or checkpoint.run_id != run_id
+            or checkpoint.status != ApprovalCheckpointStatus.PENDING.value
+        ):
             raise ValueError(f"Workflow run {run_id} has no pending approval checkpoint.")
         if decision.action.value not in checkpoint.allowed_actions:
             raise ValueError(
@@ -379,7 +387,9 @@ class WorkflowOrchestrationService:
             )
         )
 
-        validation_report = self._validate(step_name=step.step_name, artifact_type=artifact_type, payload=artifact_payload)
+        validation_report = self._validate(
+            step_name=step.step_name, artifact_type=artifact_type, payload=artifact_payload
+        )
         validation_artifact_id: int | None = None
         if validation_report is not None:
             validation_artifact = self._artifact_repo.create(
@@ -456,7 +466,9 @@ class WorkflowOrchestrationService:
             step.id,
             WorkflowStepPatch(
                 status=WorkflowStepStatus.SUCCEEDED.value,
-                validation_outcome_summary=validation_report.outcome.value if validation_report else None,
+                validation_outcome_summary=validation_report.outcome.value
+                if validation_report
+                else None,
                 completed_at=_now(),
             ),
         )
@@ -480,7 +492,9 @@ class WorkflowOrchestrationService:
                     current_step_name=step.step_name,
                     current_step_attempt=step.attempt_number,
                     needs_action=False,
-                    validation_outcome_summary=validation_report.outcome.value if validation_report else None,
+                    validation_outcome_summary=validation_report.outcome.value
+                    if validation_report
+                    else None,
                     blocked_reason=None,
                     last_event_summary=f"Completed step {step.step_name}",
                     completed_at=_now(),
@@ -518,7 +532,9 @@ class WorkflowOrchestrationService:
                 current_step_name=next_step_name,
                 current_step_attempt=next_step.attempt_number,
                 needs_action=False,
-                validation_outcome_summary=validation_report.outcome.value if validation_report else None,
+                validation_outcome_summary=validation_report.outcome.value
+                if validation_report
+                else None,
                 execution_error_summary="",
                 blocked_reason=None,
                 failure_class="",
@@ -536,15 +552,15 @@ class WorkflowOrchestrationService:
                 event_type="step_completed",
                 run_status=WorkflowRunStatus.RUNNING.value,
                 step_status=WorkflowStepStatus.SUCCEEDED.value,
-                    summary=f"Advanced to step {next_step_name}",
-                    details={
-                        "artifact_id": candidate_artifact.id,
-                        "validation_artifact_id": validation_artifact_id,
-                        "specialist_invocation_id": invocation_id,
-                        "next_step_name": next_step_name,
-                    },
-                )
+                summary=f"Advanced to step {next_step_name}",
+                details={
+                    "artifact_id": candidate_artifact.id,
+                    "validation_artifact_id": validation_artifact_id,
+                    "specialist_invocation_id": invocation_id,
+                    "next_step_name": next_step_name,
+                },
             )
+        )
         return self.get_run_state(run_id)
 
     def fail_current_step(self, run_id: int, failure: ExecutionFailurePayload) -> WorkflowRunState:
@@ -552,7 +568,9 @@ class WorkflowOrchestrationService:
         step = self._require_current_step(state)
         return self._fail_started_step(run_id, step=step, failure=failure)
 
-    def _fail_started_step(self, run_id: int, *, step, failure: ExecutionFailurePayload) -> WorkflowRunState:
+    def _fail_started_step(
+        self, run_id: int, *, step, failure: ExecutionFailurePayload
+    ) -> WorkflowRunState:
         self._step_repo.update(
             step.id,
             WorkflowStepPatch(
@@ -682,7 +700,9 @@ class WorkflowOrchestrationService:
         for sync_record_id in sync_record_ids:
             original = self._sync_repo.get_by_id(sync_record_id)
             if original is None or original.run_id != run_id:
-                raise ValueError(f"Workflow sync record {sync_record_id} does not exist for run {run_id}.")
+                raise ValueError(
+                    f"Workflow sync record {sync_record_id} does not exist for run {run_id}."
+                )
             replay_queue_item, _ = self._replay_queue_repo.enqueue_workflow_sync_replay(
                 run_id=run_id,
                 sync_record_id=sync_record_id,
@@ -809,7 +829,9 @@ class WorkflowOrchestrationService:
                 step_id=current_step.id if current_step is not None else None,
                 event_type="run_terminated",
                 run_status=WorkflowRunStatus.TERMINATED.value,
-                step_status=WorkflowStepStatus.CANCELLED.value if current_step is not None else None,
+                step_status=WorkflowStepStatus.CANCELLED.value
+                if current_step is not None
+                else None,
                 summary=reason,
                 details={"reason": reason, **partial_sync_snapshot},
             )
@@ -828,10 +850,16 @@ class WorkflowOrchestrationService:
         invocation_id: int | None,
     ) -> WorkflowRunState:
         if next_step_name is None:
-            raise ValueError("Schedule proposal steps must declare the persisted step after approval.")
+            raise ValueError(
+                "Schedule proposal steps must declare the persisted step after approval."
+            )
 
-        prior_approval_step = self._step_repo.get_last_for_run(run_id, step_name="await_schedule_approval")
-        next_approval_attempt = 1 if prior_approval_step is None else prior_approval_step.attempt_number + 1
+        prior_approval_step = self._step_repo.get_last_for_run(
+            run_id, step_name="await_schedule_approval"
+        )
+        next_approval_attempt = (
+            1 if prior_approval_step is None else prior_approval_step.attempt_number + 1
+        )
         approval_step = self._step_repo.create(
             NewWorkflowStep(
                 run_id=run_id,
@@ -866,7 +894,9 @@ class WorkflowOrchestrationService:
                 payload=ApprovalRequestArtifactPayload(
                     checkpoint_id=checkpoint.id,
                     target_artifact_id=proposal_artifact_id,
-                    target_version_number=self._require_artifact(proposal_artifact_id).version_number,
+                    target_version_number=self._require_artifact(
+                        proposal_artifact_id
+                    ).version_number,
                     allowed_actions=(
                         ApprovalAction.APPROVE.value,
                         ApprovalAction.REJECT.value,
@@ -934,7 +964,7 @@ class WorkflowOrchestrationService:
                 attempt_number=checkpoint.resume_step_attempt,
             )
         )
-        sync_records = self.prepare_approved_sync_plan(
+        self.prepare_approved_sync_plan(
             run_id,
             proposal_artifact_id=checkpoint.target_artifact_id,
             step_id=next_step.id,
@@ -1076,7 +1106,8 @@ class WorkflowOrchestrationService:
                 if reconciliation.found or reconciliation.payload_fingerprint_matches:
                     self._sync_repo.mark_succeeded(
                         claimed.id,
-                        external_object_id=reconciliation.external_object_id or claimed.external_object_id,
+                        external_object_id=reconciliation.external_object_id
+                        or claimed.external_object_id,
                     )
                     self._event_repo.create(
                         NewWorkflowEvent(
@@ -1129,7 +1160,8 @@ class WorkflowOrchestrationService:
                     step=step,
                     failure=ExecutionFailurePayload(
                         error_type="sync_write_outcome_uncertain",
-                        message=result.error_summary or "Sync write outcome is uncertain and requires reconciliation.",
+                        message=result.error_summary
+                        or "Sync write outcome is uncertain and requires reconciliation.",
                         retry_state=RetryState.RETRYABLE,
                         retryable=True,
                         details={
@@ -1179,7 +1211,8 @@ class WorkflowOrchestrationService:
                 step=step,
                 failure=ExecutionFailurePayload(
                     error_type="sync_execution_failed",
-                    message=result.error_summary or f"Sync execution failed for {claimed.planned_item_key}.",
+                    message=result.error_summary
+                    or f"Sync execution failed for {claimed.planned_item_key}.",
                     retry_state=retry_state,
                     retryable=retryable,
                     details={
@@ -1247,7 +1280,9 @@ class WorkflowOrchestrationService:
         )
         proposal_artifact = self._artifact_repo.get_by_id(checkpoint.target_artifact_id)
         if proposal_artifact is None:
-            raise ValueError(f"Schedule proposal artifact {checkpoint.target_artifact_id} does not exist.")
+            raise ValueError(
+                f"Schedule proposal artifact {checkpoint.target_artifact_id} does not exist."
+            )
         self._artifact_repo.create(
             NewWorkflowArtifact(
                 run_id=run_id,
@@ -1264,7 +1299,9 @@ class WorkflowOrchestrationService:
                 ).to_dict(),
             )
         )
-        prior_attempt = self._step_repo.get_last_for_run(run_id, step_name=proposal_artifact.producer_step_name)
+        prior_attempt = self._step_repo.get_last_for_run(
+            run_id, step_name=proposal_artifact.producer_step_name
+        )
         next_attempt = 1 if prior_attempt is None else prior_attempt.attempt_number + 1
         revision_step = self._step_repo.create(
             NewWorkflowStep(
@@ -1280,7 +1317,9 @@ class WorkflowOrchestrationService:
                 status=WorkflowRunStatus.PENDING.value,
                 current_step_name=revision_step.step_name,
                 current_step_attempt=revision_step.attempt_number,
-                attempt_count=max(self.get_run_state(run_id).run.attempt_count + 1, revision_step.attempt_number),
+                attempt_count=max(
+                    self.get_run_state(run_id).run.attempt_count + 1, revision_step.attempt_number
+                ),
                 needs_action=False,
                 validation_outcome_summary=None,
                 execution_error_summary=None,
@@ -1306,7 +1345,9 @@ class WorkflowOrchestrationService:
         )
         return self.get_run_state(run_id)
 
-    def build_final_summary_artifact(self, run_id: int, *, final_summary_text: str) -> WorkflowSummaryArtifact:
+    def build_final_summary_artifact(
+        self, run_id: int, *, final_summary_text: str
+    ) -> WorkflowSummaryArtifact:
         state = self.get_run_state(run_id)
         latest_artifacts = state.latest_artifacts
         request_artifact = latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
@@ -1352,7 +1393,9 @@ class WorkflowOrchestrationService:
             approval_decision=approval_decision,
             approval_decision_artifact_id=approval_decision_artifact_id,
             downstream_sync_status=self._downstream_sync_status(sync_records),
-            downstream_sync_artifact_ids=tuple(record.id for record in self._sorted_sync_records(sync_records)),
+            downstream_sync_artifact_ids=tuple(
+                record.id for record in self._sorted_sync_records(sync_records)
+            ),
             downstream_sync_reference_ids=tuple(
                 self._downstream_sync_reference_id(record)
                 for record in self._sorted_sync_records(sync_records)
@@ -1374,7 +1417,10 @@ class WorkflowOrchestrationService:
             WorkflowSyncStatus.FAILED_TERMINAL.value,
             WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
         }:
-            if WorkflowSyncStatus.SUCCEEDED.value in statuses or WorkflowSyncStatus.CANCELLED.value in statuses:
+            if (
+                WorkflowSyncStatus.SUCCEEDED.value in statuses
+                or WorkflowSyncStatus.CANCELLED.value in statuses
+            ):
                 return "partial"
             return "failed"
         return "mixed"
@@ -1386,7 +1432,9 @@ class WorkflowOrchestrationService:
         reference = sync_record.external_object_id or sync_record.planned_item_key
         return f"{sync_record.target_system}:{reference}"
 
-    def _build_approved_sync_items(self, *, proposal_artifact_id: int) -> tuple[ApprovedSyncItem, ...]:
+    def _build_approved_sync_items(
+        self, *, proposal_artifact_id: int
+    ) -> tuple[ApprovedSyncItem, ...]:
         proposal_artifact = self._require_artifact(proposal_artifact_id)
         proposal = ScheduleProposalArtifact.model_validate(proposal_artifact.payload)
         sync_items: list[ApprovedSyncItem] = []
@@ -1490,7 +1538,9 @@ class WorkflowOrchestrationService:
         )
         return self.get_run_state(run_id)
 
-    def _persist_representative_final_summary(self, run_id: int, *, step, summary_text: str) -> None:  # noqa: ANN001
+    def _persist_representative_final_summary(
+        self, run_id: int, *, step, summary_text: str
+    ) -> None:  # noqa: ANN001
         final_summary = self.build_final_summary_artifact(run_id, final_summary_text=summary_text)
         latest_summary = self._artifact_repo.get_latest_for_run(
             run_id,
@@ -1520,7 +1570,11 @@ class WorkflowOrchestrationService:
             dict.fromkeys(block.task_title or block.title for block in proposal.time_blocks)
         )
         task_writes = len(
-            [record for record in sorted_sync_records if record.target_system == WorkflowTargetSystem.TASK_SYSTEM.value]
+            [
+                record
+                for record in sorted_sync_records
+                if record.target_system == WorkflowTargetSystem.TASK_SYSTEM.value
+            ]
         )
         calendar_writes = len(
             [
@@ -1544,7 +1598,9 @@ class WorkflowOrchestrationService:
             return f"{summary} Carry forward: {', '.join(proposal.carry_forward_tasks[:3])}."
         return summary
 
-    def _record_recovery_transition(self, run_id: int, *, step_id: int, transition: RecoveryTransition) -> None:
+    def _record_recovery_transition(
+        self, run_id: int, *, step_id: int, transition: RecoveryTransition
+    ) -> None:
         self._event_repo.create(
             NewWorkflowEvent(
                 run_id=run_id,
@@ -1567,7 +1623,11 @@ class WorkflowOrchestrationService:
             }
 
         succeeded_count = len(
-            [record for record in sync_records if record.status == WorkflowSyncStatus.SUCCEEDED.value]
+            [
+                record
+                for record in sync_records
+                if record.status == WorkflowSyncStatus.SUCCEEDED.value
+            ]
         )
         cancelled_count = 0
         last_attempted = max(
@@ -1650,7 +1710,9 @@ class WorkflowOrchestrationService:
             raise ValueError("Calendar system adapter is not configured.")
         return self._calendar_system_adapter
 
-    def _artifact_lineage_kwargs(self, *, run_id: int, step_name: str, artifact_type: str) -> dict[str, int | None]:
+    def _artifact_lineage_kwargs(
+        self, *, run_id: int, step_name: str, artifact_type: str
+    ) -> dict[str, int | None]:
         if artifact_type != WorkflowArtifactType.SCHEDULE_PROPOSAL.value:
             return {"lineage_parent_id": None, "supersedes_artifact_id": None}
         proposals = self._artifact_repo.list_for_run_by_type(
@@ -1782,6 +1844,8 @@ def _sync_operation_for_kind(sync_kind: str) -> SyncOperation:
 
 
 def _slugify(value: str) -> str:
-    slug = "".join(character.lower() if character.isalnum() else "-" for character in value).strip("-")
+    slug = "".join(character.lower() if character.isalnum() else "-" for character in value).strip(
+        "-"
+    )
     collapsed = "-".join(part for part in slug.split("-") if part)
     return collapsed or "item"

@@ -78,4 +78,3 @@ def test_analyze_drift_passes_when_done_and_sha_present() -> None:
     )
 
     assert result.findings == []
-

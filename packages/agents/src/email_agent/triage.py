@@ -412,6 +412,5 @@ def _has_scheduling_cue(message: EmailMessage) -> bool:
 def _has_detail_request_cue(message: EmailMessage) -> bool:
     haystack = f"{message.subject}\n{message.body_text}".lower()
     return any(
-        token in haystack
-        for token in ("details", "next steps", "learn more", "share more", "role")
+        token in haystack for token in ("details", "next steps", "learn more", "share more", "role")
     )

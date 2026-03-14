@@ -960,7 +960,9 @@ class WorkflowStepRepository(Protocol):
 
     def list_for_run(self, run_id: int) -> list[WorkflowStepORM]: ...
 
-    def get_last_for_run(self, run_id: int, *, step_name: str | None = None) -> WorkflowStepORM | None: ...
+    def get_last_for_run(
+        self, run_id: int, *, step_name: str | None = None
+    ) -> WorkflowStepORM | None: ...
 
     def get_last_failed_for_run(self, run_id: int) -> WorkflowStepORM | None: ...
 
@@ -973,9 +975,13 @@ class WorkflowArtifactRepository(Protocol):
 
     def list_for_run(self, run_id: int) -> list[WorkflowArtifactORM]: ...
 
-    def list_for_run_by_type(self, run_id: int, *, artifact_type: str) -> list[WorkflowArtifactORM]: ...
+    def list_for_run_by_type(
+        self, run_id: int, *, artifact_type: str
+    ) -> list[WorkflowArtifactORM]: ...
 
-    def get_latest_for_run(self, run_id: int, *, artifact_type: str | None = None) -> WorkflowArtifactORM | None: ...
+    def get_latest_for_run(
+        self, run_id: int, *, artifact_type: str | None = None
+    ) -> WorkflowArtifactORM | None: ...
 
     def get_latest_by_type(self, run_id: int) -> dict[str, WorkflowArtifactORM]: ...
 
@@ -991,7 +997,9 @@ class WorkflowEventRepository(Protocol):
 
 @runtime_checkable
 class WorkflowSpecialistInvocationRepository(Protocol):
-    def create(self, invocation: NewWorkflowSpecialistInvocation) -> WorkflowSpecialistInvocationORM: ...
+    def create(
+        self, invocation: NewWorkflowSpecialistInvocation
+    ) -> WorkflowSpecialistInvocationORM: ...
 
     def update(
         self,
@@ -1002,7 +1010,9 @@ class WorkflowSpecialistInvocationRepository(Protocol):
 
 @runtime_checkable
 class WorkflowApprovalCheckpointRepository(Protocol):
-    def create(self, checkpoint: NewWorkflowApprovalCheckpoint) -> WorkflowApprovalCheckpointORM: ...
+    def create(
+        self, checkpoint: NewWorkflowApprovalCheckpoint
+    ) -> WorkflowApprovalCheckpointORM: ...
 
     def update(
         self,
@@ -1046,7 +1056,9 @@ class WorkflowSyncRecordRepository(Protocol):
 
     def list_failed(self, query: WorkflowSyncFailedQuery) -> list[WorkflowSyncRecordORM]: ...
 
-    def list_for_step_attempt(self, query: WorkflowSyncStepQuery) -> list[WorkflowSyncRecordORM]: ...
+    def list_for_step_attempt(
+        self, query: WorkflowSyncStepQuery
+    ) -> list[WorkflowSyncRecordORM]: ...
 
     def claim_next_pending(
         self,

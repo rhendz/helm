@@ -119,8 +119,7 @@ async def test_start_command_shows_job_control_shortcuts(monkeypatch: pytest.Mon
     await start.handle(update, _Context(args=[]))
 
     assert update.message.replies == [
-        "Helm bot is online.\n"
-        "Job controls: /jobs, /jobs paused, /jobs active, /job <job_name>"
+        "Helm bot is online.\nJob controls: /jobs, /jobs paused, /jobs active, /job <job_name>"
     ]
 
 
@@ -255,9 +254,7 @@ async def test_actions_command_formats_items(monkeypatch: pytest.MonkeyPatch) ->
 
     await actions.handle(update, _Context(args=[]))
 
-    assert update.message.replies == [
-        "Open actions:\n3: P1 Reply to recruiter\n2: P2 Review draft"
-    ]
+    assert update.message.replies == ["Open actions:\n3: P1 Reply to recruiter\n2: P2 Review draft"]
 
 
 @pytest.mark.asyncio
@@ -882,11 +879,7 @@ async def test_job_command_formats_non_runnable_item(monkeypatch: pytest.MonkeyP
     await job.handle(update, _Context(args=["some_job"]))
 
     assert update.message.replies == [
-        "Job some_job\n"
-        "Status: active\n"
-        "List: /jobs\n"
-        "Action: /pause_job some_job\n"
-        "Run: unavailable"
+        "Job some_job\nStatus: active\nList: /jobs\nAction: /pause_job some_job\nRun: unavailable"
     ]
 
 
@@ -1072,8 +1065,7 @@ async def test_job_controls_command_filters_active_items(monkeypatch: pytest.Mon
     await job_controls.handle(update, _Context(args=["active"]))
 
     assert update.message.replies == [
-        "Active jobs:\n"
-        "email_triage: active (inspect=/job email_triage; run=/run_job email_triage)"
+        "Active jobs:\nemail_triage: active (inspect=/job email_triage; run=/run_job email_triage)"
     ]
 
 

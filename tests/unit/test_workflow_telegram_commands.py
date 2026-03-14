@@ -22,7 +22,9 @@ class _Context:
 
 
 @pytest.mark.asyncio
-async def test_workflow_start_usage_message_when_request_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_start_usage_message_when_request_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async def _allow(_update: _Update, _context: _Context) -> bool:
         return False
 
@@ -37,7 +39,9 @@ async def test_workflow_start_usage_message_when_request_missing(monkeypatch: py
 @pytest.mark.asyncio
 async def test_workflow_start_formats_created_run(monkeypatch: pytest.MonkeyPatch) -> None:
     class _Service:
-        def start_run(self, *, request_text: str, submitted_by: str, chat_id: str) -> dict[str, object]:
+        def start_run(
+            self, *, request_text: str, submitted_by: str, chat_id: str
+        ) -> dict[str, object]:
             assert request_text == "Plan my week"
             assert submitted_by == "telegram:1"
             assert chat_id == "1"
@@ -83,7 +87,9 @@ async def test_workflow_replay_calls_service(monkeypatch: pytest.MonkeyPatch) ->
                 "last_event_summary": "Explicit sync replay requested.",
                 "needs_action": True,
                 "available_actions": [],
-                "safe_next_actions": [{"action": "await_replay", "label": "Await replay processing"}],
+                "safe_next_actions": [
+                    {"action": "await_replay", "label": "Await replay processing"}
+                ],
             }
 
     async def _allow(_update: _Update, _context: _Context) -> bool:
@@ -105,12 +111,16 @@ async def test_workflow_replay_calls_service(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
-async def test_workflow_approve_parses_ids_and_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_approve_parses_ids_and_calls_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class _Service:
         def __init__(self) -> None:
             self.seen: tuple[int, int] | None = None
 
-        def approve_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
+        def approve_run(
+            self, run_id: int, *, actor: str, target_artifact_id: int
+        ) -> dict[str, object]:
             self.seen = (run_id, target_artifact_id)
             assert actor == "telegram:1"
             return {
@@ -145,8 +155,11 @@ async def test_workflow_approve_parses_ids_and_calls_service(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
-async def test_workflow_completion_summary_surfaces_sync_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_completion_summary_surfaces_sync_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify Telegram formats completion summary with sync counts for weekly scheduling."""
+
     class _Service:
         def list_recent_runs(self, *, limit: int = 5) -> list[dict[str, object]]:
             return [
@@ -189,8 +202,11 @@ async def test_workflow_completion_summary_surfaces_sync_counts(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_workflow_completion_summary_absent_when_not_completed(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_completion_summary_absent_when_not_completed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify Telegram does not show completion summary for active runs."""
+
     class _Service:
         def list_recent_runs(self, *, limit: int = 5) -> list[dict[str, object]]:
             return [
@@ -221,8 +237,11 @@ async def test_workflow_completion_summary_absent_when_not_completed(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_workflow_approval_checkpoint_shows_artifact_and_proposal(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_approval_checkpoint_shows_artifact_and_proposal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify Telegram shows approval checkpoint with artifact ID and proposal summary."""
+
     class _Service:
         def list_recent_runs(self, *, limit: int = 5) -> list[dict[str, object]]:
             return [
@@ -264,8 +283,11 @@ async def test_workflow_approval_checkpoint_shows_artifact_and_proposal(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_workflow_safe_next_actions_on_completed_run_with_replay_option(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_safe_next_actions_on_completed_run_with_replay_option(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify Telegram shows safe_next_actions (e.g., replay) on completed runs."""
+
     class _Service:
         def list_recent_runs(self, *, limit: int = 5) -> list[dict[str, object]]:
             return [
@@ -277,9 +299,7 @@ async def test_workflow_safe_next_actions_on_completed_run_with_replay_option(mo
                     "last_event_summary": "Workflow completed successfully.",
                     "needs_action": False,
                     "available_actions": [],
-                    "safe_next_actions": [
-                        {"action": "request_replay", "label": "Request replay"}
-                    ],
+                    "safe_next_actions": [{"action": "request_replay", "label": "Request replay"}],
                     "completion_summary": {
                         "headline": "Scheduled 2 block(s) and synced 4 approved write(s).",
                         "approval_decision": "approve",
@@ -310,8 +330,11 @@ async def test_workflow_safe_next_actions_on_completed_run_with_replay_option(mo
 
 
 @pytest.mark.asyncio
-async def test_workflow_lists_needs_action_shows_approval_checkpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_lists_needs_action_shows_approval_checkpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify /workflow_needs_action lists runs with approval checkpoints."""
+
     class _Service:
         def list_runs_needing_action(self, *, limit: int = 5) -> list[dict[str, object]]:
             return [
@@ -348,13 +371,18 @@ async def test_workflow_lists_needs_action_shows_approval_checkpoint(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_workflow_reject_parses_ids_and_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_reject_parses_ids_and_calls_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify /reject command parses run and artifact IDs and surfaces the result."""
+
     class _Service:
         def __init__(self) -> None:
             self.seen: tuple[int, int] | None = None
 
-        def reject_run(self, run_id: int, *, actor: str, target_artifact_id: int) -> dict[str, object]:
+        def reject_run(
+            self, run_id: int, *, actor: str, target_artifact_id: int
+        ) -> dict[str, object]:
             self.seen = (run_id, target_artifact_id)
             assert actor == "telegram:1"
             return {
@@ -383,8 +411,11 @@ async def test_workflow_reject_parses_ids_and_calls_service(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
-async def test_workflow_request_revision_parses_ids_feedback_and_calls_service(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_request_revision_parses_ids_feedback_and_calls_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Verify /request_revision command parses run ID, artifact ID, and feedback."""
+
     class _Service:
         def __init__(self) -> None:
             self.seen: tuple[int, int, str] | None = None

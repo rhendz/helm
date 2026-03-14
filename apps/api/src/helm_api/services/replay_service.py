@@ -195,7 +195,9 @@ def request_workflow_run_replay(*, run_id: int, actor: str, reason: str) -> dict
                 raise ValueError(f"Workflow run {run_id} does not allow explicit replay.")
 
             sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
-            source_sync_record_ids = _select_replayable_sync_record_ids(sync_repo.list_for_run(run_id))
+            source_sync_record_ids = _select_replayable_sync_record_ids(
+                sync_repo.list_for_run(run_id)
+            )
             if not source_sync_record_ids:
                 raise ValueError(f"Workflow run {run_id} has no replayable sync records.")
 
@@ -208,7 +210,9 @@ def request_workflow_run_replay(*, run_id: int, actor: str, reason: str) -> dict
 
             refreshed = status_service.get_run_detail(run_id)
             if refreshed is None:
-                raise ValueError(f"Workflow run {run_id} could not be refreshed after replay request.")
+                raise ValueError(
+                    f"Workflow run {run_id} could not be refreshed after replay request."
+                )
 
             replay_requested_at = None
             replay_requested_by = None
@@ -227,7 +231,9 @@ def request_workflow_run_replay(*, run_id: int, actor: str, reason: str) -> dict
                     and record.id not in replay_sync_record_ids
                 ):
                     replay_sync_record_ids.append(record.id)
-                    replay_queue_source_ids.append(f"{run_id}:{record.replayed_from_sync_record_id}")
+                    replay_queue_source_ids.append(
+                        f"{run_id}:{record.replayed_from_sync_record_id}"
+                    )
 
             return {
                 "status": "accepted",
@@ -236,7 +242,9 @@ def request_workflow_run_replay(*, run_id: int, actor: str, reason: str) -> dict
                 "replay_sync_record_ids": replay_sync_record_ids,
                 "replay_queue_source_ids": replay_queue_source_ids,
                 "run": refreshed,
-                "reason": None if replay_requested_at is not None and replay_requested_by == actor else None,
+                "reason": None
+                if replay_requested_at is not None and replay_requested_by == actor
+                else None,
             }
     except SQLAlchemyError as exc:
         raise ValueError("Replay is unavailable because workflow storage is unavailable.") from exc
@@ -255,13 +263,17 @@ def _select_replayable_sync_record_ids(sync_records: list[object]) -> list[int]:
         ):
             replayable.append(record.id)
             continue
-        if record.recovery_classification == WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value and (
-            record.status == WorkflowSyncStatus.FAILED_TERMINAL.value
+        if (
+            record.recovery_classification
+            == WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value
+            and (record.status == WorkflowSyncStatus.FAILED_TERMINAL.value)
         ):
             replayable.append(record.id)
             continue
-        if record.recovery_classification == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value and (
-            record.status == WorkflowSyncStatus.CANCELLED.value
+        if (
+            record.recovery_classification
+            == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
+            and (record.status == WorkflowSyncStatus.CANCELLED.value)
         ):
             replayable.append(record.id)
     return replayable
@@ -284,7 +296,9 @@ def execute_workflow_sync_replay(*, source_id: str) -> dict[str, object]:
                 "source_id": source_id,
             }
     except SQLAlchemyError as exc:
-        raise ValueError("Replay execution is unavailable because workflow storage is unavailable.") from exc
+        raise ValueError(
+            "Replay execution is unavailable because workflow storage is unavailable."
+        ) from exc
 
 
 def _parse_workflow_sync_replay_source_id(source_id: str) -> tuple[int, int]:

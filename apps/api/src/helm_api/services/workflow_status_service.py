@@ -68,7 +68,9 @@ class WorkflowStatusService:
         )
         return self._build_summary(state)
 
-    def list_runs(self, *, needs_action: bool | None = None, limit: int = 20) -> list[dict[str, object]]:
+    def list_runs(
+        self, *, needs_action: bool | None = None, limit: int = 20
+    ) -> list[dict[str, object]]:
         if needs_action is True:
             states = self._run_repo.list_needing_action(limit=limit)
             return [self._build_summary(state) for state in states]
@@ -159,7 +161,9 @@ class WorkflowStatusService:
     def _build_summary(self, state: WorkflowRunState) -> dict[str, object]:
         failed_step = self._latest_failed_step(state)
         sync_projection = self._sync_projection(state.run.id)
-        latest_validation_artifact = state.latest_artifacts.get(WorkflowArtifactType.VALIDATION_RESULT.value)
+        latest_validation_artifact = state.latest_artifacts.get(
+            WorkflowArtifactType.VALIDATION_RESULT.value
+        )
         approval_projection = self._approval_projection(state)
         proposal_versions = self._build_proposal_versions(state.run)
         final_summary_artifact = self._artifact_repo.get_latest_for_run(
@@ -186,7 +190,8 @@ class WorkflowStatusService:
             "needs_action": state.run.needs_action,
             "paused_state": paused_state,
             "pause_reason": pause_reason,
-            "last_event_summary": state.run.last_event_summary or (state.last_event.summary if state.last_event else None),
+            "last_event_summary": state.run.last_event_summary
+            or (state.last_event.summary if state.last_event else None),
             "failure_summary": failure_summary,
             "failure_kind": failure_kind,
             "recovery_class": sync_projection["recovery_class"],
@@ -225,7 +230,11 @@ class WorkflowStatusService:
     def _build_lineage(self, run: WorkflowRunORM) -> dict[str, object]:
         artifacts = sorted(run.artifacts, key=lambda artifact: (artifact.created_at, artifact.id))
         raw_request = next(
-            (artifact for artifact in artifacts if artifact.artifact_type == WorkflowArtifactType.RAW_REQUEST.value),
+            (
+                artifact
+                for artifact in artifacts
+                if artifact.artifact_type == WorkflowArtifactType.RAW_REQUEST.value
+            ),
             None,
         )
         intermediate = [
@@ -289,7 +298,10 @@ class WorkflowStatusService:
         if not state.run.needs_action:
             return []
 
-        if state.run.blocked_reason == "approval_required" and state.active_approval_checkpoint is not None:
+        if (
+            state.run.blocked_reason == "approval_required"
+            and state.active_approval_checkpoint is not None
+        ):
             return [
                 {"action": action, "label": _approval_action_label(action)}
                 for action in state.active_approval_checkpoint.allowed_actions
@@ -303,33 +315,55 @@ class WorkflowStatusService:
         return actions
 
     def _paused_state(self, state: WorkflowRunState, failed_step) -> tuple[str | None, str | None]:  # noqa: ANN001
-        if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
+        if (
+            state.run.status == WorkflowRunStatus.BLOCKED.value
+            and state.run.blocked_reason == "approval_required"
+        ):
             return "awaiting_approval", "Awaiting operator approval before downstream changes."
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
-            return "blocked_validation", state.run.validation_outcome_summary or state.run.last_event_summary
+            return (
+                "blocked_validation",
+                state.run.validation_outcome_summary or state.run.last_event_summary,
+            )
         if state.run.status == WorkflowRunStatus.FAILED.value:
-            return "awaiting_retry", state.run.execution_error_summary or state.run.last_event_summary
+            return (
+                "awaiting_retry",
+                state.run.execution_error_summary or state.run.last_event_summary,
+            )
         return None, None
 
-    def _failure_kind(self, state: WorkflowRunState, failed_step, sync_projection: dict[str, object]) -> str | None:  # noqa: ANN001
+    def _failure_kind(
+        self, state: WorkflowRunState, failed_step, sync_projection: dict[str, object]
+    ) -> str | None:  # noqa: ANN001
         sync_recovery_class = sync_projection["recovery_class"]
         if isinstance(sync_recovery_class, str):
             return sync_recovery_class
-        if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
+        if (
+            state.run.status == WorkflowRunStatus.BLOCKED.value
+            and state.run.blocked_reason == "approval_required"
+        ):
             return "approval_required"
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
             return "blocked_validation"
         if state.run.status == WorkflowRunStatus.FAILED.value:
             return "execution_failed"
-        if failed_step is not None and failed_step.status == WorkflowStepStatus.VALIDATION_FAILED.value:
+        if (
+            failed_step is not None
+            and failed_step.status == WorkflowStepStatus.VALIDATION_FAILED.value
+        ):
             return "blocked_validation"
         return None
 
-    def _failure_summary(self, state: WorkflowRunState, failed_step, sync_projection: dict[str, object]) -> str | None:  # noqa: ANN001
+    def _failure_summary(
+        self, state: WorkflowRunState, failed_step, sync_projection: dict[str, object]
+    ) -> str | None:  # noqa: ANN001
         sync_failure_summary = sync_projection["failure_summary"]
         if isinstance(sync_failure_summary, str):
             return sync_failure_summary
-        if state.run.status == WorkflowRunStatus.BLOCKED.value and state.run.blocked_reason == "approval_required":
+        if (
+            state.run.status == WorkflowRunStatus.BLOCKED.value
+            and state.run.blocked_reason == "approval_required"
+        ):
             return "Awaiting operator approval before downstream changes."
         if state.run.status == WorkflowRunStatus.BLOCKED.value:
             return state.run.validation_outcome_summary or (
@@ -345,7 +379,8 @@ class WorkflowStatusService:
         failures = [
             step
             for step in state.run.steps
-            if step.status in {WorkflowStepStatus.FAILED.value, WorkflowStepStatus.VALIDATION_FAILED.value}
+            if step.status
+            in {WorkflowStepStatus.FAILED.value, WorkflowStepStatus.VALIDATION_FAILED.value}
         ]
         if not failures:
             return None
@@ -366,7 +401,9 @@ class WorkflowStatusService:
             checkpoint_payload = {
                 "checkpoint_id": checkpoint.id,
                 "target_artifact_id": checkpoint.target_artifact_id,
-                "target_version_number": checkpoint_proposal.version_number if checkpoint_proposal is not None else 0,
+                "target_version_number": checkpoint_proposal.version_number
+                if checkpoint_proposal is not None
+                else 0,
                 **proposal_detail,
                 "pause_reason": "Awaiting operator approval before downstream changes.",
                 "allowed_actions": list(checkpoint.allowed_actions),
@@ -409,7 +446,9 @@ class WorkflowStatusService:
         }
         for record in sync_records:
             counts_by_state[record.status] = counts_by_state.get(record.status, 0) + 1
-            counts_by_target[record.target_system] = counts_by_target.get(record.target_system, 0) + 1
+            counts_by_target[record.target_system] = (
+                counts_by_target.get(record.target_system, 0) + 1
+            )
 
         unresolved_statuses = {
             WorkflowSyncStatus.PENDING.value,
@@ -438,7 +477,8 @@ class WorkflowStatusService:
         replay_records = [
             record
             for record in sync_records
-            if record.replayed_from_sync_record_id is not None or record.replay_requested_at is not None
+            if record.replayed_from_sync_record_id is not None
+            or record.replay_requested_at is not None
         ]
         replay_lineage = None
         if replay_records:
@@ -470,7 +510,9 @@ class WorkflowStatusService:
             "calendar_writes": counts_by_target.get(WorkflowTargetSystem.CALENDAR_SYSTEM.value, 0),
         }
 
-        recovery_class = recovery_record.recovery_classification if recovery_record is not None else None
+        recovery_class = (
+            recovery_record.recovery_classification if recovery_record is not None else None
+        )
         retryable = recovery_class in {
             WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
             WorkflowSyncRecoveryClassification.RETRY_REQUESTED.value,
@@ -511,7 +553,10 @@ class WorkflowStatusService:
     def _sync_failure_summary(self, sync_record, recovery_class: str | None) -> str | None:  # noqa: ANN001
         if sync_record is None:
             return None
-        if recovery_class == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value:
+        if (
+            recovery_class
+            == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
+        ):
             return "Remaining approved writes were cancelled after partial sync success."
         if recovery_class == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value:
             return "Replay requested for downstream sync lineage."
@@ -531,7 +576,8 @@ class WorkflowStatusService:
             "planned_item_key": sync_record.planned_item_key,
             "status": sync_record.status,
             "recovery_class": sync_record.recovery_classification,
-            "retryable": sync_record.status in {
+            "retryable": sync_record.status
+            in {
                 WorkflowSyncStatus.PENDING.value,
                 WorkflowSyncStatus.FAILED_RETRYABLE.value,
                 WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value,
@@ -553,13 +599,20 @@ class WorkflowStatusService:
         has_successful_replay_sources: bool,
     ) -> list[dict[str, str]]:  # noqa: ANN001
         if recovery_class is None and has_successful_replay_sources:
-            return [{"action": "request_replay", "label": "Request explicit replay after adapter fix"}]
+            return [
+                {"action": "request_replay", "label": "Request explicit replay after adapter fix"}
+            ]
         if last_record is None:
             return []
-        if recovery_class == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value:
+        if (
+            recovery_class
+            == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value
+        ):
             return [{"action": "request_replay", "label": "Request replay for cancelled writes"}]
         if recovery_class == WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value:
-            return [{"action": "request_replay", "label": "Request explicit replay after adapter fix"}]
+            return [
+                {"action": "request_replay", "label": "Request explicit replay after adapter fix"}
+            ]
         if recovery_class in {
             WorkflowSyncRecoveryClassification.RECOVERABLE_FAILURE.value,
             WorkflowSyncRecoveryClassification.RETRY_REQUESTED.value,
@@ -575,7 +628,9 @@ class WorkflowStatusService:
         return []
 
     def _submit_approval(self, run_id: int, decision: ApprovalDecision) -> dict[str, object]:
-        return self._build_summary(self._orchestration.submit_approval_decision(run_id, decision=decision))
+        return self._build_summary(
+            self._orchestration.submit_approval_decision(run_id, decision=decision)
+        )
 
     def _build_proposal_versions(self, run: WorkflowRunORM) -> list[dict[str, object]]:
         proposals = [
@@ -585,11 +640,15 @@ class WorkflowStatusService:
         ]
         if not proposals:
             return []
-        proposals = sorted(proposals, key=lambda artifact: (artifact.version_number, artifact.id), reverse=True)
+        proposals = sorted(
+            proposals, key=lambda artifact: (artifact.version_number, artifact.id), reverse=True
+        )
         active_checkpoint = next(
             (
                 checkpoint
-                for checkpoint in sorted(run.approval_checkpoints, key=lambda row: row.id, reverse=True)
+                for checkpoint in sorted(
+                    run.approval_checkpoints, key=lambda row: row.id, reverse=True
+                )
                 if checkpoint.status == "pending"
             ),
             None,
@@ -628,10 +687,13 @@ class WorkflowStatusService:
                 "created_at": artifact.created_at,
                 "producer_step_name": artifact.producer_step_name,
                 "is_latest": artifact.id == latest_proposal_id,
-                "is_actionable": active_checkpoint is not None and active_checkpoint.target_artifact_id == artifact.id,
+                "is_actionable": active_checkpoint is not None
+                and active_checkpoint.target_artifact_id == artifact.id,
                 "superseded": artifact.id in superseded_ids,
-                "approved": decision_by_artifact_id.get(artifact.id, {}).get("decision") == "approve",
-                "rejected": decision_by_artifact_id.get(artifact.id, {}).get("decision") == "reject",
+                "approved": decision_by_artifact_id.get(artifact.id, {}).get("decision")
+                == "approve",
+                "rejected": decision_by_artifact_id.get(artifact.id, {}).get("decision")
+                == "reject",
                 "latest_decision": decision_by_artifact_id.get(artifact.id),
                 "revision_feedback_summary": revision_feedback_by_artifact_id.get(artifact.id),
                 "supersedes_artifact_id": artifact.supersedes_artifact_id,
@@ -759,7 +821,9 @@ class WorkflowStatusService:
             if isinstance(value, str)
         ]
         carry_forward_tasks = [
-            str(item) for item in latest_proposal.get("carry_forward_tasks", []) if isinstance(item, str)
+            str(item)
+            for item in latest_proposal.get("carry_forward_tasks", [])
+            if isinstance(item, str)
         ]
         attention_items: list[str] = []
         live_downstream_sync_status = self._live_downstream_sync_status(
@@ -808,7 +872,9 @@ class WorkflowStatusService:
             "scheduled_highlights": scheduled_highlights[:3],
             "total_sync_writes": total_sync_writes,
             "task_sync_writes": counts_by_target.get(WorkflowTargetSystem.TASK_SYSTEM.value, 0),
-            "calendar_sync_writes": counts_by_target.get(WorkflowTargetSystem.CALENDAR_SYSTEM.value, 0),
+            "calendar_sync_writes": counts_by_target.get(
+                WorkflowTargetSystem.CALENDAR_SYSTEM.value, 0
+            ),
             "carry_forward_tasks": carry_forward_tasks,
             "attention_items": attention_items,
         }
@@ -829,7 +895,10 @@ class WorkflowStatusService:
             final_summary=final_summary,
             sync_projection=sync_projection,
         )
-        if state.run.status == WorkflowRunStatus.COMPLETED.value and downstream_sync_status == "succeeded":
+        if (
+            state.run.status == WorkflowRunStatus.COMPLETED.value
+            and downstream_sync_status == "succeeded"
+        ):
             return f"Scheduled {scheduled_block_count} block(s) and synced {total_sync_writes} approved write(s)."
         if state.run.status == WorkflowRunStatus.COMPLETED.value:
             return (
@@ -905,10 +974,14 @@ def parse_weekly_scheduling_request(request_text: str) -> WeeklySchedulingReques
                 title=fallback_title,
                 details=text,
                 source_line=text,
-                warnings=("Parsed no explicit task list; treating the full brief as one planning item.",),
+                warnings=(
+                    "Parsed no explicit task list; treating the full brief as one planning item.",
+                ),
             ),
         )
-        warnings.append("No explicit tasks parsed; Helm will plan around one synthesized planning item.")
+        warnings.append(
+            "No explicit tasks parsed; Helm will plan around one synthesized planning item."
+        )
 
     protected_time = tuple(_split_items(sections.get("protected time")))
     no_meeting_windows = tuple(_split_items(sections.get("no meeting windows")))
@@ -925,9 +998,13 @@ def parse_weekly_scheduling_request(request_text: str) -> WeeklySchedulingReques
         assumptions.append(item)
 
     if not protected_time:
-        assumptions.append("No protected-time windows were supplied; schedule uses default daytime focus blocks.")
+        assumptions.append(
+            "No protected-time windows were supplied; schedule uses default daytime focus blocks."
+        )
     if not no_meeting_windows:
-        assumptions.append("No no-meeting windows were supplied; only explicit protected blocks constrain placement.")
+        assumptions.append(
+            "No no-meeting windows were supplied; only explicit protected blocks constrain placement."
+        )
 
     return WeeklySchedulingRequest(
         raw_request_text=text,
@@ -986,7 +1063,9 @@ def _parse_weekly_task(item: str) -> WeeklyTaskRequest:
     deadline_match = re.search(r"\b(?:due|deadline|by)\s+([^,;()]+)", item, flags=re.IGNORECASE)
     deadline = deadline_match.group(1).strip() if deadline_match else None
     if deadline is not None:
-        deadline = re.sub(r"\b\d+\s*(?:m|min|minutes|h|hr|hours)\b", "", deadline, flags=re.IGNORECASE).strip()
+        deadline = re.sub(
+            r"\b\d+\s*(?:m|min|minutes|h|hr|hours)\b", "", deadline, flags=re.IGNORECASE
+        ).strip()
     if deadline is None:
         warnings.append("Deadline not provided.")
 

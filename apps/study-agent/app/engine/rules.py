@@ -251,29 +251,29 @@ def build_checkin_proposals(
     for course in courses:
         sentiment = _course_reprioritization_signal(reprioritization_lower, course)
         if sentiment > 0:
-                new_priority = min(5, course.priority + 1)
-                if new_priority != course.priority:
-                    proposals.append(
-                        CheckinProposedChange(
-                            course_id=course.course_id,
-                            field_path="priority",
-                            old_value=str(course.priority),
-                            new_value=str(new_priority),
-                            reason="Reprioritization answer raised this course.",
-                        )
+            new_priority = min(5, course.priority + 1)
+            if new_priority != course.priority:
+                proposals.append(
+                    CheckinProposedChange(
+                        course_id=course.course_id,
+                        field_path="priority",
+                        old_value=str(course.priority),
+                        new_value=str(new_priority),
+                        reason="Reprioritization answer raised this course.",
                     )
+                )
         elif sentiment < 0:
-                new_priority = max(1, course.priority - 1)
-                if new_priority != course.priority:
-                    proposals.append(
-                        CheckinProposedChange(
-                            course_id=course.course_id,
-                            field_path="priority",
-                            old_value=str(course.priority),
-                            new_value=str(new_priority),
-                            reason="Reprioritization answer lowered this course.",
-                        )
+            new_priority = max(1, course.priority - 1)
+            if new_priority != course.priority:
+                proposals.append(
+                    CheckinProposedChange(
+                        course_id=course.course_id,
+                        field_path="priority",
+                        old_value=str(course.priority),
+                        new_value=str(new_priority),
+                        reason="Reprioritization answer lowered this course.",
                     )
+                )
 
         current_sessions = int(course.cadence.get("sessions_per_week", 3))
         if any(token in cadence_lower for token in ("too much", "unrealistic", "reduce")):

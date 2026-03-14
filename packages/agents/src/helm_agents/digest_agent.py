@@ -49,9 +49,7 @@ def generate_daily_digest(limit: int = 5) -> DigestBuildResult:
     lines: list[str] = ["Daily Brief"]
     if actions:
         lines.append("Actions:")
-        lines.extend(
-            [f"- P{item.priority} {item.title}" for item in actions]
-        )
+        lines.extend([f"- P{item.priority} {item.title}" for item in actions])
     ranked_signals = _build_ranked_signals(
         actions=actions,
         digest_items=digest_items,
@@ -129,10 +127,7 @@ def _build_ranked_signals(
         status = str(getattr(item, "status", "pending"))
         if status != "pending":
             continue
-        title = (
-            f"Draft #{getattr(item, 'id', '?')} "
-            f"({getattr(item, 'channel_type', 'unknown')})"
-        )
+        title = f"Draft #{getattr(item, 'id', '?')} ({getattr(item, 'channel_type', 'unknown')})"
         signals.append(
             _build_signal(
                 source="draft",

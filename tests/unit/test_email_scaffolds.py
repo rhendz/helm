@@ -439,8 +439,7 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
     assert "I'm interested in learning more about this opportunity." in email_drafts[0].draft_body
     assert len(draft_reasoning_artifacts) == 2
     assert all(
-        artifact.email_draft_id == email_drafts[0].id
-        for artifact in draft_reasoning_artifacts
+        artifact.email_draft_id == email_drafts[0].id for artifact in draft_reasoning_artifacts
     )
     assert all(
         artifact.action_proposal_id == action_proposals[0].id
@@ -451,21 +450,17 @@ def test_email_triage_persists_artifacts_and_is_idempotent_for_repeated_runs() -
         for artifact in draft_reasoning_artifacts
     )
     event_types = {
-        artifact.refinement_metadata["event_type"]
-        for artifact in draft_reasoning_artifacts
+        artifact.refinement_metadata["event_type"] for artifact in draft_reasoning_artifacts
     }
     assert event_types == {"generation", "refinement"}
-    generators = {
-        artifact.model_metadata["generator"] for artifact in draft_reasoning_artifacts
-    }
+    generators = {artifact.model_metadata["generator"] for artifact in draft_reasoning_artifacts}
     assert generators == {"deterministic_grounded_reply"}
     assert len(classification_artifacts) == 2
     assert classification_artifacts[0].email_thread_id == first_result.email_thread_id
     assert classification_artifacts[0].email_message_id == email_messages[0].id
     assert classification_artifacts[0].decision_context["trigger_family"] == "new_thread_inbound"
     assert (
-        classification_artifacts[1].decision_context["trigger_family"]
-        == "existing_thread_inbound"
+        classification_artifacts[1].decision_context["trigger_family"] == "existing_thread_inbound"
     )
     assert len(digest_items) == 1
     assert len(agent_runs) == 2

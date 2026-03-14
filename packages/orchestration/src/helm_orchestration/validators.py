@@ -45,7 +45,9 @@ class ValidatorRegistry:
     def validate_for_artifact_type(self, artifact_type: str, payload: object) -> ValidationReport:
         validator = self.get_for_artifact_type(artifact_type)
         if validator is None:
-            return _default_report(summary=f"No validator registered for artifact {artifact_type!r}.")
+            return _default_report(
+                summary=f"No validator registered for artifact {artifact_type!r}."
+            )
         return validator.validate(payload)
 
 
@@ -53,7 +55,11 @@ class NormalizedTaskValidator:
     name = "normalized-task-validator"
 
     def validate(self, payload: object) -> ValidationReport:
-        artifact = payload if isinstance(payload, NormalizedTaskArtifact) else NormalizedTaskArtifact.model_validate(payload)
+        artifact = (
+            payload
+            if isinstance(payload, NormalizedTaskArtifact)
+            else NormalizedTaskArtifact.model_validate(payload)
+        )
 
         issues: list[ValidationIssue] = []
         warnings: list[str] = list(artifact.warnings)

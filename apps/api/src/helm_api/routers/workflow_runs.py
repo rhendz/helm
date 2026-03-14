@@ -41,7 +41,10 @@ def list_workflow_runs(
     db: Session = Depends(get_db),
 ) -> list[WorkflowRunSummaryResponse]:
     service = WorkflowStatusService(db)
-    return [WorkflowRunSummaryResponse(**item) for item in service.list_runs(needs_action=needs_action, limit=limit)]
+    return [
+        WorkflowRunSummaryResponse(**item)
+        for item in service.list_runs(needs_action=needs_action, limit=limit)
+    ]
 
 
 @router.get("/{run_id}", response_model=WorkflowRunDetailResponse)
@@ -63,7 +66,10 @@ def list_workflow_run_proposal_versions(
 ) -> list[WorkflowProposalVersionResponse]:
     service = WorkflowStatusService(db)
     try:
-        return [WorkflowProposalVersionResponse(**item) for item in service.list_proposal_versions(run_id)]
+        return [
+            WorkflowProposalVersionResponse(**item)
+            for item in service.list_proposal_versions(run_id)
+        ]
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

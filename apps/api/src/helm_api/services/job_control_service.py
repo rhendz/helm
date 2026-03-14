@@ -24,9 +24,7 @@ def list_job_controls(*, paused: bool | None = None) -> list[dict[str, object]]:
     try:
         with SessionLocal() as session:
             repository = SQLAlchemyJobControlRepository(session)
-            persisted = {
-                row.job_name: bool(row.paused) for row in repository.list_all()
-            }
+            persisted = {row.job_name: bool(row.paused) for row in repository.list_all()}
     except SQLAlchemyError:
         persisted = {}
 
@@ -61,6 +59,8 @@ def set_job_pause(*, job_name: str, paused: bool) -> dict[str, object]:
             return {"job_name": row.job_name, "paused": bool(row.paused)}
     except SQLAlchemyError:
         return {"job_name": job_name, "paused": paused}
+
+
 def run_replay_job(*, limit: int) -> dict[str, object]:
     replay_control = get_job_control(job_name="replay")
     if replay_control is not None and bool(replay_control["paused"]):

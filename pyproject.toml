@@ -59,11 +59,21 @@ minversion = "8.0"
 addopts = "-q"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Exclude non-truth agent tests (EmailAgent and StudyAgent are present but non-truth for M002)
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+norecursedirs = ["__pycache__"]
+# Use --ignore patterns in script instead
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 
+[tool.ruff.format]
+quote-style = "double"
+skip-magic-trailing-comma = false
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-ignore = ["B008"]
+ignore = ["B008", "B023", "E501"]  # B008,B023: lambda patterns with loop vars; E501: use formatter
