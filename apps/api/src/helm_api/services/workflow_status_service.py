@@ -4,9 +4,17 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from helm_connectors import (
+    GoogleCalendarAdapter,
+    GoogleCalendarAuth,
+    StubCalendarSystemAdapter,
+    StubTaskSystemAdapter,
+)
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
+    CalendarSystemAdapter,
+    TaskSystemAdapter,
     WeeklySchedulingRequest,
     WeeklyTaskRequest,
     WorkflowOrchestrationService,
@@ -40,12 +48,35 @@ class WorkflowRunCreateInput:
 
 
 class WorkflowStatusService:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        task_system_adapter: TaskSystemAdapter | None = None,
+        calendar_system_adapter: CalendarSystemAdapter | None = None,
+    ) -> None:
         self._session = session
         self._run_repo = SQLAlchemyWorkflowRunRepository(session)
         self._artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
         self._sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
-        self._orchestration = WorkflowOrchestrationService(session)
+        
+        # Instantiate real adapters if credentials are available, otherwise use stubs
+        if task_system_adapter is None:
+            task_system_adapter = StubTaskSystemAdapter()
+        if calendar_system_adapter is None:
+            # Try to use real GoogleCalendarAdapter if credentials are available
+            try:
+                auth = GoogleCalendarAuth()
+                calendar_system_adapter = GoogleCalendarAdapter(auth)
+            except ValueError:
+                # Credentials not available; fall back to stub
+                calendar_system_adapter = StubCalendarSystemAdapter()
+        
+        self._orchestration = WorkflowOrchestrationService(
+            session,
+            task_system_adapter=task_system_adapter,
+            calendar_system_adapter=calendar_system_adapter,
+        )
 
     def create_run(self, payload: WorkflowRunCreateInput) -> dict[str, object]:
         normalized_payload = build_workflow_run_create_input(
@@ -560,6 +591,8 @@ class WorkflowStatusService:
             return "Remaining approved writes were cancelled after partial sync success."
         if recovery_class == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value:
             return "Replay requested for downstream sync lineage."
+        if sync_record.status == WorkflowSyncStatus.DRIFT_DETECTED.value:
+            return "External event was manually edited after Helm wrote it; operator action required to recover."
         if sync_record.last_error_summary:
             return sync_record.last_error_summary
         if sync_record.status == WorkflowSyncStatus.PENDING.value:
@@ -604,6 +637,11 @@ class WorkflowStatusService:
             ]
         if last_record is None:
             return []
+        # Handle drift-detected records: operator must initiate recovery
+        if last_record.status == WorkflowSyncStatus.DRIFT_DETECTED.value:
+            return [
+                {"action": "request_replay", "label": "Request explicit replay to recover from manual edit"}
+            ]
         if (
             recovery_class
             == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value

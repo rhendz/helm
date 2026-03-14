@@ -31,6 +31,61 @@
 
 ## Active
 
+### R006 — Google Calendar auth model is selected and implemented
+- Class: core-capability
+- Status: active
+- Description: Choose between service account or user OAuth, implement credential handling, and verify API access works end-to-end. This decision shapes the entire real Calendar integration architecture.
+- Why it matters: Auth model determines how Helm accesses the operator's calendar, what permissions are needed, token refresh strategy, and what external system state Helm can read/write.
+- Source: user
+- Primary owning slice: M003/S01
+- Supporting slices: none
+- Validation: mapped
+- Notes: Will be decided during M003/S01 planning with explicit decision recorded in .gsd/DECISIONS.md.
+
+### R010 — Real bidirectional Google Calendar sync with conflict detection
+- Class: integration
+- Status: active
+- Description: Helm can read the operator's real Google Calendar, write proposed calendar blocks, detect conflicts with existing events, and adapt scheduling around actual calendar reality instead of working from stubs.
+- Why it matters: The weekly scheduling workflow is useless if it writes events to a stub system. Real Calendar integration makes the workflow actually runnable and useful.
+- Source: user
+- Primary owning slice: M003/S01
+- Supporting slices: M003/S02, M003/S04
+- Validation: mapped
+- Notes: Built on R006 auth decision; S02 adds drift detection; S04 hardens edge cases.
+
+### R011 — External-change detection and recovery
+- Class: continuity
+- Status: validated
+- Description: When the operator manually reschedules or edits a Calendar event that Helm previously wrote, Helm detects the change, reconciles its internal model, and proposes reshuffle actions rather than fighting the operator by rewriting the old plan.
+- Why it matters: Operator intent (manual edits) takes precedence. Helm is an assistant, not an enforcer. Without this, Helm becomes adversarial and untrustworthy.
+- Source: user
+- Primary owning slice: M003/S02
+- Supporting slices: M003/S04
+- Validation: validated
+- Notes: S02 proves drift detection via fingerprint comparison (payload_fingerprint_matches field from adapter reconciliation). Operator edits are detected, field diffs extracted, internal workflow_sync_records marked DRIFT_DETECTED, durable drift events created. Integration tests validate full flow. Reconciliation policy (what Helm does after detecting drift) deferred to S04.
+
+### R012 — Real-time execution visibility in Telegram
+- Class: operability
+- Status: active
+- Description: As workflow sync happens and tasks/events flow to external systems, Telegram shows real-time status, failures, retries, and recovery actions. Operator knows what's happening and can intervene.
+- Why it matters: Operator trust depends on visibility. Silent success or hidden failures are equally bad. Real-time Telegram updates make the workflow transparent and actionable.
+- Source: user
+- Primary owning slice: M003/S03
+- Supporting slices: M003/S04, M003/S05
+- Validation: mapped
+- Notes: Builds on existing Telegram command structure from M001; deepens status projection to include sync events.
+
+### R013 — Operator trust through explicit verification
+- Class: quality-attribute
+- Status: active
+- Description: Durable automated tests and UAT scripts prove that external state handling (Calendar writes, drift detection, reconciliation, recovery) works correctly. Tests are hermetic; UAT proves operator experience.
+- Why it matters: Since M003 introduces real external state and manual operator edits, trust is earned through transparent, repeatable verification that can be re-checked later.
+- Source: user
+- Primary owning slice: M003/S05
+- Supporting slices: none
+- Validation: mapped
+- Notes: Integration verification exercises real Calendar writes (or test fixtures); UAT script enables operator to verify drift detection, sync visibility, and recovery paths in their own environment.
+
 ### R001 — Helm workflow-engine truth set is sharply defined
 - Class: core-capability
 - Status: active
@@ -99,6 +154,11 @@
 | R003 | continuity         | validated | M002/S03      | M002/S01, M002/S02 | validated  |
 | R004 | constraint         | active    | M002/S01      | M002/S02           | proofed    |
 | R005 | failure-visibility | validated | M002/S02      | M002/S01           | validated  |
+| R006 | core-capability    | active    | M003/S01      | none               | mapped     |
+| R010 | integration        | active    | M003/S01      | M003/S02, M003/S04 | mapped     |
+| R011 | continuity         | validated | M003/S02      | M003/S04           | validated  |
+| R012 | operability        | active    | M003/S03      | M003/S04, M003/S05 | mapped     |
+| R013 | quality-attribute  | active    | M003/S05      | none               | mapped     |
 | REQ-DURABLE-PERSISTENCE | core-capability | validated | M001/S01 | none | validated |
 | REQ-SPECIALIST-DISPATCH | integration     | validated | M001/S02 | none | validated |
 | REQ-APPROVAL-CHECKPOINTS | core-capability | validated | M001/S02 | none | validated |
@@ -110,7 +170,7 @@
 
 ## Coverage Summary
 
-- Active requirements: 2 (R001, R004)
-- Validated: 10 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005, plus M002/S03 coverage for R003)
-- Deferred: 1
-- Out of scope: 1
+- Active requirements: 6 (R001, R004, R006, R010, R012, R013)
+- Validated: 11 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005, plus M002/S03 coverage for R003, plus M003/S02 coverage for R011)
+- Deferred: 1 (R020)
+- Out of scope: 1 (R030)

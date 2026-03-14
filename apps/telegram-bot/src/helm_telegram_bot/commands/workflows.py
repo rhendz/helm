@@ -1,8 +1,13 @@
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from helm_telegram_bot.commands.common import parse_single_id_arg, reject_if_unauthorized
+from helm_telegram_bot.formatters import sync_events
 from helm_telegram_bot.services.workflow_status_service import TelegramWorkflowStatusService
+
+logger = logging.getLogger(__name__)
 
 _service = TelegramWorkflowStatusService()
 
@@ -55,6 +60,27 @@ def _format_run(run: dict[str, object]) -> str:
         attention_items = completion_summary.get("attention_items")
         if isinstance(attention_items, list) and attention_items:
             lines.append(f"Attention: {'; '.join(str(item) for item in attention_items[:3])}")
+
+    # Append sync timeline if available
+    run_id = run.get("id")
+    if isinstance(run_id, int):
+        try:
+            sync_event_list = _service.list_sync_events(run_id)
+            if sync_event_list:
+                sync_timeline = sync_events.format_sync_timeline(sync_event_list, max_events=8)
+                if sync_timeline:
+                    lines.append(f"Sync timeline:\n{sync_timeline}")
+                    logger.debug(
+                        "workflow_command_invoked",
+                        extra={
+                            "run_id": run_id,
+                            "command": "workflows_detail",
+                            "sync_record_count": len(sync_event_list),
+                        },
+                    )
+        except Exception:
+            logger.exception("sync_timeline_fetch_error", extra={"run_id": run_id})
+
     approval_checkpoint = run.get("approval_checkpoint")
     if isinstance(approval_checkpoint, dict):
         proposal_summary = (
@@ -251,3 +277,63 @@ async def versions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             line += f" | feedback: {feedback}"
         lines.append(line)
     await update.message.reply_text("\n".join(lines))
+
+
+async def sync_detail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display full sync event timeline for a workflow run."""
+    if await reject_if_unauthorized(update, context):
+        return
+    if not update.message:
+        return
+    run_id = parse_single_id_arg(context.args)
+    if run_id is None:
+        await update.message.reply_text("Usage: /workflow_sync_detail <run_id>")
+        return
+    
+    # Fetch full sync details
+    try:
+        sync_details = _service.get_sync_details(run_id)
+        sync_event_list = sync_details.get("sync_records", [])
+        
+        if not sync_event_list:
+            await update.message.reply_text(f"No sync events for workflow run {run_id}.")
+            logger.debug(
+                "workflow_command_invoked",
+                extra={
+                    "run_id": run_id,
+                    "command": "workflow_sync_detail",
+                    "sync_record_count": 0,
+                },
+            )
+            return
+        
+        # Format full timeline (use large max_events to show all available)
+        sync_timeline = sync_events.format_sync_timeline(sync_event_list, max_events=999)
+        if not sync_timeline:
+            await update.message.reply_text(f"No sync events for workflow run {run_id}.")
+            return
+        
+        # Build response with summary and timeline
+        lines = [
+            f"Run {run_id} sync timeline:",
+            f"Total writes: {sync_details.get('total_sync_writes', 0)} "
+            f"(task: {sync_details.get('task_sync_writes', 0)}, "
+            f"calendar: {sync_details.get('calendar_sync_writes', 0)})",
+            "",
+            sync_timeline,
+        ]
+        
+        response = "\n".join(lines)
+        await update.message.reply_text(response)
+        
+        logger.debug(
+            "workflow_command_invoked",
+            extra={
+                "run_id": run_id,
+                "command": "workflow_sync_detail",
+                "sync_record_count": len(sync_event_list),
+            },
+        )
+    except Exception as e:
+        logger.exception("sync_detail_command_error", extra={"run_id": run_id, "error": str(e)})
+        await update.message.reply_text(f"Error fetching sync details for run {run_id}. See logs for details.")

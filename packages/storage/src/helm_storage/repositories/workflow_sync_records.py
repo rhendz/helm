@@ -1,4 +1,6 @@
 from datetime import UTC, datetime
+from json import dumps
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
@@ -10,6 +12,7 @@ from helm_storage.repositories.contracts import (
     WorkflowSyncIdentityQuery,
     WorkflowSyncRecordPatch,
     WorkflowSyncRemainingQuery,
+    WorkflowSyncRecoveryClassification,
     WorkflowSyncStatus,
     WorkflowSyncStepQuery,
 )
@@ -232,6 +235,42 @@ class SQLAlchemyWorkflowSyncRecordRepository:
                 last_error_summary=error_summary,
                 completed_at=completed_at or _now(),
                 recovery_classification=recovery_classification,
+                recovery_updated_at=_now(),
+            ),
+        )
+
+    def mark_drift_detected(
+        self,
+        sync_record_id: int,
+        *,
+        live_fingerprint: str,
+        field_diffs: dict[str, Any],
+    ) -> WorkflowSyncRecordORM | None:
+        """Mark a sync record as having detected drift between planned and live state.
+        
+        Stores the live fingerprint and field differences as drift metadata in 
+        last_error_summary for inspection and debugging. Assigns TERMINAL_FAILURE
+        recovery classification to enable operator-initiated replay recovery.
+        
+        Args:
+            sync_record_id: ID of the sync record to mark as drifted
+            live_fingerprint: The observed fingerprint of the live external state
+            field_diffs: Mapping of field names to differences (before/after, reason, etc.)
+            
+        Returns:
+            Updated WorkflowSyncRecordORM if found, None if not found
+        """
+        drift_metadata = {
+            "live_fingerprint": live_fingerprint,
+            "field_diffs": field_diffs,
+        }
+        return self.update(
+            sync_record_id,
+            WorkflowSyncRecordPatch(
+                status=WorkflowSyncStatus.DRIFT_DETECTED.value,
+                last_error_summary=dumps(drift_metadata),
+                recovery_classification=WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value,
+                completed_at=_now(),
                 recovery_updated_at=_now(),
             ),
         )

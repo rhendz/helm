@@ -1103,7 +1103,8 @@ class WorkflowOrchestrationService:
 
             if prior_status == WorkflowSyncStatus.UNCERTAIN_NEEDS_RECONCILIATION.value:
                 reconciliation = self._reconcile_sync_record(claimed)
-                if reconciliation.found or reconciliation.payload_fingerprint_matches:
+                if reconciliation.found and reconciliation.payload_fingerprint_matches:
+                    # Event found and matches planned state - reconciliation successful
                     self._sync_repo.mark_succeeded(
                         claimed.id,
                         external_object_id=reconciliation.external_object_id
@@ -1124,6 +1125,15 @@ class WorkflowOrchestrationService:
                                 "provider_state": reconciliation.provider_state,
                             },
                         )
+                    )
+                    continue
+                elif reconciliation.found and not reconciliation.payload_fingerprint_matches:
+                    # Event found but fingerprints don't match - drift detected (manual edit)
+                    self._handle_drift_detected(
+                        run_id=run_id,
+                        step=step,
+                        sync_record=claimed,
+                        reconciliation=reconciliation,
                     )
                     continue
 
@@ -1699,6 +1709,132 @@ class WorkflowOrchestrationService:
             return adapter.reconcile_task(lookup)
         adapter = self._require_calendar_system_adapter()
         return adapter.reconcile_calendar_block(lookup)
+
+    def _handle_drift_detected(
+        self, *, run_id: int, step, sync_record, reconciliation
+    ) -> None:
+        """Handle a drift detection case where the external object was manually edited.
+
+        Args:
+            run_id: Workflow run ID
+            step: Current workflow step
+            sync_record: The claimed sync record (WorkflowSyncRecordORM)
+            reconciliation: The SyncLookupResult indicating drift (found=True, payload_fingerprint_matches=False)
+        """
+        # Extract field diffs by comparing stored payload against live event details
+        field_diffs = self._compute_field_diffs(
+            sync_record=sync_record, reconciliation=reconciliation
+        )
+
+        # Compute live fingerprint hash as reference
+        live_fingerprint = self._compute_live_fingerprint(reconciliation)
+
+        # Log drift detection with structured data (grep-able signal)
+        from helm_observability.logging import get_logger
+
+        logger = get_logger(__name__)
+        logger.info(
+            "drift_detected",
+            sync_record_id=sync_record.id,
+            planned_item_key=sync_record.planned_item_key,
+            external_object_id=reconciliation.external_object_id,
+            stored_fingerprint=sync_record.payload_fingerprint,
+            live_fingerprint=live_fingerprint,
+            field_diffs=field_diffs,
+        )
+
+        # Create a durable workflow event for drift detection
+        self._event_repo.create(
+            NewWorkflowEvent(
+                run_id=run_id,
+                step_id=step.id,
+                event_type="drift_detected_external_change",
+                run_status=WorkflowRunStatus.RUNNING.value,
+                step_status=WorkflowStepStatus.RUNNING.value,
+                summary=f"Detected external changes to {sync_record.planned_item_key} (manual edit).",
+                details={
+                    "sync_record_id": sync_record.id,
+                    "planned_item_key": sync_record.planned_item_key,
+                    "external_object_id": reconciliation.external_object_id,
+                    "stored_fingerprint": sync_record.payload_fingerprint,
+                    "live_fingerprint": live_fingerprint,
+                    "field_diffs": field_diffs,
+                },
+            )
+        )
+
+        # Mark the sync record as DRIFT_DETECTED
+        self._sync_repo.mark_drift_detected(
+            sync_record.id,
+            live_fingerprint=live_fingerprint,
+            field_diffs=field_diffs,
+        )
+
+    def _compute_field_diffs(self, *, sync_record, reconciliation: SyncLookupResult) -> dict[str, Any]:
+        """Compute field diffs between stored payload and live event details.
+
+        Compares the stored sync_record.payload against the live event details from
+        the reconciliation result to identify which fields changed.
+
+        Args:
+            sync_record: The workflow sync record (contains stored payload)
+            reconciliation: The reconciliation result (contains live event details)
+
+        Returns:
+            dict mapping field names to {before: stored_value, after: live_value}
+        """
+        diffs = {}
+
+        # Extract live event fields from reconciliation details
+        live_event_fields = reconciliation.details.get("live_event_fields", {})
+        if not live_event_fields:
+            return diffs
+
+        # Fields to compare: title, start, end, description
+        fields_to_check = ["title", "start", "end", "description"]
+
+        for field_name in fields_to_check:
+            stored_value = sync_record.payload.get(field_name)
+            live_value = live_event_fields.get(field_name)
+
+            # Record diff if values differ
+            if stored_value != live_value:
+                diffs[field_name] = {
+                    "before": stored_value,
+                    "after": live_value,
+                }
+
+        return diffs
+
+    def _compute_live_fingerprint(self, reconciliation: SyncLookupResult) -> str:
+        """Compute a fingerprint of the live event fields.
+
+        Creates a canonical JSON hash of the live event details to serve as a
+        reference for what the live state was when drift was detected.
+
+        Args:
+            reconciliation: The reconciliation result (contains live event details)
+
+        Returns:
+            Hex hash string representing the live event fingerprint
+        """
+        live_event_fields = reconciliation.details.get("live_event_fields", {})
+        if not live_event_fields:
+            return "unknown"
+
+        # Create canonical JSON of live event fields (same format as stored payload)
+        canonical_json = json.dumps(
+            {
+                "title": live_event_fields.get("title", ""),
+                "start": live_event_fields.get("start", ""),
+                "end": live_event_fields.get("end", ""),
+                "description": live_event_fields.get("description", ""),
+            },
+            sort_keys=True,
+        )
+
+        # Return SHA-256 hash hex (consistent with fingerprint format)
+        return hashlib.sha256(canonical_json.encode()).hexdigest()
 
     def _require_task_system_adapter(self) -> TaskSystemAdapter:
         if self._task_system_adapter is None:
