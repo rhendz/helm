@@ -5,7 +5,7 @@
 - "Fail runnable steps durably when no step handler exists so adapter-free execution errors are visible in persisted state."
 - "Kept API and Telegram workflow status behavior aligned behind one shared workflow read-model service."
 - "Exposed paused workflow conditions explicitly as `paused_state` and nullable `pause_reason` instead of requiring clients to infer blocked vs failed runs from generic status text."
-- "Used dedicated workflow run routes and bot commands for create, inspect, retry, and terminate actions rather than overloading unrelated status surfaces."
+- "Used dedicated workflow run routes and bot commands for create, inspect, retry, and terminate actions instead of overloading unrelated status surfaces."
 - "Persist specialist execution in a dedicated workflow_specialist_invocations table instead of hiding invocation metadata inside artifact payloads."
 - "Move specialist execution into WorkflowOrchestrationService so the worker only registers workflow-semantic steps and resumes durable state."
 - "Treat schedule proposals as first-class workflow artifacts validated by the same kernel flow as normalized tasks."
@@ -39,3 +39,4 @@
 - "Replay-requested recovery classification now overrides stale final-summary success in the shared completion projection."
 - "Representative final-summary artifacts stay unchanged after replay so lineage remains inspectable while live status turns recovery-oriented."
 - "Telegram /workflows continues to format the shared completion summary instead of adding surface-specific replay semantics."
+- "Treat weekly scheduling end-to-end behavior (API + worker + Telegram) as a protected core with dedicated integration tests and a reusable UAT script, so future cleanup can rely on automated plus human verification for task/calendar workflows."

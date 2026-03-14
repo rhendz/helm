@@ -12,14 +12,19 @@ Helm can execute multi-step, approval-gated workflows reliably enough that workf
 
 - M001 (Helm Orchestration Kernel v1) is complete and validated the kernel across API, worker, Telegram, storage, and orchestration boundaries using a weekly scheduling workflow.
 - Workflow persistence, specialist dispatch, approval checkpoints, outbound sync, replay, and operator surfaces are implemented and covered by tests.
-- M002/S01 defined a small, explicit workflow-engine truth set and classification rules, anchored on task/calendar workflows and operator surfaces, with EmailAgent deprecated and StudyAgent frozen.
-- M002/S02 applied that truth set to the repo tree:
-  - Deprecated and aspirational surfaces (Night Runner, packages/domain, LinkedIn, Email/Study docs/tests) are classified as keep/freeze/deprecate/quarantine in `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
-  - `packages/domain` has been quarantined under `docs/archive/packages-domain/` and removed from all runtime PYTHONPATH helpers.
-  - Night Runner exists only as deprecated scripts plus archived docs under `docs/archive/`; product docs mark the workstream as historical.
-  - EmailAgent remains wired for storage/runtime and replay but is explicitly non-truth; StudyAgent is frozen with no new usage added.
-  - Tests and CI (via `scripts/test.sh` and `.github/workflows/python-checks-reusable.yml`) now focus on the workflow-engine core, with pytest and rg-based diagnostics used to guard against regressions in deprecated/quarantined paths.
-- `.gsd/milestones/M001/M001-SUMMARY.md` captures what was shipped in the kernel milestone and is the primary reference for kernel behavior.
+- M002 (Helm Truth-Set Cleanup) is **complete**:
+  - **S01**: Defined a small, explicit workflow-engine truth set and classification rules, anchored on task/calendar workflows and operator surfaces, with EmailAgent deprecated and StudyAgent frozen.
+  - **S02**: Applied that truth set to the repo tree:
+    - Deprecated and aspirational surfaces (Night Runner, packages/domain, LinkedIn, Email/Study docs/tests) are classified as keep/freeze/deprecate/quarantine in `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
+    - `packages/domain` quarantined under `docs/archive/packages-domain/` and removed from runtime PYTHONPATH.
+    - Night Runner exists only as deprecated scripts plus archived docs under `docs/archive/`; product docs mark the workstream as historical.
+    - EmailAgent remains wired for storage/runtime and replay but is explicitly non-truth; StudyAgent is frozen.
+    - Tests and CI now focus on workflow-engine core with rg-based diagnostics guarding against deprecated/quarantined path regressions.
+  - **S03**: Verified weekly scheduling / task+calendar workflows end-to-end via API/worker/Telegram after cleanup:
+    - 14 automated tests (3 integration + 11 unit) covering approval checkpoints, sync execution, and completion summaries.
+    - Manual UAT script enabling future operator verification in fresh environments.
+    - R003 (Task/calendar workflows verified after cleanup) now **validated**.
+- Key references: `.gsd/milestones/M001/M001-SUMMARY.md` (kernel behavior), `.gsd/milestones/M002/slices/S03/S03-SUMMARY.md` (M002 completion), `.gsd/milestones/M002/slices/S03/S03-UAT.md` (verification script).
 
 ## Architecture / Key Patterns
 
@@ -38,5 +43,6 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 ## Milestone Sequence
 
 - [x] M001: Helm Orchestration Kernel v1 — Durable workflow kernel with a representative weekly scheduling workflow and shared operator surfaces.
-- [ ] M002: Helm Truth-Set Cleanup — Strict workflow-engine truth set, aggressive removal of stale/aspirational artifacts, and verified task/calendar workflow protection after cleanup.
-  - Working inventory for M002 cleanup and deprecated surfaces: `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
+- [x] M002: Helm Truth-Set Cleanup — Strict workflow-engine truth set, aggressive removal of stale/aspirational artifacts, and verified task/calendar workflow protection after cleanup.
+  - Truth set and classification: `.gsd/milestones/M002/M002-TRUTH-NOTE.md`, `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
+  - Verification: `.gsd/milestones/M002/slices/S03/S03-SUMMARY.md` (summary) and `.gsd/milestones/M002/slices/S03/S03-UAT.md` (operator UAT script).

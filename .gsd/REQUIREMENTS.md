@@ -44,14 +44,14 @@
 
 ### R003 — Task/calendar workflows remain intact and verified after cleanup
 - Class: continuity
-- Status: active
+- Status: validated
 - Description: After truth-set cleanup and artifact removal, the representative weekly scheduling / task+calendar workflows continue to operate correctly through API/worker/Telegram, with explicit verification/UAT demonstrating no regressions.
 - Why it matters: Task/calendar sync protection is core truth; cleanup must not break existing behavior.
 - Source: user
 - Primary owning slice: M002/S03
 - Supporting slices: M002/S01, M002/S02
-- Validation: unmapped
-- Notes: Verification should reuse and, if needed, extend existing tests and runbooks for workflow runs.
+- Validation: validated
+- Notes: S03 proves via 14 automated tests (3 integration + 11 unit) and manual UAT that weekly scheduling workflows operate end-to-end through API, worker, and Telegram surfaces after M002 cleanup. Approval checkpoints, sync execution, and completion summaries all verified. UAT script in `.gsd/milestones/M002/slices/S03/S03-UAT.md` enables future verification.
 
 ### R004 — Non-core agents do not define current truth
 - Class: constraint
@@ -96,7 +96,7 @@
 |------|--------------------|-----------|---------------|--------------------|------------|
 | R001 | core-capability    | active    | M002/S01      | none               | proofed    |
 | R002 | continuity         | validated | M002/S02      | M002/S01, M002/S03 | validated  |
-| R003 | continuity         | active    | M002/S03      | M002/S01, M002/S02 | unmapped   |
+| R003 | continuity         | validated | M002/S03      | M002/S01, M002/S02 | validated  |
 | R004 | constraint         | active    | M002/S01      | M002/S02           | proofed    |
 | R005 | failure-visibility | validated | M002/S02      | M002/S01           | validated  |
 | REQ-DURABLE-PERSISTENCE | core-capability | validated | M001/S01 | none | validated |
@@ -110,7 +110,7 @@
 
 ## Coverage Summary
 
-- Active requirements: 3
-- Validated: 9 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005)
+- Active requirements: 2 (R001, R004)
+- Validated: 10 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005, plus M002/S03 coverage for R003)
 - Deferred: 1
 - Out of scope: 1
