@@ -56,7 +56,7 @@ auto_supervisor:
   idle_timeout_minutes: 10
   hard_timeout_minutes: 30
 
-budget_ceiling: 15.00
+budget_ceiling: 25.00
 
 git:
   snapshots: true
