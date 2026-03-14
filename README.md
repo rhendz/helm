@@ -26,7 +26,7 @@ Primary product spec: [`docs/internal/helm-v1.md`](docs/internal/helm-v1.md)
 - `apps/api`: FastAPI internal API and trigger endpoints.
 - `apps/worker`: background jobs, schedulers, and workflow execution entrypoint.
 - `apps/telegram-bot`: Telegram UX for digest, drafts, approvals, and status commands.
-- `packages/domain`: shared domain primitives and value objects.
+
 - `packages/storage`: SQLAlchemy models, session setup, and repositories.
 - `packages/connectors`: external ingestion connectors (Gmail/Telegram adapters).
 - `packages/agents`: domain agents (email/digest).

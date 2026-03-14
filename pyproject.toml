@@ -40,7 +40,6 @@ where = [
   "apps/api/src",
   "apps/worker/src",
   "apps/telegram-bot/src",
-  "packages/domain/src",
   "packages/storage/src",
   "packages/connectors/src",
   "packages/agents/src",
