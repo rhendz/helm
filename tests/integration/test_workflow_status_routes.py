@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_api.dependencies import get_db
 from helm_api.main import app
+from helm_api.services import replay_service
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -17,16 +18,30 @@ from helm_orchestration import (
     ValidatorTarget,
     WorkflowOrchestrationService,
 )
+from helm_worker.jobs import workflow_runs as workflow_runs_job
 from helm_storage.db import Base
 from helm_storage.repositories import (
     NewWorkflowArtifact,
     SQLAlchemyWorkflowArtifactRepository,
+    SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
+    WorkflowSyncRecoveryClassification,
     WorkflowRunStatus,
 )
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+
+class _SessionContext:
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def __enter__(self) -> Session:
+        return self._session
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # noqa: ANN001
+        return False
 
 
 def _service(session: Session) -> WorkflowOrchestrationService:
@@ -288,6 +303,83 @@ def test_create_workflow_route_defaults_to_weekly_scheduling_contract() -> None:
         assert payload["current_step"] == "dispatch_task_agent"
         assert payload["weekly_request"]["tasks"][1]["title"] == "Prep interviews"
         assert payload["weekly_request"]["no_meeting_windows"] == ["keep Friday afternoon open."]
+
+
+def test_public_representative_flow_reaches_completion_and_replay_with_fresh_final_summary(
+    monkeypatch,
+) -> None:  # noqa: ANN001
+    for client, session in _client():
+        monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
+        monkeypatch.setattr(replay_service, "SessionLocal", lambda: _SessionContext(session))
+
+        created = client.post(
+            "/v1/workflow-runs",
+            json={
+                "request_text": (
+                    "Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; "
+                    "Prep interviews medium 120m; Clear inbox low 30m. "
+                    "Constraints: protect deep work mornings; keep Friday afternoon open."
+                ),
+                "submitted_by": "telegram:user",
+                "channel": "telegram",
+                "metadata": {"chat_id": "999"},
+            },
+        )
+        assert created.status_code == 200
+        run_id = created.json()["id"]
+
+        assert workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps()) == 1
+        assert workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps()) == 1
+
+        blocked = client.get(f"/v1/workflow-runs/{run_id}")
+        assert blocked.status_code == 200
+        assert blocked.json()["paused_state"] == "awaiting_approval"
+        target_artifact_id = blocked.json()["approval_checkpoint"]["target_artifact_id"]
+
+        approved = client.post(
+            f"/v1/workflow-runs/{run_id}/approve",
+            json={"actor": "api:test", "target_artifact_id": target_artifact_id},
+        )
+        assert approved.status_code == 200
+        assert approved.json()["status"] == WorkflowRunStatus.PENDING.value
+        assert approved.json()["current_step"] == "apply_schedule"
+
+        WorkflowOrchestrationService(
+            session,
+            validator_registry=_validator_registry(),
+            task_system_adapter=StubTaskSystemAdapter(),
+            calendar_system_adapter=StubCalendarSystemAdapter(),
+        ).execute_pending_sync_step(run_id)
+        source_sync_record_ids = [
+            record.id
+            for record in SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)
+            if record.replayed_from_sync_record_id is None
+        ]
+
+        completed = client.get(f"/v1/workflow-runs/{run_id}")
+        assert completed.status_code == 200
+        assert completed.json()["status"] == WorkflowRunStatus.COMPLETED.value
+        assert completed.json()["lineage"]["final_summary"]["downstream_sync_status"] == "succeeded"
+        assert len(completed.json()["lineage"]["final_summary"]["downstream_sync_reference_ids"]) == len(
+            source_sync_record_ids
+        )
+        replay = client.post(
+            f"/v1/replay/workflow-runs/{run_id}",
+            json={"actor": "api:operator", "reason": "Replay completed run after adapter drift."},
+        )
+        assert replay.status_code == 200
+        assert replay.json()["source_sync_record_ids"] == source_sync_record_ids
+
+        replayed = client.get(f"/v1/workflow-runs/{run_id}")
+        assert replayed.status_code == 200
+        assert replayed.json()["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        assert replayed.json()["lineage"]["final_summary"]["downstream_sync_status"] == "pending"
+        assert len(replayed.json()["lineage"]["final_summary"]["downstream_sync_artifact_ids"]) == (
+            len(source_sync_record_ids) * 2
+        )
+        assert replayed.json()["completion_summary"]["headline"] == (
+            f"Approved schedule needs downstream follow-up after {len(source_sync_record_ids) * 2} planned write(s)."
+        )
 
 
 def test_workflow_routes_cover_operator_states() -> None:

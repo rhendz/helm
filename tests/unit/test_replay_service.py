@@ -283,6 +283,7 @@ def test_completed_run_replay_leaves_durable_recovery_truth_for_shared_projectio
             reason="Replay completed run after adapter drift.",
         )
         sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(replayed.run.id)
+        final_summary = replayed.latest_artifacts[WorkflowArtifactType.FINAL_SUMMARY.value]
 
         assert replayed.run.status == "completed"
         assert sync_records[1].status == WorkflowSyncStatus.SUCCEEDED.value
@@ -294,6 +295,9 @@ def test_completed_run_replay_leaves_durable_recovery_truth_for_shared_projectio
         assert sync_records[-1].recovery_classification == (
             WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
         )
+        assert final_summary.version_number == 2
+        assert final_summary.payload["downstream_sync_status"] == "pending"
+        assert len(final_summary.payload["downstream_sync_artifact_ids"]) == 3
 
 
 def test_api_workflow_replay_endpoint_accepts_completed_successful_representative_run(monkeypatch) -> None:  # noqa: ANN001

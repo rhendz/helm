@@ -759,6 +759,21 @@ class WorkflowOrchestrationService:
                 details=replay_request.model_dump(mode="json"),
             )
         )
+        if (
+            state.run.workflow_type == "weekly_scheduling"
+            and self._artifact_repo.get_latest_for_run(
+                run_id,
+                artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
+            )
+            is not None
+        ):
+            self._persist_representative_final_summary(
+                run_id,
+                step=current_step,
+                summary_text=self._build_representative_completion_summary_text(
+                    self._sync_repo.list_for_run(run_id)
+                ),
+            )
         return self.get_run_state(run_id)
 
     def terminate_run(self, run_id: int, *, reason: str) -> WorkflowRunState:
@@ -1427,19 +1442,11 @@ class WorkflowOrchestrationService:
     def _complete_sync_execution(self, run_id: int, *, step) -> WorkflowRunState:
         sync_records = self._sync_repo.list_for_run(run_id)
         if self.get_run_state(run_id).run.workflow_type == "weekly_scheduling":
-            summary_text = self._build_representative_completion_summary_text(sync_records)
-            final_summary = self.build_final_summary_artifact(run_id, final_summary_text=summary_text)
-            if self._artifact_repo.get_latest_for_run(run_id, artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value) is None:
-                self._artifact_repo.create(
-                    NewWorkflowArtifact(
-                        run_id=run_id,
-                        step_id=step.id,
-                        artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
-                        schema_version=SCHEMA_VERSION,
-                        producer_step_name=step.step_name,
-                        payload=final_summary.model_dump(mode="json"),
-                    )
-                )
+            self._persist_representative_final_summary(
+                run_id,
+                step=step,
+                summary_text=self._build_representative_completion_summary_text(sync_records),
+            )
         self._step_repo.update(
             step.id,
             WorkflowStepPatch(
@@ -1484,6 +1491,25 @@ class WorkflowOrchestrationService:
         )
         return self.get_run_state(run_id)
 
+    def _persist_representative_final_summary(self, run_id: int, *, step, summary_text: str) -> None:  # noqa: ANN001
+        final_summary = self.build_final_summary_artifact(run_id, final_summary_text=summary_text)
+        latest_summary = self._artifact_repo.get_latest_for_run(
+            run_id,
+            artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
+        )
+        self._artifact_repo.create(
+            NewWorkflowArtifact(
+                run_id=run_id,
+                step_id=step.id,
+                artifact_type=WorkflowArtifactType.FINAL_SUMMARY.value,
+                schema_version=SCHEMA_VERSION,
+                producer_step_name=step.step_name,
+                lineage_parent_id=latest_summary.id if latest_summary is not None else None,
+                supersedes_artifact_id=latest_summary.id if latest_summary is not None else None,
+                payload=final_summary.model_dump(mode="json"),
+            )
+        )
+
     def _build_representative_completion_summary_text(self, sync_records: list[object]) -> str:
         sorted_sync_records = self._sorted_sync_records(sync_records)
         if not sorted_sync_records:
@@ -1504,6 +1530,12 @@ class WorkflowOrchestrationService:
                 if record.target_system == WorkflowTargetSystem.CALENDAR_SYSTEM.value
             ]
         )
+        downstream_status = self._downstream_sync_status(sorted_sync_records)
+        if downstream_status != "succeeded":
+            return (
+                f"Approved schedule needs downstream follow-up after {len(sorted_sync_records)} "
+                f"planned write(s)."
+            )
         summary = (
             f"Scheduled {len(proposal.time_blocks)} block(s) across {len(scheduled_highlights)} focus area(s) "
             f"and synced {len(sorted_sync_records)} approved write(s) "

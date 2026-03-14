@@ -750,7 +750,8 @@ def test_completed_then_replayed_run_projects_live_recovery_over_stale_success_s
         assert detail["status"] == WorkflowRunStatus.COMPLETED.value
         assert detail["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
         assert detail["failure_kind"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
-        assert detail["lineage"]["final_summary"]["downstream_sync_status"] == "succeeded"
+        assert detail["lineage"]["final_summary"]["downstream_sync_status"] == "pending"
+        assert len(detail["lineage"]["final_summary"]["downstream_sync_artifact_ids"]) == 3
         assert detail["completion_summary"]["headline"] == (
             "Approved schedule needs downstream follow-up after 3 planned write(s)."
         )
