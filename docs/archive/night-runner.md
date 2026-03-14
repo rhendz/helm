@@ -4,7 +4,7 @@ This repository uses a lock-protected wrapper script for unattended Codex runs.
 
 ## Files Involved
 
-- `docs/runbooks/night-runner-prompt.md`
+- `docs/archive/night-runner-prompt.md`
   - Single source of truth for night-runner behavior.
 - `scripts/night-runner.sh`
   - Wrapper that applies lock protection, timeout, and logging.
@@ -35,7 +35,7 @@ Dry run:
 ## Environment Variables
 
 - `PROMPT_FILE`
-  - Default: `docs/runbooks/night-runner-prompt.md`
+  - Default: `docs/archive/night-runner-prompt.md`
 - `MAX_HOURS_PER_RUN`
   - Default: `4`
   - Enforced by wrapper watchdog timeout
@@ -43,7 +43,7 @@ Dry run:
 Example:
 
 ```bash
-MAX_HOURS_PER_RUN=6 PROMPT_FILE=docs/runbooks/night-runner-prompt.md bash ./scripts/night-runner.sh
+MAX_HOURS_PER_RUN=6 PROMPT_FILE=docs/archive/night-runner-prompt.md bash ./scripts/night-runner.sh
 ```
 
 ## Log Paths

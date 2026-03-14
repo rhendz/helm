@@ -399,7 +399,7 @@ personal-ai-secretary/
 
 ├─ packages/
 
-│  ├─ domain/
+│  ├─ domain/ (historical; domain package is quarantined under docs/archive/packages-domain/)
 
 │  ├─ storage/
 
@@ -429,7 +429,7 @@ personal-ai-secretary/
 
 ---
 
-## 10\. Domain Model
+## 10. Domain Model (design reference; current implementation uses storage models, not packages/domain)
 
 ## 10.1 Shared Entities
 
@@ -1125,7 +1125,7 @@ Use this order by default when generating/queuing issues:
 4. Workstream D (triage maturity)  
 5. Workstream F (approval safety)  
 6. Workstream E (study expansion)  
-7. Workstream G (night-runner automation)
+7. Workstream G (night-runner automation, deprecated; see docs/archive/night-runner.md)
 
 ### 23.10 V1 Completion Gate (Updated)
 

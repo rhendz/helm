@@ -8,6 +8,26 @@
 - **REQ-ADAPTER-SYNC**: Adapter-gated sync execution with idempotency, retry, replay, and recovery classification — validated in M001.
 - **REQ-REPRESENTATIVE-WORKFLOW**: Representative weekly scheduling workflow from request through approved writes and replay-aware final lineage — validated in M001.
 - **REQ-OPERATOR-SURFACES**: Telegram and API operator tooling for workflow status, approval, replay, and lineage inspection — validated in M001.
+- **R002** — Repo working set is reduced to active and frozen truth
+  - Class: continuity
+  - Status: validated
+  - Description: S02 physically quarantined aspirational domain code, constrained Night Runner to deprecated scripts plus archived docs, confirmed LinkedIn has no live implementation, and kept tests/CI green without relying on these paths.
+  - Why it matters: Reduces cognitive load and prevents future work from building on dead paths just because files remain in the tree.
+  - Source: user
+  - Primary owning slice: M002/S02
+  - Supporting slices: M002/S01, M002/S03
+  - Validation: validated
+  - Notes: Classification inventory and rg-based diagnostics provide the ongoing guardrail.
+- **R005** — Deprecated paths are clearly marked and removed where safe
+  - Class: failure-visibility
+  - Status: validated
+  - Description: LinkedIn, Night Runner, and packages/domain are explicitly classified as deprecated/quarantined, removed from live import paths, and discoverable via diagnostics.
+  - Why it matters: Prevents future milestones from seeing these paths as live options and reduces risk of accidentally reviving deprecated architecture.
+  - Source: user
+  - Primary owning slice: M002/S02
+  - Supporting slices: M002/S01
+  - Validation: validated
+  - Notes: docs/archive/, the classification inventory, and rg sweeps are the authoritative signals for deprecated surfaces.
 
 ## Active
 
@@ -21,17 +41,6 @@
 - Supporting slices: none yet
 - Validation: proofed
 - Notes: Truth set is defined in `.gsd/milestones/M002/M002-TRUTH-NOTE.md` (M002/S01) and used as the anchor for classification rules and inventory.
-
-### R002 — Repo working set is reduced to active and frozen truth
-- Class: continuity
-- Status: active
-- Description: Stale, misleading, or aspirational artifacts (code, docs, specs, tests, runbooks) that are not part of the current truth set are removed or explicitly marked deprecated/archived so they stop shaping future GSD decisions.
-- Why it matters: Reduces cognitive load and prevents future work from building on dead paths just because files remain in the tree.
-- Source: user
-- Primary owning slice: M002/S02
-- Supporting slices: M002/S01, M002/S03
-- Validation: unmapped
-- Notes: Bias toward physical removal; quarantine only with concrete justification. Classification rules in `.gsd/milestones/M002/M002-CLASSIFICATION-RULES.md` (M002/S01) define how artifacts are tagged keep/freeze/deprecate/remove/quarantine and are the primary input to S02 cleanup decisions.
 
 ### R003 — Task/calendar workflows remain intact and verified after cleanup
 - Class: continuity
@@ -54,17 +63,6 @@
 - Supporting slices: M002/S02
 - Validation: proofed
 - Notes: `.gsd/milestones/M002/M002-TRUTH-NOTE.md` (M002/S01) explicitly treats TaskAgent/CalendarAgent as core truth and EmailAgent/StudyAgent as non-core/frozen; classification rules and inventory in M002 reference this constraint.
-
-### R005 — Deprecated paths are clearly marked and removed where safe
-- Class: failure-visibility
-- Status: active
-- Description: LinkedIn, Night Runner, and underdeveloped aspirational layers (for example `packages/domain`) are explicitly classified as deprecated and physically removed where they are not required for current truth or behavior.
-- Why it matters: Prevents future milestones from seeing these paths as live options and reduces risk of accidentally reviving deprecated architecture.
-- Source: user
-- Primary owning slice: M002/S02
-- Supporting slices: M002/S01
-- Validation: unmapped
-- Notes: Quarantine/archive only when removal would cause concrete confusion or break necessary reference. Classification rules in `.gsd/milestones/M002/M002-CLASSIFICATION-RULES.md` (M002/S01) describe how deprecated paths (including LinkedIn, Night Runner, and `packages/domain`) are tagged and provide the input S02 will use to decide between removal and quarantine.
 
 ## Deferred
 
@@ -94,25 +92,25 @@
 
 ## Traceability
 
-| ID   | Class            | Status   | Primary owner | Supporting         | Proof      |
-|------|------------------|----------|---------------|--------------------|------------|
-| R001 | core-capability  | active   | M002/S01      | none               | proofed    |
-| R002 | continuity       | active   | M002/S02      | M002/S01, M002/S03 | unmapped   |
-| R003 | continuity       | active   | M002/S03      | M002/S01, M002/S02 | unmapped   |
-| R004 | constraint       | active   | M002/S01      | M002/S02           | proofed    |
-| R005 | failure-visibility | active | M002/S02      | M002/S01           | unmapped   |
+| ID   | Class              | Status    | Primary owner | Supporting         | Proof      |
+|------|--------------------|-----------|---------------|--------------------|------------|
+| R001 | core-capability    | active    | M002/S01      | none               | proofed    |
+| R002 | continuity         | validated | M002/S02      | M002/S01, M002/S03 | validated  |
+| R003 | continuity         | active    | M002/S03      | M002/S01, M002/S02 | unmapped   |
+| R004 | constraint         | active    | M002/S01      | M002/S02           | proofed    |
+| R005 | failure-visibility | validated | M002/S02      | M002/S01           | validated  |
 | REQ-DURABLE-PERSISTENCE | core-capability | validated | M001/S01 | none | validated |
 | REQ-SPECIALIST-DISPATCH | integration     | validated | M001/S02 | none | validated |
 | REQ-APPROVAL-CHECKPOINTS | core-capability | validated | M001/S02 | none | validated |
 | REQ-ADAPTER-SYNC        | continuity      | validated | M001/S03 | none | validated |
 | REQ-REPRESENTATIVE-WORKFLOW | primary-user-loop | validated | M001/S04 | none | validated |
 | REQ-OPERATOR-SURFACES   | operability     | validated | M001/S04 | none | validated |
-| R020 | primary-user-loop | deferred | none          | none               | unmapped   |
+| R020 | primary-user-loop | deferred  | none          | none               | unmapped   |
 | R030 | anti-feature      | out-of-scope | none        | none               | n/a        |
 
 ## Coverage Summary
 
-- Active requirements: 5
-- Mapped to slices: 5
-- Validated: 6 (kernel requirements from M001)
-- Unmapped active requirements: 0
+- Active requirements: 3
+- Validated: 9 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005)
+- Deferred: 1
+- Out of scope: 1

@@ -28,6 +28,7 @@
 - "Terminal partial-sync state takes precedence over stale adapter error text when projecting operator-facing recovery summaries."
 - "Explicit replay requests are validated against safe_next_actions from the shared workflow status projection before orchestration enqueues new sync lineage."
 - "Worker replay jobs delegate workflow replay execution to the shared replay service so queue consumption does not invent replay policy."
+- "Replay worker wiring for email triage uses build_email_agent_runtime as an injectable runtime_factory so tests and future slices can mock or constrain EmailAgent behavior without expanding its truth status."
 - "Telegram surfaces replay by merging safe recovery actions with existing operator actions and exposing replay as a distinct command from retry."
 - "Keep weekly scheduling request parsing deterministic and shared in the API status service so Telegram and API store the same durable contract."
 - "Extend the shared schedule proposal schema with honored constraints, assumptions, carry-forward tasks, and rationale instead of hiding representative details inside free-form text."
