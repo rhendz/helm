@@ -47,9 +47,11 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
   - Milestone summary: `.gsd/milestones/M002/M002-SUMMARY.md` (full completion record with requirement transitions and diagnostics).
   - Truth set and classification: `.gsd/milestones/M002/M002-TRUTH-NOTE.md`, `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
   - Verification: 14 passing tests (3 integration + 11 unit), UAT script in `.gsd/milestones/M002/slices/S03/uat.md`.
-- [ ] M003: Task/Calendar Productionization — Real Google Calendar integration, external-change detection and recovery, operator UX depth, and explicit operator trust through verification.
+- [x] M003: Task/Calendar Productionization — Real Google Calendar integration, external-change detection and recovery, operator UX depth, and explicit operator trust through verification.
   - [x] S01: Real Google Calendar OAuth auth and adapter with drift detection (complete).
   - [x] S02: External-change detection and sync state reconciliation (complete).
   - [x] S03: Telegram real-time execution UX (complete).
-  - [ ] S04: Partial failure handling and reconciliation policy.
-  - [ ] S05: End-to-end integration verification and UAT.
+  - [x] S04: Partial failure handling and reconciliation policy (complete).
+  - [x] S05: End-to-end integration verification and UAT (complete).
+  - Milestone summary: `.gsd/milestones/M003/M003-SUMMARY.md` (full completion record with all 5 requirements validated).
+  - Verification: 363 passing tests (5 new integration scenarios + 358 existing), zero regressions. UAT script in `.gsd/milestones/M003/slices/S05/S05-UAT.md`.

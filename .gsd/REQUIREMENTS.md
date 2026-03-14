@@ -33,25 +33,25 @@
 
 ### R006 — Google Calendar auth model is selected and implemented
 - Class: core-capability
-- Status: active
-- Description: Choose between service account or user OAuth, implement credential handling, and verify API access works end-to-end. This decision shapes the entire real Calendar integration architecture.
+- Status: validated
+- Description: User OAuth 2.0 model chosen and fully implemented. GoogleCalendarAuth handles credential lifecycle (init, token refresh, error classification). Operator self-configures credentials (client_id, client_secret, refresh_token) from Google Cloud Console.
 - Why it matters: Auth model determines how Helm accesses the operator's calendar, what permissions are needed, token refresh strategy, and what external system state Helm can read/write.
 - Source: user
 - Primary owning slice: M003/S01
 - Supporting slices: none
-- Validation: mapped
-- Notes: Will be decided during M003/S01 planning with explicit decision recorded in .gsd/DECISIONS.md.
+- Validation: validated
+- Notes: S01 implements GoogleCalendarAuth with 17 unit tests covering credential lifecycle. S05 UAT proves operator can configure and verify credentials. Decision: "Google Calendar auth model: use user OAuth (not service account)..." recorded in .gsd/DECISIONS.md.
 
 ### R010 — Real bidirectional Google Calendar sync with conflict detection
 - Class: integration
-- Status: active
-- Description: Helm can read the operator's real Google Calendar, write proposed calendar blocks, detect conflicts with existing events, and adapt scheduling around actual calendar reality instead of working from stubs.
+- Status: validated
+- Description: GoogleCalendarAdapter upsert_calendar_block creates/updates real Calendar events. reconcile_calendar_block reads live state for drift detection. RFC3339 datetime formatting ensures Calendar API compatibility.
 - Why it matters: The weekly scheduling workflow is useless if it writes events to a stub system. Real Calendar integration makes the workflow actually runnable and useful.
 - Source: user
 - Primary owning slice: M003/S01
 - Supporting slices: M003/S02, M003/S04
-- Validation: mapped
-- Notes: Built on R006 auth decision; S02 adds drift detection; S04 hardens edge cases.
+- Validation: validated
+- Notes: S01 delivers 10 integration tests for upsert (create/update) and 6 for reconcile (read). S05 happy path test proves weekly scheduling workflow intact. S05 UAT Test Case 1 demonstrates real Calendar write with operator's credentials. Decision: "Calendar adapter protocol: reuse existing CalendarSystemAdapter interface..." recorded in .gsd/DECISIONS.md.
 
 ### R011 — External-change detection and recovery
 - Class: continuity
@@ -66,25 +66,25 @@
 
 ### R012 — Real-time execution visibility in Telegram
 - Class: operability
-- Status: active
-- Description: As workflow sync happens and tasks/events flow to external systems, Telegram shows real-time status, failures, retries, and recovery actions. Operator knows what's happening and can intervene.
+- Status: validated
+- Description: TelegramWorkflowStatusService queries sync records and formats timeline with status symbols (✓⚠✗⏳). `/workflows` command shows 8 recent events inline. `/workflow_sync_detail` shows unlimited timeline. Recovery actions (request_replay) visible in status.
 - Why it matters: Operator trust depends on visibility. Silent success or hidden failures are equally bad. Real-time Telegram updates make the workflow transparent and actionable.
 - Source: user
 - Primary owning slice: M003/S03
 - Supporting slices: M003/S04, M003/S05
-- Validation: mapped
-- Notes: Builds on existing Telegram command structure from M001; deepens status projection to include sync events.
+- Validation: validated
+- Notes: S03 delivers 31 tests (23 unit + 8 integration). S05 integration test scenario 4 proves sync events queryable and formatted correctly. S05 UAT Test Cases 1-3 demonstrate operator sees sync progress and recovery actions in Telegram. Decision: "Telegram sync timeline limited to 8 events inline..." recorded in .gsd/DECISIONS.md.
 
 ### R013 — Operator trust through explicit verification
 - Class: quality-attribute
-- Status: active
-- Description: Durable automated tests and UAT scripts prove that external state handling (Calendar writes, drift detection, reconciliation, recovery) works correctly. Tests are hermetic; UAT proves operator experience.
+- Status: validated
+- Description: S05 delivers 5 integration test scenarios (all pass) proving data correctness and state transitions without silent failures. Operator-runnable UAT script (4 test cases) enables verification in live environment with real Calendar credentials. All state durable and queryable via SQL.
 - Why it matters: Since M003 introduces real external state and manual operator edits, trust is earned through transparent, repeatable verification that can be re-checked later.
 - Source: user
 - Primary owning slice: M003/S05
 - Supporting slices: none
-- Validation: mapped
-- Notes: Integration verification exercises real Calendar writes (or test fixtures); UAT script enables operator to verify drift detection, sync visibility, and recovery paths in their own environment.
+- Validation: validated
+- Notes: 363 total tests passing (5 new + 358 existing) with zero regressions. S05-UAT.md provides comprehensive operator guidance with prerequisites, step-by-step instructions, SQL verification queries, and troubleshooting. Decision: "Treat weekly scheduling end-to-end behavior as a protected core with dedicated integration tests and a reusable UAT script..." recorded in .gsd/DECISIONS.md.
 
 ### R001 — Helm workflow-engine truth set is sharply defined
 - Class: core-capability
@@ -154,11 +154,11 @@
 | R003 | continuity         | validated | M002/S03      | M002/S01, M002/S02 | validated  |
 | R004 | constraint         | active    | M002/S01      | M002/S02           | proofed    |
 | R005 | failure-visibility | validated | M002/S02      | M002/S01           | validated  |
-| R006 | core-capability    | active    | M003/S01      | none               | mapped     |
-| R010 | integration        | active    | M003/S01      | M003/S02, M003/S04 | mapped     |
+| R006 | core-capability    | validated | M003/S01      | none               | validated  |
+| R010 | integration        | validated | M003/S01      | M003/S02, M003/S04 | validated  |
 | R011 | continuity         | validated | M003/S02      | M003/S04           | validated  |
-| R012 | operability        | active    | M003/S03      | M003/S04, M003/S05 | mapped     |
-| R013 | quality-attribute  | active    | M003/S05      | none               | mapped     |
+| R012 | operability        | validated | M003/S03      | M003/S04, M003/S05 | validated  |
+| R013 | quality-attribute  | validated | M003/S05      | none               | validated  |
 | REQ-DURABLE-PERSISTENCE | core-capability | validated | M001/S01 | none | validated |
 | REQ-SPECIALIST-DISPATCH | integration     | validated | M001/S02 | none | validated |
 | REQ-APPROVAL-CHECKPOINTS | core-capability | validated | M001/S02 | none | validated |
@@ -170,7 +170,7 @@
 
 ## Coverage Summary
 
-- Active requirements: 6 (R001, R004, R006, R010, R012, R013)
-- Validated: 11 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005, plus M002/S03 coverage for R003, plus M003/S02 coverage for R011)
+- Active requirements: 2 (R001, R004)
+- Validated: 16 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005, plus M002/S03 coverage for R003, plus M003/S01-S05 coverage for R006, R010, R012, R013; plus M003/S02 and M003/S04 coverage for R011)
 - Deferred: 1 (R020)
 - Out of scope: 1 (R030)
