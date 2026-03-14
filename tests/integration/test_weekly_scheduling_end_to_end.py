@@ -13,6 +13,7 @@ after M002 cleanup and aligns with the UAT script in .gsd/milestones/M002/slices
 """
 
 from collections.abc import Generator
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from helm_api.dependencies import get_db
@@ -33,6 +34,7 @@ from helm_storage.repositories import (
     SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
     WorkflowRunStatus,
+    WorkflowTargetSystem,
 )
 from helm_worker.jobs import workflow_runs as workflow_runs_job
 from sqlalchemy import create_engine
@@ -114,6 +116,11 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
         monkeypatch.setattr(replay_service, "SessionLocal", lambda: _SessionContext(session))
 
+        # Set up real Google Calendar credentials to enable GoogleCalendarAdapter
+        monkeypatch.setenv("CALENDAR_CLIENT_ID", "test-client-id")
+        monkeypatch.setenv("CALENDAR_CLIENT_SECRET", "test-client-secret")
+        monkeypatch.setenv("CALENDAR_REFRESH_TOKEN", "test-refresh-token")
+
         # Step 1: Create a weekly scheduling run via API
         request_text = (
             "Plan my week. Tasks: Finish roadmap draft high due Wednesday 90m; "
@@ -193,25 +200,63 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         assert approved_data["paused_state"] is None
 
         # Step 6: Execute sync via orchestration service
-        # Create service with adapters and execute pending sync
-        orchestration = WorkflowOrchestrationService(
-            session,
-            validator_registry=_validator_registry(),
-            task_system_adapter=StubTaskSystemAdapter(),
-            calendar_system_adapter=StubCalendarSystemAdapter(),
-        )
-        completed_result = orchestration.execute_pending_sync_step(run_id)
-        assert completed_result.run.status == WorkflowRunStatus.COMPLETED.value
+        # Create service with real GoogleCalendarAdapter (credentials set via monkeypatch above)
+        # Mock the Google Calendar API calls since we don't have real credentials
+        from helm_connectors import GoogleCalendarAdapter, GoogleCalendarAuth
 
-        # Capture source sync record IDs for later verification
-        source_sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)
-        source_sync_record_ids = [
-            record.id
-            for record in source_sync_records
-            if record.replayed_from_sync_record_id is None
-        ]
-        assert len(source_sync_record_ids) > 0, "Should have created sync records"
+        # Mock the Credentials.refresh to avoid actual OAuth calls
+        mock_credentials = MagicMock()
+        mock_credentials.expired = False
 
+        with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
+            mock_creds_class.return_value = mock_credentials
+
+            # Mock the Google Calendar API service
+            mock_service = MagicMock()
+            mock_events = MagicMock()
+            mock_service.events.return_value = mock_events
+
+            # Mock insert/update responses to return an event ID
+            mock_insert = MagicMock()
+            mock_insert.execute.return_value = {"id": "test-event-id-123"}
+            mock_events.insert.return_value = mock_insert
+
+            mock_update = MagicMock()
+            mock_update.execute.return_value = {"id": "test-event-id-123"}
+            mock_events.update.return_value = mock_update
+
+            with patch("googleapiclient.discovery.build") as mock_build:
+                mock_build.return_value = mock_service
+
+                auth = GoogleCalendarAuth()
+                orchestration = WorkflowOrchestrationService(
+                    session,
+                    validator_registry=_validator_registry(),
+                    task_system_adapter=StubTaskSystemAdapter(),
+                    calendar_system_adapter=GoogleCalendarAdapter(auth),
+                )
+                completed_result = orchestration.execute_pending_sync_step(run_id)
+                assert completed_result.run.status == WorkflowRunStatus.COMPLETED.value
+                
+                # Capture source sync record IDs for later verification
+                source_sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)
+                source_sync_record_ids = [
+                    record.id
+                    for record in source_sync_records
+                    if record.replayed_from_sync_record_id is None
+                ]
+                assert len(source_sync_record_ids) > 0, "Should have created sync records"
+                
+                # Verify calendar sync records have external_object_id populated
+                calendar_sync_records = [
+                    r for r in source_sync_records
+                    if r.target_system == WorkflowTargetSystem.CALENDAR_SYSTEM
+                ]
+                assert len(calendar_sync_records) > 0, "Should have calendar sync records"
+                for record in calendar_sync_records:
+                    assert record.external_object_id is not None, f"Calendar sync record {record.id} missing external_object_id"
+                    assert record.external_object_id != "", f"Calendar sync record {record.id} has empty external_object_id"
+        
         # Step 7: Assert on completion summary and sync records
         completed = client.get(f"/v1/workflow-runs/{run_id}")
         assert completed.status_code == 200
@@ -219,7 +264,7 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         assert completed_data["status"] == WorkflowRunStatus.COMPLETED.value
         assert completed_data["paused_state"] is None
         assert completed_data["needs_action"] is False
-
+        
         # Verify completion summary
         completion_summary = completed_data["completion_summary"]
         assert completion_summary is not None
@@ -230,13 +275,13 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         assert completion_summary["total_sync_writes"] > 0
         assert completion_summary["task_sync_writes"] > 0
         assert completion_summary["calendar_sync_writes"] > 0
-
+        
         # Verify sync write counts match records
         total_sync_writes = (
             completion_summary["task_sync_writes"] + completion_summary["calendar_sync_writes"]
         )
         assert completion_summary["total_sync_writes"] == total_sync_writes
-
+        
         # Verify lineage final summary has correct linkage
         final_summary = completed_data["lineage"]["final_summary"]
         assert final_summary is not None

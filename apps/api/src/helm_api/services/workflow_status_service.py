@@ -4,9 +4,17 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from helm_connectors import (
+    GoogleCalendarAdapter,
+    GoogleCalendarAuth,
+    StubCalendarSystemAdapter,
+    StubTaskSystemAdapter,
+)
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
+    CalendarSystemAdapter,
+    TaskSystemAdapter,
     WeeklySchedulingRequest,
     WeeklyTaskRequest,
     WorkflowOrchestrationService,
@@ -40,12 +48,35 @@ class WorkflowRunCreateInput:
 
 
 class WorkflowStatusService:
-    def __init__(self, session: Session) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        task_system_adapter: TaskSystemAdapter | None = None,
+        calendar_system_adapter: CalendarSystemAdapter | None = None,
+    ) -> None:
         self._session = session
         self._run_repo = SQLAlchemyWorkflowRunRepository(session)
         self._artifact_repo = SQLAlchemyWorkflowArtifactRepository(session)
         self._sync_repo = SQLAlchemyWorkflowSyncRecordRepository(session)
-        self._orchestration = WorkflowOrchestrationService(session)
+        
+        # Instantiate real adapters if credentials are available, otherwise use stubs
+        if task_system_adapter is None:
+            task_system_adapter = StubTaskSystemAdapter()
+        if calendar_system_adapter is None:
+            # Try to use real GoogleCalendarAdapter if credentials are available
+            try:
+                auth = GoogleCalendarAuth()
+                calendar_system_adapter = GoogleCalendarAdapter(auth)
+            except ValueError:
+                # Credentials not available; fall back to stub
+                calendar_system_adapter = StubCalendarSystemAdapter()
+        
+        self._orchestration = WorkflowOrchestrationService(
+            session,
+            task_system_adapter=task_system_adapter,
+            calendar_system_adapter=calendar_system_adapter,
+        )
 
     def create_run(self, payload: WorkflowRunCreateInput) -> dict[str, object]:
         normalized_payload = build_workflow_run_create_input(
