@@ -55,14 +55,14 @@
 
 ### R011 — External-change detection and recovery
 - Class: continuity
-- Status: active
+- Status: validated
 - Description: When the operator manually reschedules or edits a Calendar event that Helm previously wrote, Helm detects the change, reconciles its internal model, and proposes reshuffle actions rather than fighting the operator by rewriting the old plan.
 - Why it matters: Operator intent (manual edits) takes precedence. Helm is an assistant, not an enforcer. Without this, Helm becomes adversarial and untrustworthy.
 - Source: user
 - Primary owning slice: M003/S02
 - Supporting slices: M003/S04
-- Validation: mapped
-- Notes: Drift detection must surface clearly; reconciliation policy must be explicit; operator chooses passive observation vs active re-proposal per context.
+- Validation: validated
+- Notes: S02 proves drift detection via fingerprint comparison (payload_fingerprint_matches field from adapter reconciliation). Operator edits are detected, field diffs extracted, internal workflow_sync_records marked DRIFT_DETECTED, durable drift events created. Integration tests validate full flow. Reconciliation policy (what Helm does after detecting drift) deferred to S04.
 
 ### R012 — Real-time execution visibility in Telegram
 - Class: operability
@@ -156,7 +156,7 @@
 | R005 | failure-visibility | validated | M002/S02      | M002/S01           | validated  |
 | R006 | core-capability    | active    | M003/S01      | none               | mapped     |
 | R010 | integration        | active    | M003/S01      | M003/S02, M003/S04 | mapped     |
-| R011 | continuity         | active    | M003/S02      | M003/S04           | mapped     |
+| R011 | continuity         | validated | M003/S02      | M003/S04           | validated  |
 | R012 | operability        | active    | M003/S03      | M003/S04, M003/S05 | mapped     |
 | R013 | quality-attribute  | active    | M003/S05      | none               | mapped     |
 | REQ-DURABLE-PERSISTENCE | core-capability | validated | M001/S01 | none | validated |
@@ -170,7 +170,7 @@
 
 ## Coverage Summary
 
-- Active requirements: 7 (R001, R004, R006, R010, R011, R012, R013)
-- Validated: 10 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005, plus M002/S03 coverage for R003)
+- Active requirements: 6 (R001, R004, R006, R010, R012, R013)
+- Validated: 11 (kernel requirements from M001 plus M002/S02 coverage for R002 and R005, plus M002/S03 coverage for R003, plus M003/S02 coverage for R011)
 - Deferred: 1 (R020)
 - Out of scope: 1 (R030)

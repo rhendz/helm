@@ -250,6 +250,7 @@ class WorkflowSyncStatus(StrEnum):
     FAILED_RETRYABLE = "failed_retryable"
     FAILED_TERMINAL = "failed_terminal"
     UNCERTAIN_NEEDS_RECONCILIATION = "uncertain_needs_reconciliation"
+    DRIFT_DETECTED = "drift_detected"
     CANCELLED = "cancelled"
 
 
