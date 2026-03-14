@@ -591,6 +591,8 @@ class WorkflowStatusService:
             return "Remaining approved writes were cancelled after partial sync success."
         if recovery_class == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value:
             return "Replay requested for downstream sync lineage."
+        if sync_record.status == WorkflowSyncStatus.DRIFT_DETECTED.value:
+            return "External event was manually edited after Helm wrote it; operator action required to recover."
         if sync_record.last_error_summary:
             return sync_record.last_error_summary
         if sync_record.status == WorkflowSyncStatus.PENDING.value:
@@ -635,6 +637,11 @@ class WorkflowStatusService:
             ]
         if last_record is None:
             return []
+        # Handle drift-detected records: operator must initiate recovery
+        if last_record.status == WorkflowSyncStatus.DRIFT_DETECTED.value:
+            return [
+                {"action": "request_replay", "label": "Request explicit replay to recover from manual edit"}
+            ]
         if (
             recovery_class
             == WorkflowSyncRecoveryClassification.TERMINATED_AFTER_PARTIAL_SUCCESS.value

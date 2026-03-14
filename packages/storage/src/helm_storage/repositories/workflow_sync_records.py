@@ -12,6 +12,7 @@ from helm_storage.repositories.contracts import (
     WorkflowSyncIdentityQuery,
     WorkflowSyncRecordPatch,
     WorkflowSyncRemainingQuery,
+    WorkflowSyncRecoveryClassification,
     WorkflowSyncStatus,
     WorkflowSyncStepQuery,
 )
@@ -248,7 +249,8 @@ class SQLAlchemyWorkflowSyncRecordRepository:
         """Mark a sync record as having detected drift between planned and live state.
         
         Stores the live fingerprint and field differences as drift metadata in 
-        last_error_summary for inspection and debugging.
+        last_error_summary for inspection and debugging. Assigns TERMINAL_FAILURE
+        recovery classification to enable operator-initiated replay recovery.
         
         Args:
             sync_record_id: ID of the sync record to mark as drifted
@@ -267,6 +269,7 @@ class SQLAlchemyWorkflowSyncRecordRepository:
             WorkflowSyncRecordPatch(
                 status=WorkflowSyncStatus.DRIFT_DETECTED.value,
                 last_error_summary=dumps(drift_metadata),
+                recovery_classification=WorkflowSyncRecoveryClassification.TERMINAL_FAILURE.value,
                 completed_at=_now(),
                 recovery_updated_at=_now(),
             ),
