@@ -50,6 +50,6 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [ ] M003: Task/Calendar Productionization — Real Google Calendar integration, external-change detection and recovery, operator UX depth, and explicit operator trust through verification.
   - [x] S01: Real Google Calendar OAuth auth and adapter with drift detection (complete).
   - [x] S02: External-change detection and sync state reconciliation (complete).
-  - [ ] S03: Telegram real-time execution UX.
+  - [x] S03: Telegram real-time execution UX (complete).
   - [ ] S04: Partial failure handling and reconciliation policy.
   - [ ] S05: End-to-end integration verification and UAT.

@@ -108,6 +108,7 @@ def main() -> None:
     application.add_handler(CommandHandler("workflows", workflows.recent))
     application.add_handler(CommandHandler("workflow_needs_action", workflows.needs_action))
     application.add_handler(CommandHandler("workflow_versions", workflows.versions))
+    application.add_handler(CommandHandler("workflow_sync_detail", workflows.sync_detail))
     application.add_handler(CommandHandler("workflow_retry", workflows.retry))
     application.add_handler(CommandHandler("workflow_replay", workflows.replay))
     application.add_handler(CommandHandler("workflow_terminate", workflows.terminate))
