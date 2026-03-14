@@ -4,9 +4,9 @@ from helm_storage.db import Base
 from helm_storage.repositories import (
     ApprovalDecisionArtifactPayload,
     ApprovalRequestArtifactPayload,
+    NewWorkflowApprovalCheckpoint,
     NewWorkflowSyncRecord,
     NormalizedTaskArtifactPayload,
-    NewWorkflowApprovalCheckpoint,
     RawRequestArtifactPayload,
     ScheduleProposalArtifactPayload,
     SQLAlchemyWorkflowApprovalCheckpointRepository,
@@ -14,34 +14,34 @@ from helm_storage.repositories import (
     SQLAlchemyWorkflowEventRepository,
     SQLAlchemyWorkflowRunRepository,
     SQLAlchemyWorkflowSpecialistInvocationRepository,
-    SQLAlchemyWorkflowSyncRecordRepository,
     SQLAlchemyWorkflowStepRepository,
+    SQLAlchemyWorkflowSyncRecordRepository,
     ValidationArtifactPayload,
-    WorkflowArtifactRepository,
-    WorkflowArtifactType,
     WorkflowApprovalCheckpointPatch,
     WorkflowApprovalCheckpointRepository,
+    WorkflowArtifactRepository,
+    WorkflowArtifactType,
     WorkflowBlockedReason,
     WorkflowEventRepository,
     WorkflowRunPatch,
     WorkflowRunRepository,
     WorkflowRunStatus,
-    WorkflowSpecialistInvocationRepository,
     WorkflowSpecialistInvocationPatch,
-    WorkflowSyncFailedQuery,
-    WorkflowSyncIdentityQuery,
-    WorkflowSyncKind,
-    WorkflowSyncRecordPatch,
-    WorkflowSyncRecoveryClassification,
-    WorkflowSyncRecordRepository,
-    WorkflowSyncRemainingQuery,
-    WorkflowSyncStatus,
-    WorkflowSyncStepQuery,
-    WorkflowTargetSystem,
+    WorkflowSpecialistInvocationRepository,
     WorkflowStepPatch,
     WorkflowStepRepository,
     WorkflowStepStatus,
     WorkflowSummaryArtifactPayload,
+    WorkflowSyncFailedQuery,
+    WorkflowSyncIdentityQuery,
+    WorkflowSyncKind,
+    WorkflowSyncRecordPatch,
+    WorkflowSyncRecordRepository,
+    WorkflowSyncRecoveryClassification,
+    WorkflowSyncRemainingQuery,
+    WorkflowSyncStatus,
+    WorkflowSyncStepQuery,
+    WorkflowTargetSystem,
 )
 from helm_storage.repositories.contracts import (
     NewWorkflowArtifact,
@@ -232,7 +232,10 @@ def test_workflow_repositories_persist_raw_request_and_resume_safe_state() -> No
         assert current_state.run.id == run.id
         assert current_state.current_step is not None
         assert current_state.current_step.id == step.id
-        assert current_state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value].id == raw_request.id
+        assert (
+            current_state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value].id
+            == raw_request.id
+        )
         assert current_state.last_event is not None
         assert current_state.last_event.summary == "Normalization started"
         assert current_state.active_approval_checkpoint is None
@@ -327,26 +330,35 @@ def test_workflow_sync_record_repository_enforces_durable_identity_and_lineage()
             "task:triage-inbox",
             "calendar:focus-block-1",
         ]
-        assert sync_repo.get_by_identity(
-            proposal_artifact_id=proposal.id,
-            proposal_version_number=proposal.version_number,
-            target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
-            sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
-            planned_item_key="calendar:focus-block-1",
-        ) == calendar_sync
-        assert listed[1].supersedes_sync_record_id == task_sync.id
-        assert listed[1].lineage_generation == 1
-        assert listed[1].replay_requested_by == "telegram:1"
-        assert sync_repo.list_for_proposal(proposal.id)[0].proposal_version_number == proposal.version_number
-        assert [record.lineage_generation for record in sync_repo.list_lineage(
-            WorkflowSyncIdentityQuery(
+        assert (
+            sync_repo.get_by_identity(
                 proposal_artifact_id=proposal.id,
                 proposal_version_number=proposal.version_number,
                 target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
                 sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
                 planned_item_key="calendar:focus-block-1",
             )
-        )] == [1]
+            == calendar_sync
+        )
+        assert listed[1].supersedes_sync_record_id == task_sync.id
+        assert listed[1].lineage_generation == 1
+        assert listed[1].replay_requested_by == "telegram:1"
+        assert (
+            sync_repo.list_for_proposal(proposal.id)[0].proposal_version_number
+            == proposal.version_number
+        )
+        assert [
+            record.lineage_generation
+            for record in sync_repo.list_lineage(
+                WorkflowSyncIdentityQuery(
+                    proposal_artifact_id=proposal.id,
+                    proposal_version_number=proposal.version_number,
+                    target_system=WorkflowTargetSystem.CALENDAR_SYSTEM.value,
+                    sync_kind=WorkflowSyncKind.CALENDAR_BLOCK_UPSERT.value,
+                    planned_item_key="calendar:focus-block-1",
+                )
+            )
+        ] == [1]
 
 
 def test_workflow_sync_record_repository_queries_remaining_and_failed_items() -> None:
@@ -779,7 +791,9 @@ def test_workflow_specialist_invocation_and_schedule_proposal_lineage() -> None:
 
         latest_by_type = artifact_repo.get_latest_by_type(run.id)
         assert latest_by_type[WorkflowArtifactType.NORMALIZED_TASK.value].id == normalized_v2.id
-        assert latest_by_type[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].id == schedule_proposal.id
+        assert (
+            latest_by_type[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].id == schedule_proposal.id
+        )
         assert latest_by_type[WorkflowArtifactType.FINAL_SUMMARY.value].id == summary_artifact.id
 
         assert updated_invocation is not None
@@ -789,7 +803,10 @@ def test_workflow_specialist_invocation_and_schedule_proposal_lineage() -> None:
 
         summary_payload = latest_by_type[WorkflowArtifactType.FINAL_SUMMARY.value].payload
         assert summary_payload["request_artifact_id"] == request_artifact.id
-        assert summary_payload["intermediate_artifact_ids"] == [normalized_v2.id, schedule_proposal.id]
+        assert summary_payload["intermediate_artifact_ids"] == [
+            normalized_v2.id,
+            schedule_proposal.id,
+        ]
         assert summary_payload["validation_artifact_ids"] == [validation_artifact.id]
         assert summary_payload["approval_decision"] is None
         assert summary_payload["approval_decision_artifact_id"] is None
@@ -1033,7 +1050,10 @@ def test_workflow_failure_and_blocked_validation_states_stay_distinct() -> None:
         last_failed_step = step_repo.get_last_failed_for_run(failed_run.id)
         assert last_failed_step is not None
         assert last_failed_step.status == WorkflowStepStatus.FAILED.value
-        assert last_failed_step.execution_error_summary == "Specialist timed out while generating tasks"
+        assert (
+            last_failed_step.execution_error_summary
+            == "Specialist timed out while generating tasks"
+        )
         assert last_failed_step.retryable is True
         assert last_failed_step.retry_state == "retryable"
 
@@ -1137,9 +1157,9 @@ def test_workflow_run_queries_reconstruct_runnable_state_after_interruption() ->
         assert [state.run.id for state in runnable] == [runnable_run.id]
         assert runnable[0].current_step is not None
         assert runnable[0].current_step.id == second_attempt.id
-        assert runnable[0].latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload["summary"] == (
-            "Recovered after interruption"
-        )
+        assert runnable[0].latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload[
+            "summary"
+        ] == ("Recovered after interruption")
         assert runnable[0].last_event is not None
         assert runnable[0].last_event.summary == "Run resumed on summarize attempt 2"
 

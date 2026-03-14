@@ -219,12 +219,7 @@ def _build_gmail_service(*, scopes: list[str] | None = None) -> Any:
 
 
 def _build_gmail_raw_payload(service: Any, message_id: str) -> dict[str, Any]:
-    response = (
-        service.users()
-        .messages()
-        .get(userId="me", id=message_id, format="full")
-        .execute()
-    )
+    response = service.users().messages().get(userId="me", id=message_id, format="full").execute()
     payload = response.get("payload")
     payload_mapping = payload if isinstance(payload, Mapping) else {}
     headers = _extract_headers(payload_mapping)
@@ -416,12 +411,16 @@ def _list_changed_message_ids(
     page_token: str | None = None
 
     while True:
-        request = service.users().history().list(
-            userId="me",
-            startHistoryId=start_history_cursor,
-            historyTypes=["messageAdded"],
-            maxResults=100,
-            pageToken=page_token,
+        request = (
+            service.users()
+            .history()
+            .list(
+                userId="me",
+                startHistoryId=start_history_cursor,
+                historyTypes=["messageAdded"],
+                maxResults=100,
+                pageToken=page_token,
+            )
         )
         response = request.execute()
         history_id = response.get("historyId")
@@ -611,12 +610,7 @@ def send_reply(
         payload["threadId"] = provider_thread_id
 
     try:
-        response = (
-            service.users()
-            .messages()
-            .send(userId="me", body=payload)
-            .execute()
-        )
+        response = service.users().messages().send(userId="me", body=payload).execute()
     except TimeoutError as exc:
         raise GmailSendError("timeout", "Gmail send timed out.") from exc
     except ConnectionError as exc:

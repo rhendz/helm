@@ -9,7 +9,9 @@ from helm_orchestration import (
     CalendarAgentOutput,
     CalendarSyncResult,
     NormalizedTaskArtifact,
+    NormalizedTaskValidator,
     PreparedSpecialistInput,
+    RegisteredValidator,
     ScheduleBlock,
     ScheduleProposalValidator,
     SpecialistName,
@@ -22,12 +24,10 @@ from helm_orchestration import (
     ValidationTargetKind,
     ValidatorRegistry,
     ValidatorTarget,
+    WorkflowArtifactKind,
     WorkflowOrchestrationService,
     WorkflowResumeService,
     WorkflowSpecialistStep,
-    WorkflowArtifactKind,
-    RegisteredValidator,
-    NormalizedTaskValidator,
 )
 from helm_storage.db import Base
 from helm_storage.models import AgentRunORM, ReplayQueueORM
@@ -38,11 +38,10 @@ from helm_storage.repositories import (
     WorkflowSyncRecoveryClassification,
     WorkflowSyncStatus,
 )
-from sqlalchemy import create_engine
+from helm_worker.jobs import replay as replay_job
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-from sqlalchemy import select
-from helm_worker.jobs import replay as replay_job
 
 
 class _RecordingTaskAdapter:
@@ -83,7 +82,9 @@ def _validator_registry() -> ValidatorRegistry:
     return ValidatorRegistry(
         [
             RegisteredValidator(
-                target=ValidatorTarget(kind=ValidationTargetKind.STEP_NAME, value="normalize_request"),
+                target=ValidatorTarget(
+                    kind=ValidationTargetKind.STEP_NAME, value="normalize_request"
+                ),
                 validator=NormalizedTaskValidator(),
             ),
             RegisteredValidator(
@@ -274,9 +275,13 @@ def test_completed_run_replay_leaves_durable_recovery_truth_for_shared_projectio
 
     with session_local() as session:
         run_id = _completed_sync_run(session)
-        original_calendar_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)[1]
+        original_calendar_record = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(
+            run_id
+        )[1]
 
-        replayed = WorkflowOrchestrationService(session, validator_registry=_validator_registry()).request_sync_replay(
+        replayed = WorkflowOrchestrationService(
+            session, validator_registry=_validator_registry()
+        ).request_sync_replay(
             run_id,
             actor="api:operator",
             sync_record_ids=(original_calendar_record.id,),
@@ -300,7 +305,9 @@ def test_completed_run_replay_leaves_durable_recovery_truth_for_shared_projectio
         assert len(final_summary.payload["downstream_sync_artifact_ids"]) == 3
 
 
-def test_api_workflow_replay_endpoint_accepts_completed_successful_representative_run(monkeypatch) -> None:  # noqa: ANN001
+def test_api_workflow_replay_endpoint_accepts_completed_successful_representative_run(
+    monkeypatch,
+) -> None:  # noqa: ANN001
     _engine, session_local = _session_factory()
     monkeypatch.setattr(replay_service, "SessionLocal", session_local)
 
@@ -323,15 +330,22 @@ def test_api_workflow_replay_endpoint_accepts_completed_successful_representativ
     assert payload["status"] == "accepted"
     assert payload["run_id"] == run_id
     assert payload["source_sync_record_ids"] == source_sync_record_ids
-    assert payload["replay_queue_source_ids"] == [f"{run_id}:{sync_record_id}" for sync_record_id in source_sync_record_ids]
-    assert payload["run"]["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+    assert payload["replay_queue_source_ids"] == [
+        f"{run_id}:{sync_record_id}" for sync_record_id in source_sync_record_ids
+    ]
+    assert (
+        payload["run"]["recovery_class"]
+        == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+    )
     assert payload["run"]["safe_next_actions"] == [
         {"action": "await_replay", "label": "Await replay processing"}
     ]
     assert payload["run"]["completion_summary"]["headline"] == (
         "Approved schedule needs downstream follow-up after 4 planned write(s)."
     )
-    assert payload["run"]["sync"]["replay_lineage"]["source_sync_record_ids"] == source_sync_record_ids
+    assert (
+        payload["run"]["sync"]["replay_lineage"]["source_sync_record_ids"] == source_sync_record_ids
+    )
 
 
 def test_api_workflow_replay_endpoint_rejects_retryable_sync_failures(monkeypatch) -> None:  # noqa: ANN001

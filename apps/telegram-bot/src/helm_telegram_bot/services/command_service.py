@@ -138,8 +138,7 @@ class JobControlView:
 class TelegramCommandService:
     def list_job_controls(self) -> list[JobControlView]:
         persisted = {
-            str(item["job_name"]): bool(item.get("paused"))
-            for item in list_job_control_rows()
+            str(item["job_name"]): bool(item.get("paused")) for item in list_job_control_rows()
         }
         items: list[JobControlView] = []
         for job_name in sorted(JOBS):
@@ -469,8 +468,7 @@ class TelegramCommandService:
         return ThreadTaskTransitionResult(
             ok=True,
             message=(
-                "Email follow-up business days set to "
-                f"{config.default_follow_up_business_days}."
+                f"Email follow-up business days set to {config.default_follow_up_business_days}."
             ),
         )
 
@@ -757,8 +755,7 @@ class TelegramCommandService:
         return ThreadTaskTransitionResult(
             ok=True,
             message=(
-                f"Triggered replay worker for up to {limit} items; "
-                f"processed {processed_count}."
+                f"Triggered replay worker for up to {limit} items; processed {processed_count}."
             ),
         )
 

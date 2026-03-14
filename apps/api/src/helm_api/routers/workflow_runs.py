@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from helm_api.dependencies import get_db
 from helm_api.schemas import (
     WorkflowApprovalDecisionRequest,
+    WorkflowProposalVersionResponse,
     WorkflowRunActionRequest,
     WorkflowRunCreateRequest,
     WorkflowRunDetailResponse,
-    WorkflowProposalVersionResponse,
     WorkflowRunSummaryResponse,
 )
 from helm_api.services.workflow_status_service import WorkflowRunCreateInput, WorkflowStatusService
@@ -41,7 +41,10 @@ def list_workflow_runs(
     db: Session = Depends(get_db),
 ) -> list[WorkflowRunSummaryResponse]:
     service = WorkflowStatusService(db)
-    return [WorkflowRunSummaryResponse(**item) for item in service.list_runs(needs_action=needs_action, limit=limit)]
+    return [
+        WorkflowRunSummaryResponse(**item)
+        for item in service.list_runs(needs_action=needs_action, limit=limit)
+    ]
 
 
 @router.get("/{run_id}", response_model=WorkflowRunDetailResponse)
@@ -63,7 +66,10 @@ def list_workflow_run_proposal_versions(
 ) -> list[WorkflowProposalVersionResponse]:
     service = WorkflowStatusService(db)
     try:
-        return [WorkflowProposalVersionResponse(**item) for item in service.list_proposal_versions(run_id)]
+        return [
+            WorkflowProposalVersionResponse(**item)
+            for item in service.list_proposal_versions(run_id)
+        ]
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

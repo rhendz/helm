@@ -35,7 +35,9 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     run_id = parse_single_id_arg(context.args[:1])
     target_artifact_id = parse_single_id_arg(context.args[1:2])
     if run_id is None or target_artifact_id is None:
-        await update.message.reply_text("Usage: /approve <id> or /approve <run_id> <proposal_artifact_id>")
+        await update.message.reply_text(
+            "Usage: /approve <id> or /approve <run_id> <proposal_artifact_id>"
+        )
         return
     result = _workflow_service.approve_run(
         run_id,
@@ -72,7 +74,9 @@ async def request_revision(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     target_artifact_id = parse_single_id_arg(context.args[1:2])
     feedback = " ".join(context.args[2:]).strip()
     if run_id is None or target_artifact_id is None or not feedback:
-        await update.message.reply_text("Usage: /request_revision <run_id> <proposal_artifact_id> <feedback>")
+        await update.message.reply_text(
+            "Usage: /request_revision <run_id> <proposal_artifact_id> <feedback>"
+        )
         return
     result = _workflow_service.request_revision(
         run_id,

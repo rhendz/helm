@@ -64,8 +64,7 @@ def ingest_email(payload: EmailIngestRequest) -> EmailIngestResponse:
         **ingest_manual_email_messages(
             source_type=payload.source_type,
             messages=[
-                message.model_dump(mode="json", by_alias=True)
-                for message in payload.messages
+                message.model_dump(mode="json", by_alias=True) for message in payload.messages
             ],
         )
     )
@@ -77,8 +76,7 @@ def plan_email_seed(payload: EmailIngestRequest) -> EmailSeedPlanResponse:
         **plan_seed_email_messages(
             source_type=payload.source_type,
             messages=[
-                message.model_dump(mode="json", by_alias=True)
-                for message in payload.messages
+                message.model_dump(mode="json", by_alias=True) for message in payload.messages
             ],
         )
     )
@@ -90,8 +88,7 @@ def enqueue_email_seed(payload: EmailIngestRequest) -> EmailSeedEnqueueResponse:
         **enqueue_seed_email_messages(
             source_type=payload.source_type,
             messages=[
-                message.model_dump(mode="json", by_alias=True)
-                for message in payload.messages
+                message.model_dump(mode="json", by_alias=True) for message in payload.messages
             ],
         )
     )

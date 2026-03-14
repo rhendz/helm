@@ -4,9 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 from helm_storage.models import (
     WorkflowApprovalCheckpointORM,
     WorkflowArtifactORM,
-    WorkflowEventORM,
     WorkflowRunORM,
-    WorkflowSyncRecordORM,
     WorkflowStepORM,
 )
 from helm_storage.repositories.contracts import WorkflowRunPatch, WorkflowRunState
@@ -117,7 +115,9 @@ def _build_state(run: WorkflowRunORM) -> WorkflowRunState:
     current_step = _pick_current_step(run.steps, run.current_step_name, run.current_step_attempt)
     latest_artifacts = _latest_artifacts(run.artifacts)
     last_event = max(run.events, key=lambda event: event.id) if run.events else None
-    approval_checkpoints = tuple(sorted(run.approval_checkpoints, key=lambda checkpoint: checkpoint.id))
+    approval_checkpoints = tuple(
+        sorted(run.approval_checkpoints, key=lambda checkpoint: checkpoint.id)
+    )
     active_approval_checkpoint = _pick_active_approval_checkpoint(approval_checkpoints)
     return WorkflowRunState(
         run=run,
@@ -126,7 +126,12 @@ def _build_state(run: WorkflowRunORM) -> WorkflowRunState:
         last_event=last_event,
         approval_checkpoints=approval_checkpoints,
         active_approval_checkpoint=active_approval_checkpoint,
-        sync_records=tuple(sorted(run.sync_records, key=lambda sync_record: (sync_record.execution_order, sync_record.id))),
+        sync_records=tuple(
+            sorted(
+                run.sync_records,
+                key=lambda sync_record: (sync_record.execution_order, sync_record.id),
+            )
+        ),
     )
 
 

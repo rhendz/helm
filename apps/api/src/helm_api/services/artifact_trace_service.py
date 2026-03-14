@@ -98,9 +98,7 @@ def _resolve_source_pointers(*, session, artifact_type: str, artifact_id: int) -
             {"key": "domain", "value": artifact.domain},
         ]
         if artifact.related_action_id is not None:
-            pointers.append(
-                {"key": "related_action_id", "value": str(artifact.related_action_id)}
-            )
+            pointers.append({"key": "related_action_id", "value": str(artifact.related_action_id)})
         if artifact.related_contact_id is not None:
             pointers.append(
                 {"key": "related_contact_id", "value": str(artifact.related_contact_id)}
@@ -140,10 +138,7 @@ def _lookup_run_context(*, session, pointers: list[dict]) -> list[dict]:  # noqa
 
     records = list(
         session.execute(
-            select(AgentRunORM)
-            .where(or_(*predicates))
-            .order_by(AgentRunORM.id.desc())
-            .limit(20)
+            select(AgentRunORM).where(or_(*predicates)).order_by(AgentRunORM.id.desc()).limit(20)
         )
         .scalars()
         .all()

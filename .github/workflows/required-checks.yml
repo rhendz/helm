@@ -33,7 +33,6 @@ jobs:
               - 'apps/worker/**'
               - 'apps/telegram-bot/**'
               - 'packages/connectors/**'
-              - 'packages/domain/**'
               - 'packages/llm/**'
               - 'packages/observability/**'
               - 'packages/orchestration/**'

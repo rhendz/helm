@@ -7,10 +7,10 @@ from helm_storage.repositories.classification_artifacts import (
     SQLAlchemyClassificationArtifactRepository,
 )
 from helm_storage.repositories.contracts import (
-    ApprovalDecisionArtifactPayload,
-    ApprovalRequestArtifactPayload,
     ActionItemRepository,
     ActionProposalRepository,
+    ApprovalDecisionArtifactPayload,
+    ApprovalRequestArtifactPayload,
     ClassificationArtifactRepository,
     DigestItemRepository,
     DraftReasoningArtifactRepository,
@@ -28,48 +28,47 @@ from helm_storage.repositories.contracts import (
     NewEmailDraft,
     NewEmailThread,
     NewScheduledThreadTask,
-    NewWorkflowArtifact,
     NewWorkflowApprovalCheckpoint,
+    NewWorkflowArtifact,
     NewWorkflowEvent,
     NewWorkflowRun,
     NewWorkflowSpecialistInvocation,
     NewWorkflowStep,
+    NewWorkflowSyncRecord,
+    NormalizedTaskArtifactPayload,
+    RawRequestArtifactPayload,
     RevisionRequestArtifactPayload,
     ScheduledThreadTaskRepository,
     ScheduleProposalArtifactPayload,
     ValidationArtifactPayload,
-    WorkflowArtifactRepository,
-    WorkflowArtifactType,
     WorkflowApprovalCheckpointPatch,
     WorkflowApprovalCheckpointRepository,
+    WorkflowArtifactRepository,
+    WorkflowArtifactType,
     WorkflowBlockedReason,
     WorkflowEventRepository,
     WorkflowRunPatch,
     WorkflowRunRepository,
     WorkflowRunState,
     WorkflowRunStatus,
-    WorkflowSyncFailedQuery,
-    WorkflowSyncIdentityQuery,
-    WorkflowSyncKind,
-    WorkflowSyncPayload,
-    WorkflowSyncRecoveryClassification,
-    WorkflowSyncRecordPatch,
-    WorkflowSyncRecordRepository,
-    WorkflowSyncRemainingQuery,
-    WorkflowSyncStatus,
-    WorkflowSyncKind,
-    WorkflowSyncClaimPatch,
-    WorkflowTargetSystem,
-    NewWorkflowSyncRecord,
-    WorkflowSyncStepQuery,
     WorkflowSpecialistInvocationPatch,
     WorkflowSpecialistInvocationRepository,
     WorkflowStepPatch,
     WorkflowStepRepository,
     WorkflowStepStatus,
     WorkflowSummaryArtifactPayload,
-    RawRequestArtifactPayload,
-    NormalizedTaskArtifactPayload,
+    WorkflowSyncClaimPatch,
+    WorkflowSyncFailedQuery,
+    WorkflowSyncIdentityQuery,
+    WorkflowSyncKind,
+    WorkflowSyncPayload,
+    WorkflowSyncRecordPatch,
+    WorkflowSyncRecordRepository,
+    WorkflowSyncRecoveryClassification,
+    WorkflowSyncRemainingQuery,
+    WorkflowSyncStatus,
+    WorkflowSyncStepQuery,
+    WorkflowTargetSystem,
 )
 from helm_storage.repositories.digest_items import SQLAlchemyDigestItemRepository
 from helm_storage.repositories.draft_reasoning_artifacts import (
@@ -87,10 +86,10 @@ from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepositor
 from helm_storage.repositories.opportunities import SQLAlchemyOpportunityRepository
 from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
-from helm_storage.repositories.workflow_artifacts import SQLAlchemyWorkflowArtifactRepository
 from helm_storage.repositories.workflow_approval_checkpoints import (
     SQLAlchemyWorkflowApprovalCheckpointRepository,
 )
+from helm_storage.repositories.workflow_artifacts import SQLAlchemyWorkflowArtifactRepository
 from helm_storage.repositories.workflow_events import SQLAlchemyWorkflowEventRepository
 from helm_storage.repositories.workflow_runs import SQLAlchemyWorkflowRunRepository
 from helm_storage.repositories.workflow_specialist_invocations import (

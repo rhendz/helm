@@ -197,12 +197,16 @@ class WorkflowStepORM(Base):
 class WorkflowArtifactORM(Base):
     __tablename__ = "workflow_artifacts"
     __table_args__ = (
-        UniqueConstraint("run_id", "artifact_type", "version_number", name="uq_workflow_artifact_version"),
+        UniqueConstraint(
+            "run_id", "artifact_type", "version_number", name="uq_workflow_artifact_version"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
-    step_id: Mapped[int | None] = mapped_column(ForeignKey("workflow_steps.id", ondelete="SET NULL"))
+    step_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_steps.id", ondelete="SET NULL")
+    )
     artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -246,7 +250,9 @@ class WorkflowEventORM(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
-    step_id: Mapped[int | None] = mapped_column(ForeignKey("workflow_steps.id", ondelete="SET NULL"))
+    step_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_steps.id", ondelete="SET NULL")
+    )
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
     run_status: Mapped[str | None] = mapped_column(String(32))
     step_status: Mapped[str | None] = mapped_column(String(32))
@@ -389,8 +395,12 @@ class WorkflowSyncRecordORM(Base):
         back_populates="sync_records",
         foreign_keys=[step_id],
     )
-    last_attempt_step: Mapped["WorkflowStepORM | None"] = relationship(foreign_keys=[last_attempt_step_id])
-    proposal_artifact: Mapped["WorkflowArtifactORM"] = relationship(foreign_keys=[proposal_artifact_id])
+    last_attempt_step: Mapped["WorkflowStepORM | None"] = relationship(
+        foreign_keys=[last_attempt_step_id]
+    )
+    proposal_artifact: Mapped["WorkflowArtifactORM"] = relationship(
+        foreign_keys=[proposal_artifact_id]
+    )
     supersedes_sync_record: Mapped["WorkflowSyncRecordORM | None"] = relationship(
         remote_side="WorkflowSyncRecordORM.id",
         foreign_keys=[supersedes_sync_record_id],
@@ -494,9 +504,7 @@ class ClassificationArtifactORM(Base):
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
-    email_thread_id: Mapped[int] = mapped_column(
-        ForeignKey("email_threads.id", ondelete="CASCADE")
-    )
+    email_thread_id: Mapped[int] = mapped_column(ForeignKey("email_threads.id", ondelete="CASCADE"))
     email_message_id: Mapped[int] = mapped_column(
         ForeignKey("email_messages.id", ondelete="CASCADE")
     )
@@ -551,21 +559,15 @@ class DraftReasoningArtifactORM(Base):
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
-    email_draft_id: Mapped[int] = mapped_column(
-        ForeignKey("email_drafts.id", ondelete="CASCADE")
-    )
-    email_thread_id: Mapped[int] = mapped_column(
-        ForeignKey("email_threads.id", ondelete="CASCADE")
-    )
+    email_draft_id: Mapped[int] = mapped_column(ForeignKey("email_drafts.id", ondelete="CASCADE"))
+    email_thread_id: Mapped[int] = mapped_column(ForeignKey("email_threads.id", ondelete="CASCADE"))
     action_proposal_id: Mapped[int | None] = mapped_column(
         ForeignKey("action_proposals.id", ondelete="SET NULL")
     )
     schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
     prompt_context: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
     model_metadata: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
-    reasoning_payload: Mapped[dict[str, object]] = mapped_column(
-        JSON, default=dict, nullable=False
-    )
+    reasoning_payload: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
     refinement_metadata: Mapped[dict[str, object]] = mapped_column(
         JSON, default=dict, nullable=False
     )
@@ -659,9 +661,7 @@ class EmailAgentConfigORM(Base):
     approval_required_before_send: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False
     )
-    default_follow_up_business_days: Mapped[int] = mapped_column(
-        Integer, default=3, nullable=False
-    )
+    default_follow_up_business_days: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     timezone_name: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     last_history_cursor: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(

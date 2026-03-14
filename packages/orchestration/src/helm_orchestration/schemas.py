@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 SCHEMA_VERSION = "2026-03-13"
 
 

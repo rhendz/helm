@@ -10,10 +10,7 @@ def test_list_open_actions_applies_limit(monkeypatch) -> None:  # noqa: ANN001
     monkeypatch.setattr(command_service, "build_email_agent_runtime", lambda: object())
 
     def fake_list_open_actions(*, limit: int = 5, runtime: object) -> list[ActionView]:
-        return [
-            ActionView(id=i, priority=2, title=f"action-{i}")
-            for i in range(1, limit + 1)
-        ]
+        return [ActionView(id=i, priority=2, title=f"action-{i}") for i in range(1, limit + 1)]
 
     monkeypatch.setattr(
         command_service,
@@ -630,10 +627,7 @@ def test_run_replay_worker_rejects_paused_job(monkeypatch) -> None:  # noqa: ANN
     result = service.run_replay_worker(limit=5)
 
     assert result.ok is False
-    assert (
-        result.message
-        == "Replay job is paused; resume it before running replay manually."
-    )
+    assert result.message == "Replay job is paused; resume it before running replay manually."
 
 
 def test_pause_replay_job_happy_path(monkeypatch) -> None:  # noqa: ANN001

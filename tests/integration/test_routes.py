@@ -156,9 +156,7 @@ def test_routes_exist() -> None:
     assert pause_response.json()["paused"] is True
     paused_items_response = client.get("/v1/job-controls?status=paused")
     assert paused_items_response.status_code == 200
-    assert all(
-        item["paused"] is True for item in paused_items_response.json()["items"]
-    )
+    assert all(item["paused"] is True for item in paused_items_response.json()["items"])
     detail_response = client.get("/v1/job-controls/digest")
     assert detail_response.status_code == 200
     assert detail_response.json()["job_name"] == "digest"
@@ -167,9 +165,7 @@ def test_routes_exist() -> None:
     assert resume_response.json()["paused"] is False
     active_items_response = client.get("/v1/job-controls?status=active")
     assert active_items_response.status_code == 200
-    assert all(
-        item["paused"] is False for item in active_items_response.json()["items"]
-    )
+    assert all(item["paused"] is False for item in active_items_response.json()["items"])
     assert any(
         item["job_name"] == "digest" and item["paused"] is False
         for item in active_items_response.json()["items"]

@@ -64,9 +64,7 @@ def test_action_item_repository_contract_and_ordering() -> None:
         repo = SQLAlchemyActionItemRepository(session)
         assert isinstance(repo, ActionItemRepository)
 
-        repo.create(
-            NewActionItem(source_type="email", source_id="m-1", title="Medium", priority=2)
-        )
+        repo.create(NewActionItem(source_type="email", source_id="m-1", title="Medium", priority=2))
         repo.create(
             NewActionItem(source_type="email", source_id="m-2", title="Highest", priority=1)
         )
@@ -86,9 +84,7 @@ def test_action_item_repository_contract_and_ordering() -> None:
         fetched = repo.get_by_id(open_items[0].id)
         assert fetched is not None
         assert fetched.title == "Highest"
-        assert (
-            repo.get_open_by_source(source_type="email", source_id="m-2") is not None
-        )
+        assert repo.get_open_by_source(source_type="email", source_id="m-2") is not None
 
 
 def test_draft_reply_repository_contract_and_transitions() -> None:

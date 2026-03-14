@@ -1,10 +1,10 @@
 from collections.abc import Generator
 
 from fastapi.testclient import TestClient
-from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_api.dependencies import get_db
 from helm_api.main import app
 from helm_api.services import replay_service
+from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -18,16 +18,16 @@ from helm_orchestration import (
     ValidatorTarget,
     WorkflowOrchestrationService,
 )
-from helm_worker.jobs import workflow_runs as workflow_runs_job
 from helm_storage.db import Base
 from helm_storage.repositories import (
     NewWorkflowArtifact,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
-    WorkflowSyncRecoveryClassification,
     WorkflowRunStatus,
+    WorkflowSyncRecoveryClassification,
 )
+from helm_worker.jobs import workflow_runs as workflow_runs_job
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -85,7 +85,9 @@ def _normalized_payload() -> dict[str, object]:
     return {
         "title": "Weekly planning",
         "summary": "Focus on deep work.",
-        "tasks": [{"title": "Deep work", "summary": "Plan", "priority": "high", "estimated_minutes": 90}],
+        "tasks": [
+            {"title": "Deep work", "summary": "Plan", "priority": "high", "estimated_minutes": 90}
+        ],
     }
 
 
@@ -360,9 +362,9 @@ def test_public_representative_flow_reaches_completion_and_replay_with_fresh_fin
         assert completed.status_code == 200
         assert completed.json()["status"] == WorkflowRunStatus.COMPLETED.value
         assert completed.json()["lineage"]["final_summary"]["downstream_sync_status"] == "succeeded"
-        assert len(completed.json()["lineage"]["final_summary"]["downstream_sync_reference_ids"]) == len(
-            source_sync_record_ids
-        )
+        assert len(
+            completed.json()["lineage"]["final_summary"]["downstream_sync_reference_ids"]
+        ) == len(source_sync_record_ids)
         replay = client.post(
             f"/v1/replay/workflow-runs/{run_id}",
             json={"actor": "api:operator", "reason": "Replay completed run after adapter drift."},
@@ -372,7 +374,10 @@ def test_public_representative_flow_reaches_completion_and_replay_with_fresh_fin
 
         replayed = client.get(f"/v1/workflow-runs/{run_id}")
         assert replayed.status_code == 200
-        assert replayed.json()["recovery_class"] == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        assert (
+            replayed.json()["recovery_class"]
+            == WorkflowSyncRecoveryClassification.REPLAY_REQUESTED.value
+        )
         assert replayed.json()["lineage"]["final_summary"]["downstream_sync_status"] == "pending"
         assert len(replayed.json()["lineage"]["final_summary"]["downstream_sync_artifact_ids"]) == (
             len(source_sync_record_ids) * 2
@@ -422,7 +427,9 @@ def test_workflow_routes_cover_operator_states() -> None:
         running = client.get(f"/v1/workflow-runs/{seeded['running']}")
         assert running.status_code == 200
         assert running.json()["status"] == WorkflowRunStatus.RUNNING.value
-        assert running.json()["lineage"]["validation_artifacts"][0]["payload"]["outcome"] == "passed"
+        assert (
+            running.json()["lineage"]["validation_artifacts"][0]["payload"]["outcome"] == "passed"
+        )
 
         blocked = client.get(f"/v1/workflow-runs/{seeded['blocked']}")
         assert blocked.status_code == 200
@@ -440,7 +447,9 @@ def test_workflow_routes_cover_operator_states() -> None:
         target_artifact_id = approval_blocked.json()["approval_checkpoint"]["target_artifact_id"]
         assert approval_blocked.json()["approval_checkpoint"]["target_version_number"] == 1
 
-        proposal_versions = client.get(f"/v1/workflow-runs/{seeded['approval_blocked']}/proposal-versions")
+        proposal_versions = client.get(
+            f"/v1/workflow-runs/{seeded['approval_blocked']}/proposal-versions"
+        )
         assert proposal_versions.status_code == 200
         assert proposal_versions.json()[0]["artifact_id"] == target_artifact_id
 
@@ -488,7 +497,9 @@ def test_workflow_routes_cover_operator_states() -> None:
         assert revision.status_code == 200
         assert revision.json()["status"] == WorkflowRunStatus.PENDING.value
         assert revision.json()["current_step"] == "dispatch_calendar_agent"
-        assert revision.json()["latest_decision"]["revision_feedback"] == "Keep Friday afternoon open."
+        assert (
+            revision.json()["latest_decision"]["revision_feedback"] == "Keep Friday afternoon open."
+        )
 
         terminate = client.post(
             f"/v1/workflow-runs/{seeded['failed']}/terminate",
@@ -514,7 +525,24 @@ def test_workflow_routes_cover_operator_states() -> None:
         assert representative_completed.json()["completion_summary"]["headline"] == (
             "Scheduled 1 block(s) and synced 2 approved write(s)."
         )
-        assert representative_completed.json()["completion_summary"]["carry_forward_tasks"] == ["Clear inbox"]
-        assert representative_completed.json()["lineage"]["final_summary"]["approval_decision"] == "approve"
-        assert representative_completed.json()["lineage"]["final_summary"]["approval_decision_artifact_id"] is not None
-        assert len(representative_completed.json()["lineage"]["final_summary"]["downstream_sync_reference_ids"]) == 2
+        assert representative_completed.json()["completion_summary"]["carry_forward_tasks"] == [
+            "Clear inbox"
+        ]
+        assert (
+            representative_completed.json()["lineage"]["final_summary"]["approval_decision"]
+            == "approve"
+        )
+        assert (
+            representative_completed.json()["lineage"]["final_summary"][
+                "approval_decision_artifact_id"
+            ]
+            is not None
+        )
+        assert (
+            len(
+                representative_completed.json()["lineage"]["final_summary"][
+                    "downstream_sync_reference_ids"
+                ]
+            )
+            == 2
+        )

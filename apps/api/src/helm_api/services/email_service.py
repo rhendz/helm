@@ -420,8 +420,7 @@ def list_deep_seed_queue(*, status: str | None = None, limit: int = 20) -> list[
     except SQLAlchemyError:
         return []
     return [
-        {key: value for key, value in item.items() if key != "thread_payload"}
-        for item in queue
+        {key: value for key, value in item.items() if key != "thread_payload"} for item in queue
     ]
 
 

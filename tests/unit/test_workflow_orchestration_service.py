@@ -1,14 +1,14 @@
-from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_api.services.workflow_status_service import build_workflow_run_create_input
+from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
     ApprovedSyncItem,
+    CalendarAgentInput,
+    CalendarAgentOutput,
     CalendarSyncRequest,
     CalendarSyncResult,
     CalendarSystemAdapter,
-    CalendarAgentInput,
-    CalendarAgentOutput,
     ExecutionFailurePayload,
     NormalizedTaskArtifact,
     NormalizedTaskValidator,
@@ -18,19 +18,19 @@ from helm_orchestration import (
     ScheduleBlock,
     ScheduleProposalArtifact,
     ScheduleProposalValidator,
+    SpecialistName,
     SyncLookupRequest,
     SyncLookupResult,
     SyncOperation,
     SyncOutcomeStatus,
     SyncRetryDisposition,
     SyncTargetSystem,
-    SpecialistName,
-    TaskSyncRequest,
-    TaskSyncResult,
-    TaskSystemAdapter,
     TaskAgentInput,
     TaskAgentOutput,
     TaskArtifact,
+    TaskSyncRequest,
+    TaskSyncResult,
+    TaskSystemAdapter,
     ValidationOutcome,
     ValidationTargetKind,
     ValidatorRegistry,
@@ -39,10 +39,9 @@ from helm_orchestration import (
     WorkflowOrchestrationService,
     WorkflowResumeService,
     WorkflowSpecialistStep,
-    WorkflowSummaryArtifact,
     WorkflowStepExecutionError,
+    WorkflowSummaryArtifact,
 )
-from helm_worker.jobs.workflow_runs import _build_specialist_steps
 from helm_storage.db import Base
 from helm_storage.repositories import (
     SQLAlchemyWorkflowEventRepository,
@@ -51,11 +50,12 @@ from helm_storage.repositories import (
     WorkflowArtifactType,
     WorkflowBlockedReason,
     WorkflowRunStatus,
-    WorkflowSyncRecoveryClassification,
-    WorkflowSyncRecordPatch,
-    WorkflowSyncStatus,
     WorkflowStepStatus,
+    WorkflowSyncRecordPatch,
+    WorkflowSyncRecoveryClassification,
+    WorkflowSyncStatus,
 )
+from helm_worker.jobs.workflow_runs import _build_specialist_steps
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -228,7 +228,9 @@ def test_adapter_protocols_use_normalized_sync_contracts() -> None:
     )
 
     task_result = task_adapter.upsert_task(TaskSyncRequest(item=task_item))
-    calendar_result = calendar_adapter.upsert_calendar_block(CalendarSyncRequest(item=calendar_item))
+    calendar_result = calendar_adapter.upsert_calendar_block(
+        CalendarSyncRequest(item=calendar_item)
+    )
     lookup = calendar_adapter.reconcile_calendar_block(
         SyncLookupRequest(
             proposal_artifact_id=4,
@@ -295,7 +297,8 @@ class RecordingCalendarAdapter:
         if configured is not None:
             if configured.status is SyncOutcomeStatus.SUCCEEDED:
                 self._records[request.item.planned_item_key] = (
-                    configured.external_object_id or request.item.planned_item_key.replace("calendar:", "calendar-"),
+                    configured.external_object_id
+                    or request.item.planned_item_key.replace("calendar:", "calendar-"),
                     request.item.payload_fingerprint,
                 )
             return configured
@@ -448,8 +451,12 @@ def _calendar_agent_step(*, valid_output: bool = True) -> WorkflowSpecialistStep
     def _build_input(state) -> PreparedSpecialistInput:  # type: ignore[no-untyped-def]
         normalized_artifact = state.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value]
         request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
-        revision_request_artifact = state.latest_artifacts.get(WorkflowArtifactType.REVISION_REQUEST.value)
-        prior_proposal_artifact = state.latest_artifacts.get(WorkflowArtifactType.SCHEDULE_PROPOSAL.value)
+        revision_request_artifact = state.latest_artifacts.get(
+            WorkflowArtifactType.REVISION_REQUEST.value
+        )
+        prior_proposal_artifact = state.latest_artifacts.get(
+            WorkflowArtifactType.SCHEDULE_PROPOSAL.value
+        )
         normalized = NormalizedTaskArtifact.model_validate(normalized_artifact.payload)
         request = CalendarAgentInput(
             workflow_type=state.run.workflow_type,
@@ -465,11 +472,17 @@ def _calendar_agent_step(*, valid_output: bool = True) -> WorkflowSpecialistStep
                 revision_request_artifact.id if revision_request_artifact is not None else None
             ),
             revision_feedback=(
-                revision_request_artifact.payload["feedback"] if revision_request_artifact is not None else None
+                revision_request_artifact.payload["feedback"]
+                if revision_request_artifact is not None
+                else None
             ),
-            prior_proposal_artifact_id=prior_proposal_artifact.id if prior_proposal_artifact is not None else None,
+            prior_proposal_artifact_id=prior_proposal_artifact.id
+            if prior_proposal_artifact is not None
+            else None,
             prior_proposal_version=(
-                prior_proposal_artifact.version_number if prior_proposal_artifact is not None else None
+                prior_proposal_artifact.version_number
+                if prior_proposal_artifact is not None
+                else None
             ),
         )
         return PreparedSpecialistInput(
@@ -538,9 +551,9 @@ def test_validation_failure_blocks_run_durably() -> None:
         assert state.run.retry_state == RetryState.AWAITING_OPERATOR.value
         assert state.current_step is not None
         assert state.current_step.status == WorkflowStepStatus.VALIDATION_FAILED.value
-        assert state.latest_artifacts[WorkflowArtifactType.VALIDATION_RESULT.value].payload["outcome"] == (
-            ValidationOutcome.FAILED.value
-        )
+        assert state.latest_artifacts[WorkflowArtifactType.VALIDATION_RESULT.value].payload[
+            "outcome"
+        ] == (ValidationOutcome.FAILED.value)
 
 
 def test_successful_step_persists_validation_and_advances_to_next_step() -> None:
@@ -564,9 +577,9 @@ def test_successful_step_persists_validation_and_advances_to_next_step() -> None
         assert state.current_step is not None
         assert state.current_step.step_name == "summarize"
         assert state.current_step.status == WorkflowStepStatus.PENDING.value
-        assert state.latest_artifacts[WorkflowArtifactType.VALIDATION_RESULT.value].payload["outcome"] == (
-            ValidationOutcome.PASSED_WITH_WARNINGS.value
-        )
+        assert state.latest_artifacts[WorkflowArtifactType.VALIDATION_RESULT.value].payload[
+            "outcome"
+        ] == (ValidationOutcome.PASSED_WITH_WARNINGS.value)
 
 
 def test_execution_failure_persists_failed_step_and_retryability() -> None:
@@ -616,7 +629,9 @@ def test_retry_requeues_last_failed_step_without_advancing() -> None:
             next_step_name="summarize",
         )
 
-        state = service.retry_current_step(created.run.id, reason="Operator requested retry after correction.")
+        state = service.retry_current_step(
+            created.run.id, reason="Operator requested retry after correction."
+        )
 
         assert state.run.status == WorkflowRunStatus.PENDING.value
         assert state.run.current_step_name == "normalize_request"
@@ -672,10 +687,16 @@ def test_task_agent_specialist_dispatch_persists_typed_input_and_advances() -> N
 
         assert resumed.run.current_step_name == "dispatch_calendar_agent"
         assert resumed.run.status == WorkflowRunStatus.RUNNING.value
-        assert resumed.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload["title"] == "Weekly planning"
+        assert (
+            resumed.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload["title"]
+            == "Weekly planning"
+        )
         assert invocation.specialist_name == SpecialistName.TASK_AGENT.value
         assert invocation.status == WorkflowStepStatus.SUCCEEDED.value
-        assert invocation.output_artifact_id == resumed.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].id
+        assert (
+            invocation.output_artifact_id
+            == resumed.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].id
+        )
 
 
 def test_specialist_resume_service_skips_blocked_runs_until_explicit_retry() -> None:
@@ -703,7 +724,9 @@ def test_specialist_resume_service_skips_blocked_runs_until_explicit_retry() -> 
                 step_name="dispatch_task_agent",
                 specialist=SpecialistName.TASK_AGENT,
                 input_builder=_task_agent_step().input_builder,
-                handler=lambda _payload: TaskAgentOutput(title="Weekly planning", summary="", tasks=()),
+                handler=lambda _payload: TaskAgentOutput(
+                    title="Weekly planning", summary="", tasks=()
+                ),
                 artifact_type=WorkflowArtifactKind.NORMALIZED_TASK,
                 next_step_name="dispatch_calendar_agent",
             ),
@@ -735,7 +758,11 @@ def test_calendar_agent_specialist_validation_failure_blocks_after_output() -> N
         resume_service = WorkflowResumeService(
             session,
             workflow_service=service,
-            specialist_steps={_calendar_agent_step(valid_output=False).key: _calendar_agent_step(valid_output=False)},
+            specialist_steps={
+                _calendar_agent_step(valid_output=False).key: _calendar_agent_step(
+                    valid_output=False
+                )
+            },
         )
 
         blocked = resume_service.resume_run(task_state.run.id)
@@ -746,7 +773,12 @@ def test_calendar_agent_specialist_validation_failure_blocks_after_output() -> N
         assert blocked.current_step is not None
         assert blocked.current_step.step_name == "dispatch_calendar_agent"
         assert blocked.current_step.status == WorkflowStepStatus.VALIDATION_FAILED.value
-        assert blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload["proposal_summary"] == ""
+        assert (
+            blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload[
+                "proposal_summary"
+            ]
+            == ""
+        )
         assert invocations[-1].specialist_name == SpecialistName.CALENDAR_AGENT.value
         assert invocations[-1].status == WorkflowStepStatus.VALIDATION_FAILED.value
 
@@ -778,9 +810,13 @@ def test_schedule_proposal_creates_approval_checkpoint_and_blocks_run() -> None:
             completed.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload
         )
         assert proposal.warnings == ("Calendar still needs a final conflict scan.",)
-        validation = completed.latest_artifacts[WorkflowArtifactType.VALIDATION_RESULT.value].payload
+        validation = completed.latest_artifacts[
+            WorkflowArtifactType.VALIDATION_RESULT.value
+        ].payload
         assert validation["outcome"] == ValidationOutcome.PASSED_WITH_WARNINGS.value
-        approval_request = completed.latest_artifacts[WorkflowArtifactType.APPROVAL_REQUEST.value].payload
+        approval_request = completed.latest_artifacts[
+            WorkflowArtifactType.APPROVAL_REQUEST.value
+        ].payload
         assert approval_request["allowed_actions"] == ["approve", "reject", "request_revision"]
 
 
@@ -818,7 +854,9 @@ def test_weekly_scheduling_worker_flow_uses_shared_request_contract() -> None:
         task_advanced = resume_service.resume_run(created.run.id)
         blocked = resume_service.resume_run(created.run.id)
 
-        normalized = task_advanced.latest_artifacts[WorkflowArtifactType.NORMALIZED_TASK.value].payload
+        normalized = task_advanced.latest_artifacts[
+            WorkflowArtifactType.NORMALIZED_TASK.value
+        ].payload
         proposal = blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].payload
 
         assert blocked.run.status == WorkflowRunStatus.BLOCKED.value
@@ -889,7 +927,10 @@ def test_weekly_scheduling_revision_generates_new_proposal_version_from_feedback
         assert revised.run.status == WorkflowRunStatus.BLOCKED.value
         assert len(proposals) == 2
         assert proposals[-1].supersedes_artifact_id == proposals[0].id
-        assert "Revision focus: Move interview prep earlier in the week." in proposals[-1].payload["assumptions"]
+        assert (
+            "Revision focus: Move interview prep earlier in the week."
+            in proposals[-1].payload["assumptions"]
+        )
 
 
 def test_specialist_resume_service_is_restart_safe_between_task_agent_and_calendar_agent() -> None:
@@ -912,14 +953,18 @@ def test_specialist_resume_service_is_restart_safe_between_task_agent_and_calend
         )
 
         after_task = first_resume.resume_run(created.run.id)
-        after_task_step_name = after_task.current_step.step_name if after_task.current_step is not None else None
+        after_task_step_name = (
+            after_task.current_step.step_name if after_task.current_step is not None else None
+        )
         after_calendar = second_resume.resume_run(created.run.id)
         invocation_repo = SQLAlchemyWorkflowSpecialistInvocationRepository(session)
 
         assert after_task_step_name == "dispatch_calendar_agent"
         assert after_calendar.run.status == WorkflowRunStatus.BLOCKED.value
         assert after_calendar.run.current_step_name == "await_schedule_approval"
-        assert [record.specialist_name for record in invocation_repo.list_for_run(created.run.id)] == [
+        assert [
+            record.specialist_name for record in invocation_repo.list_for_run(created.run.id)
+        ] == [
             SpecialistName.TASK_AGENT.value,
             SpecialistName.CALENDAR_AGENT.value,
         ]
@@ -954,9 +999,9 @@ def test_approval_decision_approve_resumes_next_persisted_step() -> None:
         assert resumed.run.needs_action is False
         assert resumed.run.current_step_name == "apply_schedule"
         assert resumed.active_approval_checkpoint is None
-        assert resumed.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].payload["decision"] == (
-            ApprovalAction.APPROVE.value
-        )
+        assert resumed.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].payload[
+            "decision"
+        ] == (ApprovalAction.APPROVE.value)
 
 
 def test_approval_decision_approve_persists_sync_manifest_before_execution() -> None:
@@ -990,7 +1035,10 @@ def test_approval_decision_approve_persists_sync_manifest_before_execution() -> 
         assert resumed.current_step.step_name == "apply_schedule"
         assert len(sync_records) == 2
         assert [record.execution_order for record in sync_records] == [1, 2]
-        assert {record.target_system for record in sync_records} == {"task_system", "calendar_system"}
+        assert {record.target_system for record in sync_records} == {
+            "task_system",
+            "calendar_system",
+        }
         assert {record.proposal_artifact_id for record in sync_records} == {target_artifact_id}
         assert {record.proposal_version_number for record in sync_records} == {
             blocked.latest_artifacts[WorkflowArtifactType.SCHEDULE_PROPOSAL.value].version_number
@@ -1000,7 +1048,9 @@ def test_approval_decision_approve_persists_sync_manifest_before_execution() -> 
             event_type="approved_sync_manifest_created",
         )
         assert len(manifest_events) == 1
-        assert manifest_events[0].details["sync_record_ids"] == [record.id for record in sync_records]
+        assert manifest_events[0].details["sync_record_ids"] == [
+            record.id for record in sync_records
+        ]
 
 
 def test_prepare_approved_sync_plan_is_idempotent_for_same_proposal_version() -> None:
@@ -1076,7 +1126,9 @@ def test_sync_execution_processes_records_in_deterministic_task_then_calendar_or
         )
 
         completed = service.execute_pending_sync_step(approved.run.id)
-        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(completed.run.id)
+        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(
+            completed.run.id
+        )
         final_summary = completed.latest_artifacts[WorkflowArtifactType.FINAL_SUMMARY.value].payload
 
         assert completed.run.status == WorkflowRunStatus.COMPLETED.value
@@ -1089,7 +1141,9 @@ def test_sync_execution_processes_records_in_deterministic_task_then_calendar_or
             completed.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].id
         )
         assert final_summary["downstream_sync_status"] == "succeeded"
-        assert final_summary["downstream_sync_artifact_ids"] == [record.id for record in sync_records]
+        assert final_summary["downstream_sync_artifact_ids"] == [
+            record.id for record in sync_records
+        ]
         assert final_summary["downstream_sync_reference_ids"] == [
             f"task_system:{sync_records[0].external_object_id}",
             f"calendar_system:{sync_records[1].external_object_id}",
@@ -1509,7 +1563,9 @@ def test_sync_retry_resume_only_replays_remaining_failed_items() -> None:
         assert retry_events[-1].details["previous_attempt"] == 1
 
 
-def test_terminate_after_partial_sync_preserves_succeeded_lineage_and_cancels_remaining_work() -> None:
+def test_terminate_after_partial_sync_preserves_succeeded_lineage_and_cancels_remaining_work() -> (
+    None
+):
     with _session() as session:
         task_adapter = RecordingTaskAdapter()
         calendar_adapter = RecordingCalendarAdapter()
@@ -1552,7 +1608,9 @@ def test_terminate_after_partial_sync_preserves_succeeded_lineage_and_cancels_re
             failed.run.id,
             reason="Operator revoked approval after partial sync.",
         )
-        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(terminated.run.id)
+        sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(
+            terminated.run.id
+        )
         termination_event = SQLAlchemyWorkflowEventRepository(session).list_for_run_by_type(
             terminated.run.id,
             event_type="run_terminated",
@@ -1644,7 +1702,9 @@ def test_request_sync_replay_creates_new_lineage_without_mutating_original_recor
         assert replay_events[0].details["source_sync_record_ids"] == [original_calendar_record.id]
 
 
-def test_request_sync_replay_after_termination_appends_new_lineage_to_frozen_partial_state() -> None:
+def test_request_sync_replay_after_termination_appends_new_lineage_to_frozen_partial_state() -> (
+    None
+):
     with _session() as session:
         task_adapter = RecordingTaskAdapter()
         calendar_adapter = RecordingCalendarAdapter()
@@ -1734,9 +1794,9 @@ def test_approval_decision_reject_closes_run_cleanly() -> None:
 
         assert terminated.run.status == WorkflowRunStatus.TERMINATED.value
         assert terminated.run.needs_action is False
-        assert terminated.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].payload["decision"] == (
-            ApprovalAction.REJECT.value
-        )
+        assert terminated.latest_artifacts[WorkflowArtifactType.APPROVAL_DECISION.value].payload[
+            "decision"
+        ] == (ApprovalAction.REJECT.value)
 
 
 def test_approval_decision_request_revision_returns_to_proposal_step() -> None:
@@ -1768,9 +1828,9 @@ def test_approval_decision_request_revision_returns_to_proposal_step() -> None:
         assert revised.run.status == WorkflowRunStatus.PENDING.value
         assert revised.run.current_step_name == "dispatch_calendar_agent"
         assert revised.run.current_step_attempt == 2
-        assert revised.latest_artifacts[WorkflowArtifactType.REVISION_REQUEST.value].payload["feedback"] == (
-            "Keep Friday afternoon open."
-        )
+        assert revised.latest_artifacts[WorkflowArtifactType.REVISION_REQUEST.value].payload[
+            "feedback"
+        ] == ("Keep Friday afternoon open.")
 
 
 def test_revision_request_creates_new_schedule_proposal_version_with_lineage() -> None:
@@ -1895,6 +1955,6 @@ def test_final_summary_artifact_creation_completes_workflow() -> None:
         )
 
         assert state.run.status == WorkflowRunStatus.COMPLETED.value
-        assert state.latest_artifacts[WorkflowArtifactType.FINAL_SUMMARY.value].payload["final_summary_text"] == (
-            "Workflow ready for operator review."
-        )
+        assert state.latest_artifacts[WorkflowArtifactType.FINAL_SUMMARY.value].payload[
+            "final_summary_text"
+        ] == ("Workflow ready for operator review.")

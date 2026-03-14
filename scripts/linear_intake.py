@@ -154,9 +154,7 @@ def resolve_team_id(team_key: str) -> str:
         if (team.get("key") or "").upper() == key_upper:
             return team["id"]
 
-    available_keys = sorted(
-        (team.get("key") or "").upper() for team in teams if team.get("key")
-    )
+    available_keys = sorted((team.get("key") or "").upper() for team in teams if team.get("key"))
     available = ", ".join(available_keys)
     raise RuntimeError(f"Linear team key not found: {team_key}. Available: {available}")
 

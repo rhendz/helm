@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session, aliased
 from helm_storage.models import WorkflowStepORM, WorkflowSyncRecordORM
 from helm_storage.repositories.contracts import (
     NewWorkflowSyncRecord,
-    WorkflowSyncIdentityQuery,
     WorkflowSyncFailedQuery,
+    WorkflowSyncIdentityQuery,
     WorkflowSyncRecordPatch,
     WorkflowSyncRemainingQuery,
     WorkflowSyncStatus,
@@ -69,13 +69,19 @@ class SQLAlchemyWorkflowSyncRecordRepository:
         sync_kind: str,
         planned_item_key: str,
     ) -> WorkflowSyncRecordORM | None:
-        stmt = select(WorkflowSyncRecordORM).where(
-            WorkflowSyncRecordORM.proposal_artifact_id == proposal_artifact_id,
-            WorkflowSyncRecordORM.proposal_version_number == proposal_version_number,
-            WorkflowSyncRecordORM.target_system == target_system,
-            WorkflowSyncRecordORM.sync_kind == sync_kind,
-            WorkflowSyncRecordORM.planned_item_key == planned_item_key,
-        ).order_by(WorkflowSyncRecordORM.lineage_generation.desc(), WorkflowSyncRecordORM.id.desc())
+        stmt = (
+            select(WorkflowSyncRecordORM)
+            .where(
+                WorkflowSyncRecordORM.proposal_artifact_id == proposal_artifact_id,
+                WorkflowSyncRecordORM.proposal_version_number == proposal_version_number,
+                WorkflowSyncRecordORM.target_system == target_system,
+                WorkflowSyncRecordORM.sync_kind == sync_kind,
+                WorkflowSyncRecordORM.planned_item_key == planned_item_key,
+            )
+            .order_by(
+                WorkflowSyncRecordORM.lineage_generation.desc(), WorkflowSyncRecordORM.id.desc()
+            )
+        )
         return self._session.execute(stmt).scalars().first()
 
     def list_lineage(self, query: WorkflowSyncIdentityQuery) -> list[WorkflowSyncRecordORM]:
@@ -88,7 +94,9 @@ class SQLAlchemyWorkflowSyncRecordRepository:
                 WorkflowSyncRecordORM.sync_kind == query.sync_kind,
                 WorkflowSyncRecordORM.planned_item_key == query.planned_item_key,
             )
-            .order_by(WorkflowSyncRecordORM.lineage_generation.asc(), WorkflowSyncRecordORM.id.asc())
+            .order_by(
+                WorkflowSyncRecordORM.lineage_generation.asc(), WorkflowSyncRecordORM.id.asc()
+            )
         )
         return list(self._session.execute(stmt).scalars().all())
 

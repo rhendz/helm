@@ -42,7 +42,8 @@ class StubCalendarSystemAdapter:
         return SyncLookupResult(
             found=True,
             external_object_id=record["external_object_id"],
-            payload_fingerprint_matches=record["payload_fingerprint"] == request.payload_fingerprint,
+            payload_fingerprint_matches=record["payload_fingerprint"]
+            == request.payload_fingerprint,
             provider_state="present",
         )
 

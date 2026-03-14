@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from helm_storage.repositories import WorkflowRunState
+
 from helm_orchestration.schemas import (
     ApprovedSyncItem,
     CalendarSyncRequest,
@@ -15,7 +17,6 @@ from helm_orchestration.schemas import (
     TaskSyncResult,
     ValidationReport,
 )
-from helm_storage.repositories import WorkflowRunState
 
 
 class WorkflowArtifactKind(StrEnum):

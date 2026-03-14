@@ -9,8 +9,8 @@ from helm_api.routers import (
     job_controls,
     replay,
     status,
-    workflows,
     workflow_runs,
+    workflows,
 )
 
 app = FastAPI(title="helm-api", version="0.1.0")

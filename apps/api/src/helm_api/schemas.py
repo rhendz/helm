@@ -312,8 +312,6 @@ class CompleteScheduledTaskResponse(BaseModel):
     reason: str | None = None
 
 
-
-
 class AgentRunFailureResponse(BaseModel):
     id: int
     agent_name: str
@@ -648,7 +646,9 @@ class WorkflowLineageResponse(BaseModel):
     raw_request: WorkflowArtifactLinkResponse | None = None
     intermediate_artifacts: list[WorkflowArtifactLinkResponse] = Field(default_factory=list)
     validation_artifacts: list[WorkflowArtifactLinkResponse] = Field(default_factory=list)
-    final_summary: WorkflowFinalSummaryResponse = Field(default_factory=WorkflowFinalSummaryResponse)
+    final_summary: WorkflowFinalSummaryResponse = Field(
+        default_factory=WorkflowFinalSummaryResponse
+    )
     step_transitions: list[WorkflowStepTransitionResponse] = Field(default_factory=list)
     events: list[WorkflowEventResponse] = Field(default_factory=list)
 

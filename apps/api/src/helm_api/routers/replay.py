@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from fastapi import Query
 
 from helm_api.dependencies import get_db
 from helm_api.schemas import (
@@ -17,8 +16,8 @@ from helm_api.services.replay_service import (
     enqueue_failed_agent_run,
     list_replay_items,
     reprocess_failed_runs,
-    requeue_replay_item,
     request_workflow_run_replay,
+    requeue_replay_item,
 )
 
 router = APIRouter(prefix="/v1/replay", tags=["replay"])
