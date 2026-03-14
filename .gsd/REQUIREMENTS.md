@@ -19,8 +19,8 @@
 - Source: user
 - Primary owning slice: M002/S01
 - Supporting slices: none yet
-- Validation: unmapped
-- Notes: Truth set must be written down as a small note and reflected in classifications and requirements.
+- Validation: proofed
+- Notes: Truth set is defined in `.gsd/milestones/M002/M002-TRUTH-NOTE.md` (M002/S01) and used as the anchor for classification rules and inventory.
 
 ### R002 — Repo working set is reduced to active and frozen truth
 - Class: continuity
@@ -31,7 +31,7 @@
 - Primary owning slice: M002/S02
 - Supporting slices: M002/S01, M002/S03
 - Validation: unmapped
-- Notes: Bias toward physical removal; quarantine only with concrete justification.
+- Notes: Bias toward physical removal; quarantine only with concrete justification. Classification rules in `.gsd/milestones/M002/M002-CLASSIFICATION-RULES.md` (M002/S01) define how artifacts are tagged keep/freeze/deprecate/remove/quarantine and are the primary input to S02 cleanup decisions.
 
 ### R003 — Task/calendar workflows remain intact and verified after cleanup
 - Class: continuity
@@ -52,8 +52,8 @@
 - Source: user
 - Primary owning slice: M002/S01
 - Supporting slices: M002/S02
-- Validation: unmapped
-- Notes: EmailAgent code is left alone; email cleanup is about deprecating non-kernel truth surfaces.
+- Validation: proofed
+- Notes: `.gsd/milestones/M002/M002-TRUTH-NOTE.md` (M002/S01) explicitly treats TaskAgent/CalendarAgent as core truth and EmailAgent/StudyAgent as non-core/frozen; classification rules and inventory in M002 reference this constraint.
 
 ### R005 — Deprecated paths are clearly marked and removed where safe
 - Class: failure-visibility
@@ -64,7 +64,7 @@
 - Primary owning slice: M002/S02
 - Supporting slices: M002/S01
 - Validation: unmapped
-- Notes: Quarantine/archive only when removal would cause concrete confusion or break necessary reference.
+- Notes: Quarantine/archive only when removal would cause concrete confusion or break necessary reference. Classification rules in `.gsd/milestones/M002/M002-CLASSIFICATION-RULES.md` (M002/S01) describe how deprecated paths (including LinkedIn, Night Runner, and `packages/domain`) are tagged and provide the input S02 will use to decide between removal and quarantine.
 
 ## Deferred
 
@@ -96,10 +96,10 @@
 
 | ID   | Class            | Status   | Primary owner | Supporting         | Proof      |
 |------|------------------|----------|---------------|--------------------|------------|
-| R001 | core-capability  | active   | M002/S01      | none               | unmapped   |
+| R001 | core-capability  | active   | M002/S01      | none               | proofed    |
 | R002 | continuity       | active   | M002/S02      | M002/S01, M002/S03 | unmapped   |
 | R003 | continuity       | active   | M002/S03      | M002/S01, M002/S02 | unmapped   |
-| R004 | constraint       | active   | M002/S01      | M002/S02           | unmapped   |
+| R004 | constraint       | active   | M002/S01      | M002/S02           | proofed    |
 | R005 | failure-visibility | active | M002/S02      | M002/S01           | unmapped   |
 | REQ-DURABLE-PERSISTENCE | core-capability | validated | M001/S01 | none | validated |
 | REQ-SPECIALIST-DISPATCH | integration     | validated | M001/S02 | none | validated |

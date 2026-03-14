@@ -33,3 +33,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 
 - [x] M001: Helm Orchestration Kernel v1 — Durable workflow kernel with a representative weekly scheduling workflow and shared operator surfaces.
 - [ ] M002: Helm Truth-Set Cleanup — Strict workflow-engine truth set, aggressive removal of stale/aspirational artifacts, and verified task/calendar workflow protection after cleanup.
+  - Working inventory for M002 cleanup: `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
