@@ -23,8 +23,8 @@ from helm_storage.models import (
     WorkflowEventORM,
     WorkflowRunORM,
     WorkflowSpecialistInvocationORM,
-    WorkflowSyncRecordORM,
     WorkflowStepORM,
+    WorkflowSyncRecordORM,
 )
 
 

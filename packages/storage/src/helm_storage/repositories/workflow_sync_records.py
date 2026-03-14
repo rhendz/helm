@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session, aliased
 from helm_storage.models import WorkflowStepORM, WorkflowSyncRecordORM
 from helm_storage.repositories.contracts import (
     NewWorkflowSyncRecord,
-    WorkflowSyncIdentityQuery,
     WorkflowSyncFailedQuery,
+    WorkflowSyncIdentityQuery,
     WorkflowSyncRecordPatch,
     WorkflowSyncRemainingQuery,
     WorkflowSyncStatus,

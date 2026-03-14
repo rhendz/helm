@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from helm_orchestration.schemas import SyncLookupRequest, SyncLookupResult, TaskSyncRequest, TaskSyncResult
+    from helm_orchestration.schemas import (
+        SyncLookupRequest,
+        SyncLookupResult,
+        TaskSyncRequest,
+        TaskSyncResult,
+    )
 
 
 class StubTaskSystemAdapter:
@@ -11,7 +16,11 @@ class StubTaskSystemAdapter:
         self._records: dict[str, dict[str, str]] = {}
 
     def upsert_task(self, request: TaskSyncRequest) -> TaskSyncResult:
-        from helm_orchestration.schemas import SyncOutcomeStatus, SyncRetryDisposition, TaskSyncResult
+        from helm_orchestration.schemas import (
+            SyncOutcomeStatus,
+            SyncRetryDisposition,
+            TaskSyncResult,
+        )
 
         external_object_id = self._ensure_external_object_id(request.item.planned_item_key)
         self._records[request.item.planned_item_key] = {

@@ -4,9 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 from helm_storage.models import (
     WorkflowApprovalCheckpointORM,
     WorkflowArtifactORM,
-    WorkflowEventORM,
     WorkflowRunORM,
-    WorkflowSyncRecordORM,
     WorkflowStepORM,
 )
 from helm_storage.repositories.contracts import WorkflowRunPatch, WorkflowRunState

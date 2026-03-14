@@ -1,10 +1,10 @@
 from collections.abc import Generator
 
 from fastapi.testclient import TestClient
-from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_api.dependencies import get_db
 from helm_api.main import app
 from helm_api.services import replay_service
+from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -18,16 +18,16 @@ from helm_orchestration import (
     ValidatorTarget,
     WorkflowOrchestrationService,
 )
-from helm_worker.jobs import workflow_runs as workflow_runs_job
 from helm_storage.db import Base
 from helm_storage.repositories import (
     NewWorkflowArtifact,
     SQLAlchemyWorkflowArtifactRepository,
     SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
-    WorkflowSyncRecoveryClassification,
     WorkflowRunStatus,
+    WorkflowSyncRecoveryClassification,
 )
+from helm_worker.jobs import workflow_runs as workflow_runs_job
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool

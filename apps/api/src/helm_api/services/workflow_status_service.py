@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from helm_orchestration import (
@@ -20,10 +20,10 @@ from helm_storage.repositories import (
     WorkflowArtifactType,
     WorkflowRunState,
     WorkflowRunStatus,
+    WorkflowStepStatus,
     WorkflowSyncRecoveryClassification,
     WorkflowSyncStatus,
     WorkflowTargetSystem,
-    WorkflowStepStatus,
 )
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
