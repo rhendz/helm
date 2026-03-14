@@ -47,3 +47,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
   - Milestone summary: `.gsd/milestones/M002/M002-SUMMARY.md` (full completion record with requirement transitions and diagnostics).
   - Truth set and classification: `.gsd/milestones/M002/M002-TRUTH-NOTE.md`, `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
   - Verification: 14 passing tests (3 integration + 11 unit), UAT script in `.gsd/milestones/M002/slices/S03/uat.md`.
+- [ ] M003: Task/Calendar Productionization — Real Google Calendar integration, external-change detection and recovery, operator UX depth, and explicit operator trust through verification.
