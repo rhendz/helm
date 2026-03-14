@@ -118,6 +118,11 @@ def _execute_replay(
             runtime_factory=runtime_factory,
         )
         return
+    if source_type == "workflow_sync_replay" and source_id is not None:
+        from helm_api.services.replay_service import execute_workflow_sync_replay
+
+        execute_workflow_sync_replay(source_id=source_id)
+        return
     raise NotImplementedError(f"Unsupported replay source_type: {source_type}")
 
 

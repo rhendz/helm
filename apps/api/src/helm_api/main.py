@@ -10,6 +10,7 @@ from helm_api.routers import (
     replay,
     status,
     workflows,
+    workflow_runs,
 )
 
 app = FastAPI(title="helm-api", version="0.1.0")
@@ -18,6 +19,7 @@ app.include_router(artifacts.router)
 app.include_router(drafts.router)
 app.include_router(email.router)
 app.include_router(workflows.router)
+app.include_router(workflow_runs.router)
 app.include_router(status.router)
 app.include_router(replay.router)
 app.include_router(job_controls.router)

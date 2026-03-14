@@ -43,6 +43,7 @@ from helm_telegram_bot.commands import (
     uninitialized_threads,
     waiting_on_other_party_threads,
     waiting_on_user_threads,
+    workflows,
 )
 from helm_telegram_bot.config import get_settings
 
@@ -101,6 +102,15 @@ def main() -> None:
     application.add_handler(
         CommandHandler("waiting_on_user_threads", waiting_on_user_threads.handle)
     )
+    application.add_handler(CommandHandler("reject", approve.reject))
+    application.add_handler(CommandHandler("request_revision", approve.request_revision))
+    application.add_handler(CommandHandler("workflow_start", workflows.start))
+    application.add_handler(CommandHandler("workflows", workflows.recent))
+    application.add_handler(CommandHandler("workflow_needs_action", workflows.needs_action))
+    application.add_handler(CommandHandler("workflow_versions", workflows.versions))
+    application.add_handler(CommandHandler("workflow_retry", workflows.retry))
+    application.add_handler(CommandHandler("workflow_replay", workflows.replay))
+    application.add_handler(CommandHandler("workflow_terminate", workflows.terminate))
 
     logger.info("telegram_bot_started")
     application.run_polling()

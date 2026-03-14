@@ -9,6 +9,7 @@ from helm_worker.jobs import (
     email_triage,
     replay,
     scheduled_thread_tasks,
+    workflow_runs,
 )
 
 Job = Callable[[], None]
@@ -22,4 +23,5 @@ JOBS: dict[str, Job] = {
     "digest": digest.run,
     "replay": replay.run,
     "scheduled_thread_tasks": scheduled_thread_tasks.run,
+    "workflow_runs": workflow_runs.run,
 }

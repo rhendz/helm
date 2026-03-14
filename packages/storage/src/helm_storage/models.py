@@ -1,8 +1,8 @@
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from helm_storage.db import Base
@@ -110,6 +110,295 @@ class AgentRunORM(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text())
+
+
+class WorkflowRunORM(Base):
+    __tablename__ = "workflow_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    internal_uuid: Mapped[str] = mapped_column(
+        String(36), default=lambda: str(uuid4()), unique=True, nullable=False
+    )
+    workflow_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    current_step_name: Mapped[str | None] = mapped_column(String(128))
+    needs_action: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    current_step_attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    validation_outcome_summary: Mapped[str | None] = mapped_column(Text())
+    execution_error_summary: Mapped[str | None] = mapped_column(Text())
+    blocked_reason: Mapped[str | None] = mapped_column(String(64))
+    failure_class: Mapped[str | None] = mapped_column(String(64))
+    retry_state: Mapped[str | None] = mapped_column(String(32))
+    resume_step_name: Mapped[str | None] = mapped_column(String(128))
+    resume_step_attempt: Mapped[int | None] = mapped_column(Integer)
+    last_event_summary: Mapped[str | None] = mapped_column(Text())
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    steps: Mapped[list["WorkflowStepORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    artifacts: Mapped[list["WorkflowArtifactORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    events: Mapped[list["WorkflowEventORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    approval_checkpoints: Mapped[list["WorkflowApprovalCheckpointORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+    sync_records: Mapped[list["WorkflowSyncRecordORM"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan"
+    )
+
+
+class WorkflowStepORM(Base):
+    __tablename__ = "workflow_steps"
+    __table_args__ = (
+        UniqueConstraint("run_id", "step_name", "attempt_number", name="uq_workflow_step_attempt"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    validation_outcome_summary: Mapped[str | None] = mapped_column(Text())
+    execution_error_summary: Mapped[str | None] = mapped_column(Text())
+    failure_class: Mapped[str | None] = mapped_column(String(64))
+    retry_state: Mapped[str | None] = mapped_column(String(32))
+    retryable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="steps")
+    artifacts: Mapped[list["WorkflowArtifactORM"]] = relationship(back_populates="step")
+    events: Mapped[list["WorkflowEventORM"]] = relationship(back_populates="step")
+    specialist_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="step"
+    )
+    sync_records: Mapped[list["WorkflowSyncRecordORM"]] = relationship(
+        back_populates="step",
+        foreign_keys="WorkflowSyncRecordORM.step_id",
+    )
+
+
+class WorkflowArtifactORM(Base):
+    __tablename__ = "workflow_artifacts"
+    __table_args__ = (
+        UniqueConstraint("run_id", "artifact_type", "version_number", name="uq_workflow_artifact_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int | None] = mapped_column(ForeignKey("workflow_steps.id", ondelete="SET NULL"))
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    producer_step_name: Mapped[str | None] = mapped_column(String(128))
+    lineage_parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="SET NULL")
+    )
+    supersedes_artifact_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="SET NULL")
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="artifacts")
+    step: Mapped["WorkflowStepORM | None"] = relationship(back_populates="artifacts")
+    lineage_parent: Mapped["WorkflowArtifactORM | None"] = relationship(
+        remote_side="WorkflowArtifactORM.id",
+        foreign_keys=[lineage_parent_id],
+    )
+    supersedes_artifact: Mapped["WorkflowArtifactORM | None"] = relationship(
+        remote_side="WorkflowArtifactORM.id",
+        foreign_keys=[supersedes_artifact_id],
+    )
+    input_to_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="input_artifact",
+        foreign_keys="WorkflowSpecialistInvocationORM.input_artifact_id",
+    )
+    output_from_invocations: Mapped[list["WorkflowSpecialistInvocationORM"]] = relationship(
+        back_populates="output_artifact",
+        foreign_keys="WorkflowSpecialistInvocationORM.output_artifact_id",
+    )
+    approval_checkpoints: Mapped[list["WorkflowApprovalCheckpointORM"]] = relationship(
+        back_populates="target_artifact",
+    )
+
+
+class WorkflowEventORM(Base):
+    __tablename__ = "workflow_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int | None] = mapped_column(ForeignKey("workflow_steps.id", ondelete="SET NULL"))
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_status: Mapped[str | None] = mapped_column(String(32))
+    step_status: Mapped[str | None] = mapped_column(String(32))
+    summary: Mapped[str] = mapped_column(Text(), nullable=False)
+    details: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="events")
+    step: Mapped["WorkflowStepORM | None"] = relationship(back_populates="events")
+
+
+class WorkflowApprovalCheckpointORM(Base):
+    __tablename__ = "workflow_approval_checkpoints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int] = mapped_column(ForeignKey("workflow_steps.id", ondelete="CASCADE"))
+    target_artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    resume_step_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    resume_step_attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    allowed_actions: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    decision: Mapped[str | None] = mapped_column(String(32))
+    decision_actor: Mapped[str | None] = mapped_column(String(255))
+    decision_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision_feedback: Mapped[str | None] = mapped_column(Text())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="approval_checkpoints")
+    step: Mapped["WorkflowStepORM"] = relationship()
+    target_artifact: Mapped["WorkflowArtifactORM"] = relationship(
+        back_populates="approval_checkpoints",
+    )
+
+
+class WorkflowSpecialistInvocationORM(Base):
+    __tablename__ = "workflow_specialist_invocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int] = mapped_column(ForeignKey("workflow_steps.id", ondelete="CASCADE"))
+    specialist_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    output_artifact_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="running")
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_summary: Mapped[str | None] = mapped_column(Text())
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="specialist_invocations")
+    step: Mapped["WorkflowStepORM"] = relationship(back_populates="specialist_invocations")
+    input_artifact: Mapped["WorkflowArtifactORM"] = relationship(
+        back_populates="input_to_invocations",
+        foreign_keys=[input_artifact_id],
+    )
+    output_artifact: Mapped["WorkflowArtifactORM | None"] = relationship(
+        back_populates="output_from_invocations",
+        foreign_keys=[output_artifact_id],
+    )
+
+
+class WorkflowSyncRecordORM(Base):
+    __tablename__ = "workflow_sync_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "proposal_artifact_id",
+            "proposal_version_number",
+            "target_system",
+            "sync_kind",
+            "planned_item_key",
+            "lineage_generation",
+            name="uq_workflow_sync_record_identity",
+        ),
+        UniqueConstraint("idempotency_key", name="uq_workflow_sync_record_idempotency"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"))
+    step_id: Mapped[int] = mapped_column(ForeignKey("workflow_steps.id", ondelete="CASCADE"))
+    proposal_artifact_id: Mapped[int] = mapped_column(
+        ForeignKey("workflow_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    proposal_version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_system: Mapped[str] = mapped_column(String(64), nullable=False)
+    sync_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    planned_item_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    execution_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    payload_fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    external_object_id: Mapped[str | None] = mapped_column(String(255))
+    last_error_summary: Mapped[str | None] = mapped_column(Text())
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_attempt_step_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_steps.id", ondelete="SET NULL")
+    )
+    last_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lineage_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    recovery_classification: Mapped[str | None] = mapped_column(String(64))
+    recovery_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replay_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replay_requested_by: Mapped[str | None] = mapped_column(String(255))
+    terminated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    termination_reason: Mapped[str | None] = mapped_column(Text())
+    terminated_after_sync_count: Mapped[int | None] = mapped_column(Integer)
+    terminated_after_planned_item_key: Mapped[str | None] = mapped_column(String(255))
+    supersedes_sync_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_sync_records.id", ondelete="SET NULL")
+    )
+    replayed_from_sync_record_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workflow_sync_records.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    run: Mapped["WorkflowRunORM"] = relationship(back_populates="sync_records")
+    step: Mapped["WorkflowStepORM"] = relationship(
+        back_populates="sync_records",
+        foreign_keys=[step_id],
+    )
+    last_attempt_step: Mapped["WorkflowStepORM | None"] = relationship(foreign_keys=[last_attempt_step_id])
+    proposal_artifact: Mapped["WorkflowArtifactORM"] = relationship(foreign_keys=[proposal_artifact_id])
+    supersedes_sync_record: Mapped["WorkflowSyncRecordORM | None"] = relationship(
+        remote_side="WorkflowSyncRecordORM.id",
+        foreign_keys=[supersedes_sync_record_id],
+    )
+    replayed_from_sync_record: Mapped["WorkflowSyncRecordORM | None"] = relationship(
+        remote_side="WorkflowSyncRecordORM.id",
+        foreign_keys=[replayed_from_sync_record_id],
+    )
 
 
 class EmailMessageORM(Base):

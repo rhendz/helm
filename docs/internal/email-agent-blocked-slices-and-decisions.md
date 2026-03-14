@@ -93,7 +93,7 @@ What remains is â€œno more safe implementation without making decisions first.â€
 - Status: mostly decided
 - Why it is not fully safe yet:
   - follow-up timing and send retry semantics are now defined for v1
-  - implementation should stay aligned to the locked contract as quality improves
+  - remaining work is implementing the contract, not inventing it
 - What implementation this blocks:
   - `HELM-52`
   - any richer scheduling semantics beyond the simple default
@@ -190,6 +190,7 @@ These are the decisions that should now be treated as the baseline unless explic
   - it is conservative
   - it unblocks scheduling behavior without inventing enterprise calendar semantics
 - What is still open:
+  - where the timezone is surfaced/configured in the Email Agent boundary
   - whether future holiday support belongs in Email Agent or an external calendar service
 
 ### Decision 7: Send attempts are first-class Email Agent records
@@ -362,4 +363,5 @@ These still need explicit resolution before the next implementation pass can saf
 
 4. Resume implementation in this order:
 - `HELM-52` send scaffold
+- remaining `HELM-51` deep-seed queue work
 - next quality slices on classification and drafting
