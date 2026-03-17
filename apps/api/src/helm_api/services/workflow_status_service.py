@@ -1004,6 +1004,29 @@ def parse_weekly_scheduling_request(request_text: str) -> WeeklySchedulingReques
     assumptions: list[str] = []
 
     task_lines = _split_items(sections.get("tasks"))
+
+    # If no labeled "tasks:" section, try splitting the body of the request directly.
+    # Handles natural input like "Schedule my week: Monday X, Tuesday Y, Wednesday Z"
+    if not task_lines:
+        body = text
+        # Strip common schedule-request prefixes
+        body_match = re.match(
+            r"(?i)(?:schedule my week|plan my week|plan the week)\s*[:\-]\s*(.*)",
+            body,
+        )
+        if body_match:
+            body = body_match.group(1).strip()
+        # Restore newlines from the original request for splitting (collapsed above)
+        body_from_original = re.sub(
+            r"(?i)(?:schedule my week|plan my week|plan the week)\s*[:\-]\s*",
+            "",
+            request_text.strip(),
+        ).strip()
+        candidate_lines = _split_items(body_from_original) or _split_items(body)
+        # Only use if we got more than one item (otherwise not a list)
+        if len(candidate_lines) > 1:
+            task_lines = candidate_lines
+
     tasks = tuple(_parse_weekly_task(item) for item in task_lines if item)
     if not tasks:
         fallback_title = _infer_planning_goal(text) or "Weekly planning request"
