@@ -31,6 +31,19 @@ class TelegramWorkflowStatusService:
                 )
             )
 
+    def start_task_run(self, *, request_text: str, submitted_by: str, chat_id: str) -> dict[str, object]:
+        with SessionLocal() as session:
+            return WorkflowStatusService(session).create_run(
+                build_workflow_run_create_input(
+                    workflow_type="task_quick_add",
+                    first_step_name="infer_task_semantics",
+                    request_text=request_text,
+                    submitted_by=submitted_by,
+                    channel="telegram",
+                    metadata={"chat_id": chat_id},
+                )
+            )
+
     def list_recent_runs(self, *, limit: int = 5) -> list[dict[str, object]]:
         with SessionLocal() as session:
             return WorkflowStatusService(session).list_runs(limit=limit)

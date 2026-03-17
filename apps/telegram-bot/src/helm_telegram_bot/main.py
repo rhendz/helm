@@ -36,6 +36,7 @@ from helm_telegram_bot.commands import (
     set_followup_days,
     snooze,
     start,
+    task,
     tasks,
     thread,
     threads,
@@ -91,6 +92,7 @@ def main() -> None:
     application.add_handler(CommandHandler("reviews", reviews.handle))
     application.add_handler(CommandHandler("set_email_timezone", set_email_timezone.handle))
     application.add_handler(CommandHandler("set_followup_days", set_followup_days.handle))
+    application.add_handler(CommandHandler("task", task.handle))
     application.add_handler(CommandHandler("tasks", tasks.handle))
     application.add_handler(CommandHandler("thread", thread.handle))
     application.add_handler(CommandHandler("threads", threads.handle))
