@@ -2,56 +2,39 @@
 
 ## What This Is
 
-Helm Orchestration Kernel is the durable workflow engine for Helm, a single-user internal AI system. It can run multi-step workflows with typed specialist dispatch, durable artifacts, approval-gated side effects, restart-safe resume, replay-aware recovery, and shared operator surfaces across API and Telegram. The representative weekly scheduling workflow proves the kernel end to end, including task and calendar specialists, approval checkpoints, outbound sync, and recovery/replay behavior.
+Helm is a single-user personal AI orchestration system, Telegram-first and DB-first. It runs multi-step, approval-gated workflows that connect operator intent to real external systems (Google Calendar, task storage). The core operator loop is: send a task or scheduling request via Telegram → Helm infers semantics → creates internal records → syncs to Calendar → notifies when done.
 
 ## Core Value
 
-Helm can execute multi-step, approval-gated workflows reliably enough that workflow state, artifacts, and side effects remain durable and inspectable across restarts and failures, with task/calendar sync protection as a core capability.
+The operator can add a task through Telegram and trust that it lands on Calendar at the right time, with correct local timezone, without requiring the operator to debug internal state or poll for status.
 
 ## Current State
 
-- M001 (Helm Orchestration Kernel v1) is complete and validated the kernel across API, worker, Telegram, storage, and orchestration boundaries using a weekly scheduling workflow.
-- Workflow persistence, specialist dispatch, approval checkpoints, outbound sync, replay, and operator surfaces are implemented and covered by tests.
-- M002 (Helm Truth-Set Cleanup) is **complete**:
-  - **S01**: Defined a small, explicit workflow-engine truth set and classification rules, anchored on task/calendar workflows and operator surfaces, with EmailAgent deprecated and StudyAgent frozen.
-  - **S02**: Applied that truth set to the repo tree:
-    - Deprecated and aspirational surfaces (Night Runner, packages/domain, LinkedIn, Email/Study docs/tests) are classified as keep/freeze/deprecate/quarantine in `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
-    - `packages/domain` quarantined under `docs/archive/packages-domain/` and removed from runtime PYTHONPATH.
-    - Night Runner exists only as deprecated scripts plus archived docs under `docs/archive/`; product docs mark the workstream as historical.
-    - EmailAgent remains wired for storage/runtime and replay but is explicitly non-truth; StudyAgent is frozen.
-    - Tests and CI now focus on workflow-engine core with rg-based diagnostics guarding against deprecated/quarantined path regressions.
-  - **S03**: Verified weekly scheduling / task+calendar workflows end-to-end via API/worker/Telegram after cleanup:
-    - 14 automated tests (3 integration + 11 unit) covering approval checkpoints, sync execution, and completion summaries.
-    - Manual UAT script enabling future operator verification in fresh environments.
-    - R003 (Task/calendar workflows verified after cleanup) now **validated**.
-- Key references: `.gsd/milestones/M001/M001-SUMMARY.md` (kernel behavior), `.gsd/milestones/M002/slices/S03/S03-SUMMARY.md` (M002 completion), `.gsd/milestones/M002/slices/S03/S03-UAT.md` (verification script).
+- M001–M003 complete: durable workflow kernel, truth-set cleanup, real Google Calendar OAuth integration with drift detection.
+- The core task→calendar loop exists but is not trustworthy: timezone handling is broken (hardcoded UTC base, no operator timezone config), scheduling logic is placeholder (hardcoded date, no LLM inference), and Telegram exposes debug internals by default.
+- Worker polling interval is 30s, causing 2–3 minute latency for simple operator actions.
+- Test suite exercises the scheduling path against stubs only — no real calendar datetime correctness verification.
+- M004 is the foundation repair milestone: fix the loop so it actually works.
 
 ## Architecture / Key Patterns
 
-- Python monorepo with `apps/` (API, worker, Telegram bot) and `packages/` (orchestration, storage, connectors, agents, observability, archived domain).
-- DB-first design with Postgres as the source of truth for workflow state, artifacts, sync records, and events.
-- Orchestration logic lives in `packages/orchestration/src/helm_orchestration/` and owns workflow semantics, specialist dispatch, approval, sync execution, replay, and status projection.
-- Storage models and repositories live in `packages/storage/src/helm_storage/` and implement workflow_* tables and related persistence.
-- Connectors (task/calendar) live in `packages/connectors/src/helm_connectors/` and are invoked via adapter contracts.
-- Agents (including EmailAgent and StudyAgent) live in `packages/agents/src/helm_agents/`; EmailAgent is deprecated for this version, StudyAgent is frozen.
-- Operator surfaces are provided by FastAPI in `apps/api` and Telegram commands in `apps/telegram-bot`, backed by shared status/replay services.
+- Python monorepo: `apps/` (api, worker, telegram-bot) and `packages/` (orchestration, storage, connectors, agents, llm, observability, runtime).
+- DB-first: Postgres is the source of truth for workflow state, artifacts, sync records, tasks.
+- Custom step-runner in `packages/orchestration` — not LangGraph. Specialist steps registered in `apps/worker/jobs/workflow_runs.py`.
+- Worker polls every 30s for runnable steps (target: reduce to background-only after M004 direct execution path).
+- Telegram bot is the primary operator surface. Proactive push via `TelegramDigestDeliveryService` (bot.send_message) exists but is only used for digests today.
+- Google Calendar adapter in `packages/connectors/src/helm_connectors/google_calendar.py` — correct RFC3339 formatting, but no operator timezone awareness upstream.
+- LLM via `packages/llm` (OpenAI). Currently unused in the scheduling path — `_run_task_agent` is pure Python with no inference.
+- `uv` for dependency management. `uv.lock` present.
 
 ## Capability Contract
 
-See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement status, and coverage mapping across M001 and M002.
+See `.gsd/REQUIREMENTS.md` for the explicit capability contract.
 
 ## Milestone Sequence
 
-- [x] M001: Helm Orchestration Kernel v1 — Durable workflow kernel with a representative weekly scheduling workflow and shared operator surfaces.
-- [x] M002: Helm Truth-Set Cleanup — Strict workflow-engine truth set, aggressive removal of stale/aspirational artifacts, and verified task/calendar workflow protection after cleanup.
-  - Milestone summary: `.gsd/milestones/M002/M002-SUMMARY.md` (full completion record with requirement transitions and diagnostics).
-  - Truth set and classification: `.gsd/milestones/M002/M002-TRUTH-NOTE.md`, `.gsd/milestones/M002/M002-CLASSIFICATION-INVENTORY.md`.
-  - Verification: 14 passing tests (3 integration + 11 unit), UAT script in `.gsd/milestones/M002/slices/S03/uat.md`.
-- [x] M003: Task/Calendar Productionization — Real Google Calendar integration, external-change detection and recovery, operator UX depth, and explicit operator trust through verification.
-  - [x] S01: Real Google Calendar OAuth auth and adapter with drift detection (complete).
-  - [x] S02: External-change detection and sync state reconciliation (complete).
-  - [x] S03: Telegram real-time execution UX (complete).
-  - [x] S04: Partial failure handling and reconciliation policy (complete).
-  - [x] S05: End-to-end integration verification and UAT (complete).
-  - Milestone summary: `.gsd/milestones/M003/M003-SUMMARY.md` (full completion record with all 5 requirements validated).
-  - Verification: 363 passing tests (5 new integration scenarios + 358 existing), zero regressions. UAT script in `.gsd/milestones/M003/slices/S05/S05-UAT.md`.
+- [x] M001: Helm Orchestration Kernel v1 — Durable workflow kernel with weekly scheduling workflow and shared operator surfaces.
+- [x] M002: Helm Truth-Set Cleanup — Strict workflow-engine truth set, removal of stale artifacts, verified task/calendar workflow protection.
+- [x] M003: Task/Calendar Productionization — Real Google Calendar OAuth, drift detection, Telegram sync visibility, partial failure handling.
+- [ ] M004: Foundation Repair — Fix the core task→calendar loop: correct timezone handling, LLM task inference, `/task` quick-add, immediate operator execution, Telegram UX overhaul, strict test boundaries with real E2E calendar coverage, live reload, Datadog.
+- [ ] M005: Bidirectional Sync + Recurring Events — External calendar edit detection, internal reconciliation, conflict handling, recurring event support, reactive webhooks where viable.

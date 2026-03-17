@@ -28,35 +28,43 @@ version: 1
 
 models:
   research:
-    model: claude-haiku-4-5
+    # Research requires architectural judgment — haiku misses non-obvious patterns
+    model: claude-sonnet-4-6
     fallbacks:
-      - claude-sonnet-4-0
-      - claude-3-haiku-20240307
-  planning:
-    model: claude-haiku-4-5
-    fallbacks:
-      - claude-sonnet-4-0
+      - claude-opus-4-6
       - claude-3-7-sonnet-20250219
+
+  planning:
+    # Planning is the highest-stakes phase — use the strongest model available
+    model: claude-opus-4-6
+    fallbacks:
+      - claude-sonnet-4-6
+      - claude-3-7-sonnet-20250219
+
   execution:
-    model: claude-haiku-4-5
+    # Sonnet is the right execution tier; haiku fallback removed (quality cliff)
+    model: claude-sonnet-4-6
     fallbacks:
-      - claude-sonnet-4-0
-      - claude-3-haiku-20240307
+      - claude-opus-4-6
+      - claude-3-7-sonnet-20250219
+
   completion:
-    model: claude-haiku-4-5
+    # Summaries inform future slices — haiku fallback produces shallow output
+    model: claude-sonnet-4-6
     fallbacks:
-      - claude-sonnet-4-0
-      - claude-3-haiku-20240307
+      - claude-opus-4-6
+      - claude-3-7-sonnet-20250219
 
 skill_discovery: suggest
 
 auto_supervisor:
-  model: claude-haiku-4-5
-  soft_timeout_minutes: 20
-  idle_timeout_minutes: 10
-  hard_timeout_minutes: 30
+  # Supervisor is the quality gate for mid-run decisions — needs judgment capability
+  model: claude-sonnet-4-6
+  soft_timeout_minutes: 30
+  idle_timeout_minutes: 15
+  hard_timeout_minutes: 60
 
-budget_ceiling: 25.00
+budget_ceiling: 100.00
 
 git:
   snapshots: true

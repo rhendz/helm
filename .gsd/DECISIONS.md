@@ -1,3 +1,11 @@
+# Decisions Register
+
+<!-- Append-only. Never edit or remove existing rows.
+     To reverse a decision, add a new row that supersedes it.
+     Read this file at the start of any planning or research phase. -->
+
+## M001–M003 Decisions (legacy format — preserved as-is)
+
 - "Keep workflow persistence in dedicated workflow_* tables rather than extending legacy email-specific or observability tables."
 - "Define the final summary artifact as a typed payload now, with nullable approval and downstream sync linkage fields, so later phases extend the same contract."
 - "Model workflow artifacts and failures as explicit Pydantic schemas so storage payloads stay typed before specialist adapters exist."
@@ -58,6 +66,21 @@
 - "Sync event query interface uses existing repository methods (list_for_run, list_for_run_by_type) instead of introducing new SQL. Minimizes change surface and reuses tested abstractions."
 - "Formatter functions use defensive dict access (.get() with defaults) and isinstance() type checks. Pattern mirrors existing workflows.py to maintain consistency across formatters."
 - "Sync query and formatter failures are isolated from command response. Exceptions logged separately; failures do not block run status display (fault-tolerant degradation)."
-- "Reconciliation policy for drift: PASSIVE (operator-initiated recovery, not auto-proposal). When drift is detected (external event manually edited), sync record is marked DRIFT_DETECTED with recovery_classification=TERMINAL_FAILURE. Operator is presented with request_replay action in /workflows command. Rationale: (1) respects operator intent (manual edits take precedence), (2) avoids adversarial behavior where Helm fights operator changes, (3) aligns with existing safe_next_actions pattern for operator-initiated retry/replay, (4) lower implementation complexity (no proposal generation or pause/resume logic needed). Alternative (active policy: auto-generate reshuffle proposal) deferred to future phases pending UI design for proposal review under external constraints."
-- "Drift detection and recovery classification assigned in mark_drift_detected(): sync record status=DRIFT_DETECTED, recovery_classification=TERMINAL_FAILURE, completed_at and recovery_updated_at set. Maps to [request_replay] action in workflow_status safe_next_actions. Integration tests prove end-to-end: drift → classification → action visibility → operator replay initiation."
-- "Partial failure handling: 'leave dirty' semantics. When sync A succeeds, sync B fails, sync C pending: B is marked FAILED_TERMINAL, C is marked CANCELLED, workflow terminates with TERMINATED_AFTER_PARTIAL_SUCCESS. Termination snapshot records attempt counts, succeeded/failed/cancelled counts per target system. Operator can initiate replay to retry B+C (or just C if B is external-only failure). No silent data loss: all state transitions persist in workflow_sync_records and workflow_events."
+- "Reconciliation policy for drift: PASSIVE (operator-initiated recovery, not auto-proposal). When drift is detected (external event manually edited), sync record is marked DRIFT_DETECTED with recovery_classification=TERMINAL_FAILURE. Operator is presented with request_replay action in /workflows command."
+- "Drift detection and recovery classification assigned in mark_drift_detected(): sync record status=DRIFT_DETECTED, recovery_classification=TERMINAL_FAILURE, completed_at and recovery_updated_at set."
+- "Partial failure handling: 'leave dirty' semantics. When sync A succeeds, sync B fails, sync C pending: B is marked FAILED_TERMINAL, C is marked CANCELLED, workflow terminates with TERMINATED_AFTER_PARTIAL_SUCCESS."
+
+## M004 Decisions
+
+| # | When | Scope | Decision | Choice | Rationale | Revisable? |
+|---|------|-------|----------|--------|-----------|------------|
+| D001 | M004 | arch | Workflow engine for M004 | Keep custom DB-backed step runner | Issues are implementation quality problems (hardcoded dates, UTC misuse, stub inference), not architecture problems. Temporal migration deferred indefinitely. | Yes — if step runner proves fundamentally inadequate for M005 requirements |
+| D002 | M004 | arch | `/task` storage model | Workflow artifact (reuse existing machinery) | Avoids schema migration for M004. Dedicated tasks table deferred to M005 when task querying becomes a first-class need. | Yes — M005 likely needs dedicated table |
+| D003 | M004 | arch | Immediate execution delivery | Inline from Telegram handler after DB persist | Operator-triggered actions execute immediately. Worker polling retained as background recovery for orphaned runnable steps. Crash safety: step state is DB-persisted; polling recovers. | Yes — revisit if bot process stability becomes a concern |
+| D004 | M004 | arch | Shared scheduling primitives location | `packages/orchestration/src/helm_orchestration/scheduling.py` (new file) | Single import point for both `/task` handler and worker job handlers. Keeps timezone, inference, approval policy, and past-event guard co-located. | No |
+| D005 | M004 | convention | Operator timezone config | `OPERATOR_TIMEZONE` env var (IANA format), required, fail-fast | Explicit source of truth. No inference from Telegram locale or system TZ. Validated against `zoneinfo` at startup. Visible in `/status` output. | No |
+| D006 | M004 | convention | Conditional approval thresholds | Auto-place: confidence ≥ high AND block ≤ 2h AND no displacement. Ask: low confidence, ambiguous sizing, block >2h, conflict/displacement, unclear interpretation | Conservative policy while trust is being rebuilt. Exact confidence threshold is implementation detail for S01. | Yes — loosen once track record is established |
+| D007 | M004 | convention | Test layer enforcement | unit: no DB/network; integration: test Postgres, no external API; e2e: real APIs, requires `HELM_E2E=true` + `HELM_CALENDAR_TEST_ID` | Prevents mock leakage that caused timezone bug to go undetected. E2E tests skip (not fail) if env vars absent, but fail explicitly if `HELM_CALENDAR_TEST_ID=primary`. | No |
+| D008 | M004 | convention | Telegram default output | Concise operator-facing by default; debug/detail on explicit request | Current verbosity (run IDs, step names, sync timelines) makes Helm feel like a debugging tool. Detail remains accessible via existing `/workflow_sync_detail`, `/workflows` commands. | No |
+| D009 | M004 | library | Observability for M004 | `ddtrace` for APM + Datadog log forwarding | Structured JSON logs already present via structlog. `ddtrace` adds APM traces with minimal code changes. Scope bounded to `/task` path + key request handlers. | Yes — expand scope in later milestones |
+| D010 | M004 | convention | Live reload mechanism | `watchfiles` for worker and bot | API already uses uvicorn `--reload`. Worker and bot use `python -m watchfiles helm_worker.main src/` pattern. Add `watchfiles` to dev deps. | No |
