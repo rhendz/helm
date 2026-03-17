@@ -114,6 +114,15 @@ Establish the shared domain types and inference capability for the `/task` quick
 - [ ] Unit tests cover approval policy edge cases (exact thresholds) and mocked inference call
 - [ ] Existing test suite passes (no regressions from schema changes)
 
+## Observability Impact
+
+This task is pure library additions (no runtime wiring), so there are no new log entries or DB rows produced by T01 itself. However, the types defined here are the observable surface for downstream tasks:
+
+- **`TaskSemantics`** is the structured output of `LLMClient.infer_task_semantics()` — future structlog entries in T02 will log `urgency`, `priority`, `sizing_minutes`, and `confidence` as structured fields.
+- **`ConditionalApprovalPolicy`** produces `ApprovalDecision` values that will be logged (action + actor) in T02's background task handler.
+- **Failure visibility:** If `infer_task_semantics()` raises (e.g. OpenAI API error), `response.output_parsed` will be `None` — callers must guard against this. T02 wraps the call in try/except and pushes a user-facing error message to the operator chat.
+- **Inspection surface:** No DB changes in T01. In T02, `workflow_runs` rows with `workflow_type="task_quick_add"` become the durable record.
+
 ## Verification
 
 - `cd /Users/ankush/git/helm/.gsd/worktrees/M004 && uv run --frozen --extra dev pytest tests/unit/test_task_inference.py -v` — all tests pass

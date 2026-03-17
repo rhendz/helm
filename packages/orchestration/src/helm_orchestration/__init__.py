@@ -14,6 +14,7 @@ from helm_orchestration.contracts import (
     WorkflowStepExecutionError,
 )
 from helm_orchestration.resume_service import WorkflowResumeService
+from helm_orchestration.scheduling import ApprovalPolicy, ConditionalApprovalPolicy
 from helm_orchestration.schemas import (
     SCHEMA_VERSION,
     ApprovalAction,
@@ -44,6 +45,7 @@ from helm_orchestration.schemas import (
     TaskAgentInput,
     TaskAgentOutput,
     TaskArtifact,
+    TaskSemantics,
     TaskSyncRequest,
     TaskSyncResult,
     ValidationIssue,
@@ -61,11 +63,13 @@ from helm_orchestration.validators import (
 from helm_orchestration.workflow_service import WorkflowOrchestrationService
 
 __all__ = [
+    "ApprovalPolicy",
     "CalendarAgentInput",
     "CalendarAgentOutput",
     "CalendarSyncRequest",
     "CalendarSyncResult",
     "CalendarSystemAdapter",
+    "ConditionalApprovalPolicy",
     "ExecutionFailurePayload",
     "NormalizedTaskArtifact",
     "NormalizedTaskValidator",
@@ -94,6 +98,7 @@ __all__ = [
     "SyncRetryDisposition",
     "SyncTargetSystem",
     "SpecialistName",
+    "TaskSemantics",
     "TaskSyncRequest",
     "TaskSyncResult",
     "TaskSystemAdapter",

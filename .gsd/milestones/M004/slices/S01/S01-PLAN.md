@@ -42,7 +42,7 @@
 
 ## Tasks
 
-- [ ] **T01: Define TaskSemantics model, approval policy stub, and LLM inference method** `est:1h`
+- [x] **T01: Define TaskSemantics model, approval policy stub, and LLM inference method** `est:1h`
   - Why: Establishes the shared domain types and inference capability that the `/task` handler consumes. These are pure library additions with no runtime wiring — tested in isolation.
   - Files: `packages/orchestration/src/helm_orchestration/schemas.py`, `packages/orchestration/src/helm_orchestration/scheduling.py` (new), `packages/orchestration/src/helm_orchestration/__init__.py`, `packages/llm/src/helm_llm/client.py`, `tests/unit/test_task_inference.py` (new)
   - Do: (1) Add `TaskSemantics` Pydantic model to `schemas.py` with `urgency: str`, `priority: str`, `sizing_minutes: int`, `confidence: float` — use `extra="ignore"` not `extra="forbid"` since it's an LLM parse target. (2) Add `urgency: str | None = None` and `confidence: float | None = None` to `WeeklyTaskRequest`. (3) Create `scheduling.py` with `ApprovalPolicy` Protocol and `ConditionalApprovalPolicy` class — `evaluate(semantics) -> ApprovalDecision` returns APPROVE when confidence ≥ 0.8 and sizing_minutes ≤ 120, else REQUEST_REVISION. (4) Export new types from `__init__.py`. (5) Add `infer_task_semantics(text) -> TaskSemantics` to `LLMClient` using `self._client.responses.parse(model=..., instructions=..., input=text, text_format=TaskSemantics)`. (6) Write `test_task_inference.py` with mocked LLM response and table-driven approval policy tests.
