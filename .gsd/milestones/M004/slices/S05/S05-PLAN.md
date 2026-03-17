@@ -45,7 +45,7 @@
 
 ## Tasks
 
-- [ ] **T01: Move misclassified calendar adapter test to unit layer** `est:15m`
+- [x] **T01: Move misclassified calendar adapter test to unit layer** `est:15m`
   - Why: `tests/integration/test_google_calendar_adapter_real_api.py` has 98 Mock calls and zero real API calls — it's a unit test living in the wrong directory, violating R113's test layer separation policy
   - Files: `tests/integration/test_google_calendar_adapter_real_api.py` → `tests/unit/test_google_calendar_adapter.py`
   - Do: `git mv` the file; verify all tests pass from the new location; confirm no other file imports from the old path

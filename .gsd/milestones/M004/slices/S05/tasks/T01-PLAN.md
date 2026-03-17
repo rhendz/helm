@@ -49,6 +49,14 @@ This is a zero-risk file move with no code changes inside the file.
 - `OPERATOR_TIMEZONE=America/Los_Angeles uv run --frozen --extra dev pytest tests/unit/test_google_calendar_adapter.py -v` → all tests pass
 - `OPERATOR_TIMEZONE=America/Los_Angeles uv run --frozen --extra dev pytest tests/unit/ tests/integration/ --ignore=tests/unit/test_study_agent_mvp.py -q` → no regressions
 
+## Observability Impact
+
+This task is a pure file rename with no runtime behavior changes.
+
+- **Signals that change:** None. The moved tests use mocks exclusively — no structlog entries, no DB writes, no network calls.
+- **How a future agent inspects this task:** Run `pytest tests/unit/test_google_calendar_adapter.py -v` and confirm the test count matches the original file. Check `git log --follow tests/unit/test_google_calendar_adapter.py` to confirm the rename lineage.
+- **Failure visibility:** If `pytest tests/unit/test_google_calendar_adapter.py` is not found (FileNotFoundError), the move did not complete. If the old path still appears in `grep -r "test_google_calendar_adapter_real_api" .`, references remain and need updating. No runtime failure paths exist because there are no production code changes.
+
 ## Inputs
 
 - `tests/integration/test_google_calendar_adapter_real_api.py` — 749-line test file with 98 Mock calls, zero real API calls
