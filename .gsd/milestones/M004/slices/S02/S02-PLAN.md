@@ -58,7 +58,7 @@
   - Verify: `pytest tests/unit/ -v` → no failures caused by missing `OPERATOR_TIMEZONE`; `python -c "import os; os.environ['OPERATOR_TIMEZONE']='Bad/Zone'; from helm_runtime.config import RuntimeAppSettings"` then construct instance and confirm it raises
   - Done when: all unit tests pass; invalid IANA string raises at `RuntimeAppSettings` init; `OPERATOR_TIMEZONE` is visible in `.env.example`
 
-- [ ] **T03: Refactor workflow_runs.py to use shared primitives and fix RFC3339** `est:60m`
+- [x] **T03: Refactor workflow_runs.py to use shared primitives and fix RFC3339** `est:60m`
   - Why: This task closes the actual bug — replacing `datetime(2026, 3, 16, 9, tzinfo=UTC)` with `compute_reference_week`, wiring `parse_local_slot` and `to_utc` for correct local-time interpretation, removing the `replace("+00:00", "Z")` hack, and adding the `past_event_guard` call before each `ScheduleBlock` is appended. This is the integration closure step — verified by the regression suite.
   - Files: `apps/worker/src/helm_worker/jobs/workflow_runs.py`
   - Do: Replace `_candidate_slots` body to call `compute_reference_week(tz)` and generate slots relative to it; update `_run_calendar_agent` to read `settings.operator_timezone` and pass `ZoneInfo(...)` through; replace `_parse_slot_from_title` with `parse_local_slot`; fix RFC3339 output; add `past_event_guard` warn-and-skip; run full integration suite

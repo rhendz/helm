@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_connectors.google_calendar import GoogleCalendarAdapter, GoogleCalendarAuth
@@ -11,6 +12,7 @@ from helm_orchestration import (
     CalendarAgentInput,
     CalendarAgentOutput,
     NormalizedTaskValidator,
+    PastEventError,
     PreparedSpecialistInput,
     RegisteredValidator,
     ScheduleBlock,
@@ -27,13 +29,24 @@ from helm_orchestration import (
     WorkflowOrchestrationService,
     WorkflowResumeService,
     WorkflowSpecialistStep,
+    compute_reference_week,
+    parse_local_slot,
+    past_event_guard,
+    to_utc,
 )
 from helm_storage.db import SessionLocal
 from helm_storage.repositories import WorkflowArtifactType, WorkflowRunState
+from helm_worker.config import settings
 from sqlalchemy.orm import Session
 
 logger = get_logger("helm_worker.jobs.workflow_runs")
 STEP_HANDLERS: dict[tuple[str, str], WorkflowSpecialistStep] = {}
+
+# Used by _parse_duration_from_title — regex lives here since it's the only consumer
+_RANGE_PATTERN = re.compile(
+    r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[-\u2013]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
+    re.IGNORECASE,
+)
 
 
 def run(*, handlers: dict[tuple[str, str], WorkflowSpecialistStep] | None = None) -> int:
@@ -251,6 +264,8 @@ def _build_calendar_agent_input(state: WorkflowRunState) -> PreparedSpecialistIn
 
 def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
     request = CalendarAgentInput.model_validate(payload)
+    tz = ZoneInfo(settings.operator_timezone)
+
     scheduled_blocks: list[ScheduleBlock] = []
     carry_forward: list[str] = []
     proposed_changes: list[str] = []
@@ -268,29 +283,41 @@ def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
         )
     )
 
-    slots = _candidate_slots(request)
+    slots = _candidate_slots(request, tz)
     for task, slot in zip(tasks, slots, strict=False):
         # Try to parse explicit duration from title (e.g. "10am-12pm" → 120 min)
         duration_minutes = _parse_duration_from_title(task.title) or task.estimated_minutes or 60
-        # Try to use the explicit start time from the title if present
-        explicit_start = _parse_slot_from_title(task.title, reference_week_start=slot)
-        start = explicit_start if explicit_start is not None else slot
-        end_time = start + timedelta(minutes=duration_minutes)
+        # Use shared parse_local_slot to extract day/time from title; fall back to slot
+        local_start = parse_local_slot(task.title, week_start=slot, tz=tz) or slot
+        start_utc = to_utc(local_start, tz)
+        end_utc = start_utc + timedelta(minutes=duration_minutes)
+
+        try:
+            past_event_guard(start_utc, tz)
+        except PastEventError as exc:
+            logger.warning(
+                "past_event_guard_triggered",
+                task_title=task.title,
+                reason=str(exc),
+            )
+            carry_forward.append(task.title)
+            continue
+
         scheduled_blocks.append(
             ScheduleBlock(
                 title=task.title,
                 task_title=task.title,
-                start=start.isoformat().replace("+00:00", "Z"),
-                end=end_time.isoformat().replace("+00:00", "Z"),
+                start=start_utc.isoformat(),
+                end=end_utc.isoformat(),
             )
         )
-        change = f"Schedule {task.title} on {_human_day(start)}."
+        change = f"Schedule {task.title} on {_human_day(start_utc)}."
         if task.deadline:
             change += f" Deadline tracked: {task.deadline}."
         proposed_changes.append(change)
 
-    if len(tasks) > len(scheduled_blocks):
-        for task in tasks[len(scheduled_blocks):]:
+    if len(tasks) > len(scheduled_blocks) + len(carry_forward):
+        for task in tasks[len(scheduled_blocks) + len(carry_forward):]:
             carry_forward.append(task.title)
 
     if request.scheduling_constraints:
@@ -325,77 +352,12 @@ def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
     )
 
 
-def _candidate_slots(request: CalendarAgentInput) -> list[datetime]:
-    base = datetime(2026, 3, 16, 9, tzinfo=UTC)
+def _candidate_slots(request: CalendarAgentInput, tz: ZoneInfo) -> list[datetime]:
+    week_monday = compute_reference_week(tz)
     protected = request.weekly_request.protected_time if request.weekly_request is not None else ()
     if protected:
-        return [base + timedelta(days=index) for index in range(4)]
-    return [base + timedelta(days=index, hours=(index % 2)) for index in range(5)]
-
-
-_DAY_OFFSETS = {
-    "monday": 0, "tuesday": 1, "wednesday": 2,
-    "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
-}
-
-_TIME_PATTERN = re.compile(
-    r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", re.IGNORECASE
-)
-
-_RANGE_PATTERN = re.compile(
-    r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[-–]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
-    re.IGNORECASE,
-)
-
-
-def _parse_slot_from_title(title: str, *, reference_week_start: datetime) -> datetime | None:
-    """Extract day + start time from a natural title like 'Monday deep work 10am-12pm'.
-
-    Returns a UTC datetime for the named day at the named time, relative to the
-    Monday of the current week (reference_week_start). Returns None if no day or
-    time can be parsed.
-    """
-    lowered = title.lower()
-
-    # Find day offset
-    day_offset: int | None = None
-    for day, offset in _DAY_OFFSETS.items():
-        if day in lowered:
-            day_offset = offset
-            break
-    if day_offset is None:
-        return None
-
-    # Monday of reference week
-    week_monday = reference_week_start - timedelta(days=reference_week_start.weekday())
-    base_day = week_monday + timedelta(days=day_offset)
-
-    # Find start time — prefer a range match (e.g. "10am-12pm"), fall back to first time
-    range_match = _RANGE_PATTERN.search(title)
-    if range_match:
-        hour = int(range_match.group(1))
-        minute = int(range_match.group(2) or 0)
-        # Determine am/pm: use start-side am/pm if present, else infer from end-side
-        start_ampm = range_match.group(3) or range_match.group(6)
-        if start_ampm and start_ampm.lower() == "pm" and hour != 12:
-            hour += 12
-        elif start_ampm and start_ampm.lower() == "am" and hour == 12:
-            hour = 0
-        return base_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    time_match = _TIME_PATTERN.search(title)
-    if time_match:
-        hour = int(time_match.group(1))
-        minute = int(time_match.group(2) or 0)
-        ampm = time_match.group(3).lower()
-        if ampm == "pm" and hour != 12:
-            hour += 12
-        elif ampm == "am" and hour == 12:
-            hour = 0
-        return base_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
-
-    # Day found but no time — use 9am default
-    return base_day.replace(hour=9, minute=0, second=0, microsecond=0)
+        return [week_monday + timedelta(days=index, hours=9) for index in range(4)]
+    return [week_monday + timedelta(days=index, hours=9 + (index % 2)) for index in range(5)]
 
 
 def _parse_duration_from_title(title: str) -> int | None:
@@ -432,4 +394,5 @@ def _priority_rank(priority: str | None) -> int:
 
 
 def _human_day(value: datetime) -> str:
-    return value.strftime("%A %H:%M UTC")
+    local = value.astimezone() if value.tzinfo else value
+    return local.strftime("%A %H:%M %Z")
