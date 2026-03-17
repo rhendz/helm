@@ -358,7 +358,7 @@ class WorkflowSyncRecordORM(Base):
     execution_order: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
-    payload_fingerprint: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_fingerprint: Mapped[str] = mapped_column(Text(), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     external_object_id: Mapped[str | None] = mapped_column(String(255))
     last_error_summary: Mapped[str | None] = mapped_column(Text())
