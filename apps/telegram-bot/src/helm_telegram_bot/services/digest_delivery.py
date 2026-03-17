@@ -24,6 +24,16 @@ class TelegramDigestDeliveryService:
         asyncio.run(self._send_message(token=token, chat_id=chat_id, text=text))
         logger.info("digest_delivered", chat_id=chat_id, text_chars=len(text))
 
+    def notify_approval_needed(self, run_id: int, proposal_summary: str) -> None:
+        text = (
+            f"⏳ Schedule proposal ready (run {run_id})\n"
+            f"{proposal_summary}\n"
+            f"Use /approve {run_id} <artifact_id> to confirm or "
+            f"/reject {run_id} <artifact_id> to decline."
+        )
+        self.deliver(text)
+        logger.info("proactive_approval_notification_sent", run_id=run_id)
+
     async def _send_message(self, *, token: str, chat_id: int, text: str) -> None:
         async with Bot(token=token) as bot:
             await bot.send_message(chat_id=chat_id, text=text)

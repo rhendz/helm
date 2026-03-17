@@ -53,7 +53,7 @@
 
 ## Tasks
 
-- [ ] **T01: Build `/status` command and `notify_approval_needed` delivery method** `est:45m`
+- [x] **T01: Build `/status` command and `notify_approval_needed` delivery method** `est:45m`
   - Why: Closes R109 (operator-facing `/status`) and provides the delivery primitive needed by T03 for proactive notification. `/status` is the fastest-value deliverable — no new infrastructure, just formatting over existing service methods. `notify_approval_needed` is a simple extension of `TelegramDigestDeliveryService` and is logically grouped here since it's the same service tested by `/status` unit tests.
   - Files: `apps/telegram-bot/src/helm_telegram_bot/commands/status.py` (new), `apps/telegram-bot/src/helm_telegram_bot/services/digest_delivery.py`, `tests/unit/test_status_command.py` (new)
   - Do: See T01-PLAN.md
