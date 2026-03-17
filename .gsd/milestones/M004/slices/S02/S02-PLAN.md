@@ -44,7 +44,7 @@
 
 ## Tasks
 
-- [ ] **T01: Add timezone primitives to scheduling.py and unit-test them** `est:45m`
+- [x] **T01: Add timezone primitives to scheduling.py and unit-test them** `est:45m`
   - Why: The four pure functions (`compute_reference_week`, `parse_local_slot`, `to_utc`, `past_event_guard`) are the foundation everything else delegates to. Implementing and unit-testing them in isolation — before touching the worker or config — keeps the complex timezone logic reviewable and verifiable independently.
   - Files: `packages/orchestration/src/helm_orchestration/scheduling.py`, `packages/orchestration/src/helm_orchestration/__init__.py`, `tests/unit/test_scheduling_primitives.py`
   - Do: Add four pure functions to `scheduling.py` (below the existing `ConditionalApprovalPolicy`); export them from `__init__.py`; write `test_scheduling_primitives.py` with ≥12 assertions covering all four functions and failure paths

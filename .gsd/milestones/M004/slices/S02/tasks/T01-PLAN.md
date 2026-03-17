@@ -135,6 +135,15 @@ Also define `PastEventError(ValueError)` in `scheduling.py` — a named exceptio
 - `packages/orchestration/src/helm_orchestration/__init__.py` — existing file; add new imports and `__all__` entries
 - `apps/worker/src/helm_worker/jobs/workflow_runs.py` lines 329–409 — reference implementation of `_candidate_slots` and `_parse_slot_from_title`; copy regex constants, adapt parsing logic to return tz-aware datetime
 
+## Observability Impact
+
+These are pure library functions with no runtime side effects on their own. Observability signals will be emitted by callers (T03 wires `past_event_guard` into the worker job). For this task specifically:
+
+- **Failure visibility:** `PastEventError` surfaces as a named exception; callers in T03 will log a `past_event_guard_triggered` warning via structlog when a slot is skipped.
+- **Inspection:** `parse_local_slot` and `compute_reference_week` are deterministic and testable in isolation. No runtime logging needed here — the 18 unit tests serve as the inspection surface.
+- **Import-time check:** `from helm_orchestration import compute_reference_week, ...` failing at startup would surface immediately as an `ImportError` before any job runs.
+- **Future agent guidance:** Run `pytest tests/unit/test_scheduling_primitives.py -v` to verify all 18 tests pass; run `python -c "from helm_orchestration import compute_reference_week, parse_local_slot, to_utc, past_event_guard, PastEventError; print('ok')"` to verify exports.
+
 ## Expected Output
 
 - `packages/orchestration/src/helm_orchestration/scheduling.py` — expanded with `PastEventError`, `_DAY_OFFSETS`, `_TIME_PATTERN`, `_RANGE_PATTERN`, and four new pure functions

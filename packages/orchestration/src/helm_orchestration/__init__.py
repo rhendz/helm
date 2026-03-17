@@ -14,7 +14,15 @@ from helm_orchestration.contracts import (
     WorkflowStepExecutionError,
 )
 from helm_orchestration.resume_service import WorkflowResumeService
-from helm_orchestration.scheduling import ApprovalPolicy, ConditionalApprovalPolicy
+from helm_orchestration.scheduling import (
+    ApprovalPolicy,
+    ConditionalApprovalPolicy,
+    PastEventError,
+    compute_reference_week,
+    parse_local_slot,
+    past_event_guard,
+    to_utc,
+)
 from helm_orchestration.schemas import (
     SCHEMA_VERSION,
     ApprovalAction,
@@ -69,10 +77,15 @@ __all__ = [
     "CalendarSyncRequest",
     "CalendarSyncResult",
     "CalendarSystemAdapter",
+    "compute_reference_week",
     "ConditionalApprovalPolicy",
     "ExecutionFailurePayload",
     "NormalizedTaskArtifact",
     "NormalizedTaskValidator",
+    "parse_local_slot",
+    "past_event_guard",
+    "PastEventError",
+    "to_utc",
     "ApprovalAction",
     "ApprovalCheckpointStatus",
     "ApprovalDecision",
