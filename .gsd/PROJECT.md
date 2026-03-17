@@ -11,10 +11,10 @@ The operator can add a task through Telegram and trust that it lands on Calendar
 ## Current State
 
 - M001–M003 complete: durable workflow kernel, truth-set cleanup, real Google Calendar OAuth integration with drift detection.
-- The core task→calendar loop exists but is not trustworthy: timezone handling is broken (hardcoded UTC base, no operator timezone config), scheduling logic is placeholder (hardcoded date, no LLM inference), and Telegram exposes debug internals by default.
-- Worker polling interval is 30s, causing 2–3 minute latency for simple operator actions.
-- Test suite exercises the scheduling path against stubs only — no real calendar datetime correctness verification.
-- M004 is the foundation repair milestone: fix the loop so it actually works.
+- M004 in progress (S01–S04 complete, S05–S06 remaining):
+  - S01–S03: `/task` quick-add with LLM inference, shared timezone/scheduling primitives, immediate execution path all shipped.
+  - S04: `/status` (pending approvals with `/approve N M` hints, recent completions, OPERATOR_TIMEZONE) and `/agenda` (today's Calendar events in local time) commands live; proactive approval notifications wired into worker; 501 tests passing.
+- Remaining: S05 (real E2E calendar tests with staging calendar), S06 (live reload, Datadog, cleanup).
 
 ## Architecture / Key Patterns
 
