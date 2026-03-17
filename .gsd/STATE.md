@@ -1,7 +1,7 @@
 # GSD State
 
 **Active Milestone:** M004: Foundation Repair
-**Active Slice:** S03: Immediate execution path for operator actions
+**Active Slice:** S04: Telegram UX overhaul and proactive notifications
 **Phase:** executing
 **Requirements Status:** 19 active · 0 validated · 4 deferred · 3 out of scope
 
@@ -18,4 +18,4 @@
 - None
 
 ## Next Action
-Execute T01 of S03 (Wire inline execution for /task and /approve with worker recovery).
+Execute slice S04 tasks: T01 (status command + notify_approval_needed), T02 (agenda command + list_today_events), T03 (worker notification wiring + command registration).
