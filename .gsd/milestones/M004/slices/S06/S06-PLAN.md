@@ -46,7 +46,7 @@
 
 ## Tasks
 
-- [ ] **T01: Merge milestone/M004 into main and verify full test suite** `est:1h`
+- [x] **T01: Merge milestone/M004 into main and verify full test suite** `est:1h`
   - Why: Nothing from S01–S04 is deployable until the milestone branch is merged into main. This is the critical path for the entire milestone.
   - Files: All files modified on `milestone/M004` (see research); key conflicts in `schemas.py`, `__init__.py`, `google_calendar.py`, `workflow_runs.py`, `e2e/conftest.py`, `test_workflow_telegram_commands.py`
   - Do: Merge `milestone/M004` into `main`. Resolve conflicts per documented rules: (1) `schemas.py` — keep `SyncLookupRequest.calendar_id` from main + add `TaskSemantics`/`WeeklyTaskRequest.urgency,confidence` from milestone; (2) `google_calendar.py` — keep main's `calendar_id` threading; (3) `e2e/conftest.py` — keep main's safety gates; (4) `workflow_runs.py` — take milestone's refactored structure but ensure `_run_calendar_agent` uses `os.getenv("HELM_CALENDAR_TEST_ID", "primary")` for calendar_id; (5) `__init__.py` — merge `__all__` entries keeping all symbols; (6) `test_workflow_telegram_commands.py` — take milestone's version with `execute_after_approval` assertions; (7) `.gsd/` docs — take main's versions. Ensure `tests/conftest.py` exists (from milestone — sets `OPERATOR_TIMEZONE`). Delete `tests/integration/test_google_calendar_adapter_real_api.py` if conflict (main moved it to unit/).
