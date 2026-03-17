@@ -1,7 +1,7 @@
 # GSD State
 
 **Active Milestone:** M004: Foundation Repair
-**Active Slice:** S05: Strict test boundaries and real E2E calendar coverage
+**Active Slice:** S06: Dev experience, observability, and cleanup
 **Phase:** executing
 **Requirements Status:** 19 active · 0 validated · 4 deferred · 3 out of scope
 
@@ -18,4 +18,4 @@
 - None
 
 ## Next Action
-Execute slice S05 tasks (T01 → T02 → T03 → T04).
+Execute T01: Merge milestone/M004 into main and verify full test suite.
