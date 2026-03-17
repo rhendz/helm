@@ -282,3 +282,35 @@ class TestWeeklySchedulingFullStackE2E:
             assert result.payload_fingerprint_matches is True, (
                 f"False drift for {rec['planned_item_key']}: {result.details}"
             )
+
+    # ------------------------------------------------------------------
+    # Step 7: timezone correctness — events land at correct local hour
+    # ------------------------------------------------------------------
+
+    def test_07_events_have_correct_local_times(self) -> None:
+        """Fetch each event and assert start time matches OPERATOR_TIMEZONE local hour (R103)."""
+        from datetime import datetime as dt_cls
+        from zoneinfo import ZoneInfo
+
+        assert self.created_event_ids, "No event IDs — step 4 must have failed"
+
+        tz = ZoneInfo(os.environ["OPERATOR_TIMEZONE"])
+        calendar_id = os.environ["HELM_CALENDAR_TEST_ID"]
+
+        adapter = GoogleCalendarAdapter(GoogleCalendarAuth())
+        service = adapter._get_service()
+
+        # Expected local start hours from _WEEKLY_REQUEST
+        # Order matches the order events are created (Mon, Tue, Wed)
+        expected_hours = [10, 14, 9]
+
+        for event_id, expected_hour in zip(self.created_event_ids, expected_hours):
+            event = service.events().get(
+                calendarId=calendar_id, eventId=event_id
+            ).execute()
+            start_str = event["start"]["dateTime"]
+            start_local = dt_cls.fromisoformat(start_str).astimezone(tz)
+            assert start_local.hour == expected_hour, (
+                f"Expected hour {expected_hour} in {tz}, got {start_local.hour} "
+                f"(raw: {start_str}) for event '{event.get('summary')}'"
+            )

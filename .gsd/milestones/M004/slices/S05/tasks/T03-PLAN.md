@@ -108,3 +108,16 @@ After T02 threads `calendar_id` through the adapter, all events land on the stag
 ## Expected Output
 
 - `tests/e2e/test_weekly_scheduling_full_stack_e2e.py` — has `test_07_events_have_correct_local_times` that fetches events from staging calendar and asserts start hour in OPERATOR_TIMEZONE matches expected local hour
+
+## Observability Impact
+
+**What changes:** A new test step (`test_07_events_have_correct_local_times`) fetches live Calendar events and asserts `start.dateTime` converts to the expected local hour in `OPERATOR_TIMEZONE`. No new runtime log signals are emitted — the observability lives in the test assertion failure message.
+
+**How a future agent inspects this task:**
+- `pytest tests/e2e/test_weekly_scheduling_full_stack_e2e.py --collect-only 2>&1 | grep test_07` — confirms the step is collected
+- On assertion failure, the message surfaces: `Expected hour {N} in {tz}, got {actual} (raw: {iso_string}) for event '{summary}'` — this pinpoints whether the bug is in IANA timezone resolution, UTC offset math, or the wrong event being checked.
+- `OPERATOR_TIMEZONE` env var must be set; if absent, `os.environ["OPERATOR_TIMEZONE"]` raises `KeyError` immediately, making the misconfiguration visible.
+
+**Failure state visibility:**
+- If an event was stored in UTC without tz conversion, the raw `start_str` will have a UTC offset (`+00:00`) and `start_local.hour` will differ from the expected local hour by the UTC offset amount — the error message exposes both the raw ISO string and the converted hour.
+- If `HELM_CALENDAR_TEST_ID` points to the wrong calendar, the `service.events().get()` call will raise a 404, making the misconfiguration immediately visible.

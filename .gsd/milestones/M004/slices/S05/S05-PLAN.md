@@ -59,7 +59,7 @@
   - Verify: `HELM_E2E=true HELM_CALENDAR_TEST_ID=primary ... pytest tests/e2e/ -v` errors; `pytest tests/e2e/ -v` (no HELM_E2E) skips; full unit+integration suite still passes
   - Done when: no `calendarId="primary"` hardcoded in E2E test files; adapter reads `calendar_id` from payload; safety guards prevent primary calendar writes in E2E
 
-- [ ] **T03: Add timezone correctness assertions to E2E full-stack test** `est:45m`
+- [x] **T03: Add timezone correctness assertions to E2E full-stack test** `est:45m`
   - Why: The ultimate proof for R103 — after a full-stack E2E run creates Calendar events, fetch each one and assert the start time in OPERATOR_TIMEZONE matches the local hour from the request text. This is the assertion that would have caught the original timezone bug.
   - Files: `tests/e2e/test_weekly_scheduling_full_stack_e2e.py`
   - Do: Add a new test step (test_07) that fetches each created event from the staging calendar, parses `start.dateTime`, converts to OPERATOR_TIMEZONE, and asserts the hour matches the expected local time from `_WEEKLY_REQUEST` ("10am", "2pm", "9am")
