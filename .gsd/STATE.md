@@ -1,7 +1,7 @@
 # GSD State
 
 **Active Milestone:** M004: Foundation Repair
-**Active Slice:** S02: Timezone correctness and shared scheduling primitives
+**Active Slice:** S03: Immediate execution path for operator actions
 **Phase:** executing
 **Requirements Status:** 19 active · 0 validated · 4 deferred · 3 out of scope
 
@@ -18,4 +18,4 @@
 - None
 
 ## Next Action
-Execute S02/T01: Add timezone primitives to scheduling.py and unit-test them.
+Execute T01 of S03 (Wire inline execution for /task and /approve with worker recovery).
