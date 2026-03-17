@@ -10,7 +10,7 @@
 - Source: user
 - Primary owning slice: M004/S01
 - Supporting slices: M004/S03, M004/S04
-- Validation: unmapped
+- Validation: S01 proves: task record persisted before async work (workflow_type="task_quick_add" DB row created at ack time); operator notified of outcome (success or error push). Calendar placement and full execution path validated in S02/S03.
 - Notes: Task record must be persisted before placement/sync begins. `/task` is a new fast path, not a replacement for the weekly scheduling workflow.
 
 ### R101 — LLM-based task semantic inference
@@ -21,7 +21,8 @@
 - Source: user
 - Primary owning slice: M004/S01
 - Supporting slices: M004/S02
-- Validation: unmapped
+- Validation: S01 proves: LLMClient.infer_task_semantics() exists with responses.parse structured output pattern; TaskSemantics model correctly captures urgency/priority/sizing_minutes/confidence fields; mocked inference tests validate data shape. Live API validation deferred to S02/S03.
+- Notes: Inference output feeds into both /task and weekly scheduling paths via ConditionalApprovalPolicy.
 - Notes: Inference runs via LLM (OpenAI). Output feeds into both `/task` and weekly scheduling paths. Shared primitive.
 
 ### R102 — OPERATOR_TIMEZONE as required config, fail-fast on missing/invalid
@@ -32,7 +33,7 @@
 - Source: user
 - Primary owning slice: M004/S02
 - Supporting slices: M004/S04
-- Validation: unmapped
+- Validation: S02 proves: `RuntimeAppSettings.operator_timezone` is a required field with IANA `ZoneInfo` validator; missing value raises `ValidationError` at startup before any job runs; invalid IANA string (e.g. "Not/A/Timezone") raises `ValidationError` with descriptive message; `OPERATOR_TIMEZONE=America/Los_Angeles` injected via `tests/conftest.py` for test isolation. Remaining gap: timezone not yet visible in `/status` output (deferred to S04).
 - Notes: Replaces the hardcoded UTC base in `_candidate_slots`. Must be visible to operator in status output.
 
 ### R103 — Correct local↔UTC conversion throughout scheduling path
@@ -43,8 +44,8 @@
 - Source: user
 - Primary owning slice: M004/S02
 - Supporting slices: M004/S05
-- Validation: unmapped
-- Notes: Fix spans `_parse_slot_from_title`, `_candidate_slots`, and the ScheduleBlock serialization. Verified by E2E test asserting actual event start time in Calendar.
+- Validation: S02 proves: `parse_local_slot("Monday deep work 10am", week_start, ZoneInfo("America/Los_Angeles"))` returns `2026-03-16 10:00:00-07:00` (PDT, not UTC); `to_utc(local_dt, tz)` correctly converts; RFC3339 `replace("+00:00","Z")` hack removed from `workflow_runs.py`; `ScheduleBlock.start/end` emit proper offset-aware ISO format. Remaining gap: S05 will assert actual Calendar event start time against staging calendar.
+- Notes: Fix spans `_parse_slot_from_title`, `_candidate_slots`, and the ScheduleBlock serialization.
 
 ### R104 — Past-event guard on all calendar write paths
 - Class: quality-attribute
@@ -54,7 +55,7 @@
 - Source: user
 - Primary owning slice: M004/S02
 - Supporting slices: none
-- Validation: unmapped
+- Validation: S02 proves: `past_event_guard(past_dt, tz)` raises `PastEventError(ValueError)` with ISO timestamp in message; future datetimes pass without raising; `_run_calendar_agent` in `workflow_runs.py` calls `past_event_guard` before appending each `ScheduleBlock` with warn-and-skip pattern: `logger.warning("past_event_guard_triggered", ...)` + `carry_forward.append(task.title)` + `continue`. Policy is "warn-and-skip" (not hard crash) — operator sees carry-forward tasks in the proposal.
 - Notes: Guard runs at calendar write time, not just at proposal time.
 
 ### R105 — Dynamic week calculation replacing hardcoded date
@@ -65,7 +66,7 @@
 - Source: user
 - Primary owning slice: M004/S02
 - Supporting slices: none
-- Validation: unmapped
+- Validation: S02 proves: `compute_reference_week(ZoneInfo("America/Los_Angeles"))` returns current Monday at midnight PDT (tz-aware, weekday==0); `grep "2026, 3, 16" apps/worker/src/helm_worker/jobs/workflow_runs.py` returns empty (hardcoded date removed); `_candidate_slots` now calls `compute_reference_week(tz)` dynamically and passes `tz` through to all slot construction.
 - Notes: Part of the shared scheduling primitives refactor.
 
 ### R106 — Immediate execution for operator-triggered workflows; polling as background-only
@@ -76,7 +77,7 @@
 - Source: user
 - Primary owning slice: M004/S03
 - Supporting slices: M004/S01
-- Validation: unmapped
+- Validation: S03 proves at contract level: 10 unit tests confirm `/task` background coroutine calls `complete_current_step` inline; `/approve` calls `resume_run` inline immediately after `approve_run()` succeeds; worker recovery handler registered under `("task_quick_add", "infer_task_semantics")` for polling-based recovery of orphaned runs.
 - Notes: Implementation: trigger step execution inline from the Telegram handler (or via a minimal fast queue) after state is persisted. Polling remains for steps that were left runnable but not yet picked up.
 
 ### R107 — Conditional approval policy: auto-place on high confidence + low disruption; ask otherwise
@@ -87,7 +88,7 @@
 - Source: user
 - Primary owning slice: M004/S01
 - Supporting slices: M004/S04
-- Validation: unmapped
+- Validation: S01 proves: ConditionalApprovalPolicy.evaluate() returns APPROVE for confidence≥0.8 AND sizing≤120min; returns REQUEST_REVISION for either condition failing; exact boundary values verified (0.79→REVISION, 0.80→APPROVE, 120→APPROVE, 121→REVISION). Live calendar placement validation deferred to S02/S03.
 - Notes: Policy is a shared primitive used by both `/task` and weekly scheduling.
 
 ### R108 — Proactive approval notifications via Telegram push
@@ -142,7 +143,7 @@
 - Source: user
 - Primary owning slice: M004/S02
 - Supporting slices: M004/S01, M004/S06
-- Validation: unmapped
+- Validation: S02 proves: `compute_reference_week`, `parse_local_slot`, `to_utc`, `past_event_guard`, `PastEventError` are all exported from `helm_orchestration` package; `workflow_runs.py` imports and delegates to all four primitives; `_parse_slot_from_title`, `_DAY_OFFSETS`, `_TIME_PATTERN`, `_RANGE_PATTERN` deleted from `workflow_runs.py`; 53 integration tests pass with no regressions. Remaining gap: `/task` fast path uses shared `ConditionalApprovalPolicy` from S01 but does not yet call the new scheduling primitives (deferred to S03 full execution path).
 - Notes: Weekly scheduling workflow remains a supported separate entry point. The refactor is about shared primitives, not merging the workflows.
 
 ### R113 — Strict test layer boundaries: unit (pure), integration (DB, no external), E2E (real staging calendar)
@@ -175,7 +176,7 @@
 - Source: user
 - Primary owning slice: M004/S02
 - Supporting slices: M004/S06
-- Validation: unmapped
+- Validation: S02 proves: `pytest tests/integration/ -v` → 53/53 passed after refactor; `pytest tests/integration/test_weekly_scheduling_end_to_end.py -v` → 3/3 passed; `pytest tests/integration/test_weekly_scheduling_with_drift_recovery.py -v` → 5/5 passed; no hardcoded date, no RFC3339 hack, no duplicated slot parsing in `workflow_runs.py`.
 - Notes: Existing integration tests for weekly scheduling must remain passing.
 
 ### R116 — Live reload for worker and telegram-bot in docker-compose
@@ -305,14 +306,14 @@
 
 | ID | Class | Status | Primary owner | Supporting | Proof |
 |----|-------|--------|---------------|------------|-------|
-| R100 | primary-user-loop | active | M004/S01 | M004/S03, S04 | unmapped |
-| R101 | core-capability | active | M004/S01 | M004/S02 | unmapped |
+| R100 | primary-user-loop | active | M004/S01 | M004/S03, S04 | S01: DB-persisted run + outcome notification proven at contract level |
+| R101 | core-capability | active | M004/S01 | M004/S02 | S01: inference method + TaskSemantics model proven at contract level |
 | R102 | constraint | active | M004/S02 | M004/S04 | unmapped |
 | R103 | core-capability | active | M004/S02 | M004/S05 | unmapped |
 | R104 | quality-attribute | active | M004/S02 | none | unmapped |
 | R105 | core-capability | active | M004/S02 | none | unmapped |
-| R106 | operability | active | M004/S03 | M004/S01 | unmapped |
-| R107 | core-capability | active | M004/S01 | M004/S04 | unmapped |
+| R106 | operability | active | M004/S03 | M004/S01 | S03: inline execution paths proven at contract level (10 unit tests; `/task` → `complete_current_step`; `/approve` → `resume_run`; worker recovery handler registered) |
+| R107 | core-capability | active | M004/S01 | M004/S04 | S01: ConditionalApprovalPolicy boundary values proven (15 unit tests) |
 | R108 | operability | active | M004/S04 | M004/S03 | unmapped |
 | R109 | operability | active | M004/S04 | none | unmapped |
 | R110 | operability | active | M004/S04 | none | unmapped |

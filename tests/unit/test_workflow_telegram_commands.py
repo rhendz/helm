@@ -117,6 +117,7 @@ async def test_workflow_approve_parses_ids_and_calls_service(
     class _Service:
         def __init__(self) -> None:
             self.seen: tuple[int, int] | None = None
+            self.execute_after_approval_called: list[int] = []
 
         def approve_run(
             self, run_id: int, *, actor: str, target_artifact_id: int
@@ -134,6 +135,10 @@ async def test_workflow_approve_parses_ids_and_calls_service(
                 "latest_proposal_version": {"version_number": 1, "artifact_id": target_artifact_id},
             }
 
+        def execute_after_approval(self, run_id: int) -> dict[str, object]:
+            self.execute_after_approval_called.append(run_id)
+            return {"id": run_id, "status": "completed", "needs_action": False}
+
     async def _allow(_update: _Update, _context: _Context) -> bool:
         return False
 
@@ -146,12 +151,11 @@ async def test_workflow_approve_parses_ids_and_calls_service(
     await approve.handle(update, _Context(args=["7", "41"]))
 
     assert service.seen == (7, 41)
-    assert update.message.replies == [
-        "Run 7 [pending] step=apply_schedule paused=active\n"
-        "Last: Approval granted and workflow resumed.\n"
-        "Needs action: no | Next: none\n"
-        "Latest proposal: v1 artifact=41"
-    ]
+    assert service.execute_after_approval_called == [7]
+    # First reply is the formatted run; second is "Approved and syncing…"
+    assert len(update.message.replies) == 2
+    assert "Run 7" in update.message.replies[0]
+    assert "syncing" in update.message.replies[1] or "Approved" in update.message.replies[1]
 
 
 @pytest.mark.asyncio

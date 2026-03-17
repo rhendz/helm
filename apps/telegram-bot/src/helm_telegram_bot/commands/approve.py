@@ -1,3 +1,4 @@
+import structlog
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -6,6 +7,7 @@ from helm_telegram_bot.commands.workflows import _format_run
 from helm_telegram_bot.services.command_service import TelegramCommandService
 from helm_telegram_bot.services.workflow_status_service import TelegramWorkflowStatusService
 
+logger = structlog.get_logger()
 _draft_service = TelegramCommandService()
 _workflow_service = TelegramWorkflowStatusService()
 _service = _draft_service
@@ -45,6 +47,15 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         target_artifact_id=target_artifact_id,
     )
     await update.message.reply_text(_format_run(result))
+    # Trigger immediate execution of apply_schedule step
+    try:
+        _workflow_service.execute_after_approval(run_id)
+        await update.message.reply_text("✅ Approved and syncing to calendar…")
+    except Exception:
+        logger.exception("approve_inline_execution_failed", run_id=run_id)
+        await update.message.reply_text(
+            f"✅ Approved (run {run_id}). Calendar sync will complete shortly."
+        )
 
 
 async def reject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

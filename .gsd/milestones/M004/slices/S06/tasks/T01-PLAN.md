@@ -77,6 +77,15 @@ The merge has real conflicts that must be resolved with specific rules (document
 - `grep "pytest_configure\|e2e_calendar_id" tests/e2e/conftest.py` → shows safety gates
 - `test -f tests/conftest.py && echo OK` → exists
 
+## Observability Impact
+
+This task ships S01–S04 runtime behavior into `main`. After merge:
+
+- **Signals emitted:** `task_inference_complete`, `task_inference_failed` structlog events (from `/task` handler and LLM inference path); `workflow_run_start`, `workflow_run_complete` log events (from `workflow_runs.py`).
+- **Inspection surfaces:** `uv run --frozen pytest tests/unit/ tests/integration/ -q` — test count is the primary health signal. A drop below 440 or any failure indicates a bad merge or conflict resolution error.
+- **Failure visibility:** Merge conflicts left unresolved manifest as Python syntax errors at import time. The `pytest` run will immediately surface these as collection errors rather than test failures. `git diff --check` can catch whitespace/marker artifacts.
+- **Redaction constraints:** None — test runs don't touch secrets; `HELM_CALENDAR_TEST_ID` is a non-sensitive env override.
+
 ## Inputs
 
 - `milestone/M004` branch — S01–S04 implementation (LLM inference, `/task` handler, `/status` command, approval policy, proactive notifications, scheduling refactor)

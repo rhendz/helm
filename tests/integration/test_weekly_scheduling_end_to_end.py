@@ -302,40 +302,50 @@ def test_weekly_scheduling_approval_checkpoint_blocks_execution(monkeypatch) -> 
     - available_actions are present
     - Workflow cannot proceed without approval
     """
-    for client, session in _client():
-        monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
+    # Freeze scheduling "now" to a Sunday evening so all Mon-Fri slots generated
+    # by compute_reference_week are in the future and past_event_guard never fires.
+    from datetime import UTC, datetime as real_datetime
+    from unittest.mock import patch as mock_patch
 
-        # Create run and advance to approval
-        created = client.post(
-            "/v1/workflow-runs",
-            json={
-                "workflow_type": "weekly_scheduling",
-                "first_step_name": "dispatch_task_agent",
-                "request_text": "Plan my week. Tasks: Task 1 high 90m; Task 2 medium 60m. Constraints: protect mornings.",
-                "submitted_by": "test-operator",
-                "channel": "api",
-            },
-        )
-        run_id = created.json()["id"]
+    _future_now = real_datetime(2099, 1, 5, 0, 1, 0, tzinfo=UTC)
+    with mock_patch("helm_orchestration.scheduling.datetime") as mock_dt:
+        mock_dt.now.return_value = _future_now
+        mock_dt.side_effect = lambda *args, **kw: real_datetime(*args, **kw)
 
-        # Advance to approval checkpoint
-        workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
-        workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
+        for client, session in _client():
+            monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
 
-        # Verify run is blocked and needs action
-        blocked = client.get(f"/v1/workflow-runs/{run_id}")
-        assert blocked.json()["paused_state"] == "awaiting_approval"
-        assert blocked.json()["needs_action"] is True
-        available_actions = blocked.json()["available_actions"]
-        action_names = [a["action"] for a in available_actions]
-        assert set(action_names) == {"approve", "reject", "request_revision"}
+            # Create run and advance to approval
+            created = client.post(
+                "/v1/workflow-runs",
+                json={
+                    "workflow_type": "weekly_scheduling",
+                    "first_step_name": "dispatch_task_agent",
+                    "request_text": "Plan my week. Tasks: Task 1 high 90m; Task 2 medium 60m. Constraints: protect mornings.",
+                    "submitted_by": "test-operator",
+                    "channel": "api",
+                },
+            )
+            run_id = created.json()["id"]
 
-        # Verify no further progress without approval
-        further_runs = workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
-        assert further_runs == 0, "Worker should not process any jobs when awaiting approval"
+            # Advance to approval checkpoint
+            workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
+            workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
 
-        still_blocked = client.get(f"/v1/workflow-runs/{run_id}")
-        assert still_blocked.json()["paused_state"] == "awaiting_approval"
+            # Verify run is blocked and needs action
+            blocked = client.get(f"/v1/workflow-runs/{run_id}")
+            assert blocked.json()["paused_state"] == "awaiting_approval"
+            assert blocked.json()["needs_action"] is True
+            available_actions = blocked.json()["available_actions"]
+            action_names = [a["action"] for a in available_actions]
+            assert set(action_names) == {"approve", "reject", "request_revision"}
+
+            # Verify no further progress without approval
+            further_runs = workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
+            assert further_runs == 0, "Worker should not process any jobs when awaiting approval"
+
+            still_blocked = client.get(f"/v1/workflow-runs/{run_id}")
+            assert still_blocked.json()["paused_state"] == "awaiting_approval"
 
 
 def test_weekly_scheduling_sync_record_integrity(monkeypatch) -> None:  # noqa: ANN001

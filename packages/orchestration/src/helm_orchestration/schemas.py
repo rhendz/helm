@@ -104,6 +104,8 @@ class WeeklyTaskRequest(BaseModel):
     estimated_minutes: int | None = None
     source_line: str | None = None
     warnings: tuple[str, ...] = ()
+    urgency: str | None = None
+    confidence: float | None = None
 
 
 class WeeklySchedulingRequest(BaseModel):

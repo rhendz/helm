@@ -18,4 +18,4 @@
 - None
 
 ## Next Action
-Execute T01: Merge milestone/M004 into main and verify full test suite.
+Execute T01: Merge milestone/M004 into main and verify full test suite in slice S06.
