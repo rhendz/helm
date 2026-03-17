@@ -11,10 +11,12 @@ The operator can add a task through Telegram and trust that it lands on Calendar
 ## Current State
 
 - M001–M003 complete: durable workflow kernel, truth-set cleanup, real Google Calendar OAuth integration with drift detection.
-- M004 in progress (S01–S04 complete, S05–S06 remaining):
-  - S01–S03: `/task` quick-add with LLM inference, shared timezone/scheduling primitives, immediate execution path all shipped.
-  - S04: `/status` (pending approvals with `/approve N M` hints, recent completions, OPERATOR_TIMEZONE) and `/agenda` (today's Calendar events in local time) commands live; proactive approval notifications wired into worker; 501 tests passing.
-- Remaining: S05 (real E2E calendar tests with staging calendar), S06 (live reload, Datadog, cleanup).
+- M004 in progress (S01–S05 complete, S06 remaining):
+  - S01–S03: `/task` quick-add with LLM inference, shared timezone/scheduling primitives, immediate execution path all shipped (on `milestone/M004` branch).
+  - S04: `/status` (pending approvals with `/approve N M` hints, recent completions, OPERATOR_TIMEZONE) and `/agenda` (today's Calendar events in local time) commands live; proactive approval notifications wired into worker.
+  - S05: Strict test layer boundaries enforced; E2E safety guards (HELM_E2E + HELM_CALENDAR_TEST_ID fail-fast); calendar_id threaded through full adapter stack (no hardcoded "primary"); timezone correctness E2E assertion (test_07) in place; /task→DB state integration test added; scheduling primitives ported to main; 436 tests passing.
+  - **Note:** S01–S04 implementation is on `milestone/M004` branch; S05 test infrastructure is on `main`. Branch merge required before M004 is fully deployable.
+- Remaining: S06 (live reload, Datadog, cleanup).
 
 ## Architecture / Key Patterns
 

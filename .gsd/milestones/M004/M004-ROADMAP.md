@@ -74,7 +74,7 @@ This milestone is complete only when all are true:
 - [x] **S04: Telegram UX overhaul and proactive notifications** `risk:medium` `depends:[S01,S02,S03]`
   > After this: `/status` shows pending approvals, recent actions, and active OPERATOR_TIMEZONE; `/agenda` shows today's Calendar events in local time; Helm pushes an approval notification without being polled; one `/task` auto-places (high confidence, low disruption) and one triggers an approval request (ambiguous/disruptive); default output is concise and operator-facing
 
-- [ ] **S05: Strict test boundaries and real E2E calendar coverage** `risk:high` `depends:[S02,S03]`
+- [x] **S05: Strict test boundaries and real E2E calendar coverage** `risk:high` `depends:[S02,S03]`
   > After this: E2E test suite writes to staging calendar, reads back events, asserts correct local times in OPERATOR_TIMEZONE, cleans up deterministically; fails fast if `HELM_CALENDAR_TEST_ID` is missing or "primary"; unit/integration/E2E layers are strictly separated with no mocks leaking across boundaries
 
 - [ ] **S06: Dev experience, observability, and cleanup** `risk:low` `depends:[S01]`
