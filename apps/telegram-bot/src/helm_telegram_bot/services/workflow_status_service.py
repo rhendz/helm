@@ -1,14 +1,29 @@
 from __future__ import annotations
 
 import logging
+import os
+from datetime import timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from helm_api.services.replay_service import request_workflow_run_replay
 from helm_api.services.workflow_status_service import (
     WorkflowStatusService,
     build_workflow_run_create_input,
 )
+from helm_connectors import StubTaskSystemAdapter
+from helm_orchestration import (
+    CalendarAgentOutput,
+    ScheduleBlock,
+    TaskSemantics,
+    WorkflowOrchestrationService,
+    compute_reference_week,
+    parse_local_slot,
+    past_event_guard,
+    to_utc,
+)
 from helm_storage.db import SessionLocal
+from helm_storage.repositories import WorkflowArtifactType
 from helm_storage.repositories.workflow_events import SQLAlchemyWorkflowEventRepository
 from helm_storage.repositories.workflow_sync_records import (
     SQLAlchemyWorkflowSyncRecordRepository,
@@ -30,6 +45,86 @@ class TelegramWorkflowStatusService:
                     metadata={"chat_id": chat_id},
                 )
             )
+
+    def start_task_run(self, *, request_text: str, submitted_by: str, chat_id: str) -> dict[str, object]:
+        with SessionLocal() as session:
+            return WorkflowStatusService(session).create_run(
+                build_workflow_run_create_input(
+                    workflow_type="task_quick_add",
+                    first_step_name="infer_task_semantics",
+                    request_text=request_text,
+                    submitted_by=submitted_by,
+                    channel="telegram",
+                    metadata={"chat_id": chat_id},
+                )
+            )
+
+    def execute_task_run(
+        self,
+        run_id: int,
+        *,
+        semantics: TaskSemantics,
+        request_text: str,
+    ) -> dict[str, object]:
+        """Build a CalendarAgentOutput from TaskSemantics and advance the run to the approval checkpoint."""
+        # Lazy imports to avoid importing helm_worker.config at module level
+        # (worker config requires OPERATOR_TIMEZONE env var and would fail at import time)
+        from helm_worker.jobs.workflow_runs import (
+            _build_calendar_adapter,
+            _build_validator_registry,
+        )
+
+        tz = ZoneInfo(os.environ["OPERATOR_TIMEZONE"])
+        week_start = compute_reference_week(tz)
+        local_start = parse_local_slot(request_text, week_start, tz)
+        if local_start is None:
+            local_start = week_start.replace(hour=9, minute=0, second=0, microsecond=0)
+        start_utc = to_utc(local_start, tz)
+        end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
+        # Raises PastEventError if the resolved time is in the past — caller handles it
+        past_event_guard(start_utc, tz)
+
+        block = ScheduleBlock(
+            title=request_text,
+            task_title=request_text,
+            start=start_utc.isoformat(),
+            end=end_utc.isoformat(),
+        )
+        output = CalendarAgentOutput(
+            proposal_summary=f"Schedule: {request_text}",
+            calendar_id="primary",
+            time_blocks=(block,),
+            proposed_changes=(f"Schedule {request_text}",),
+        )
+
+        with SessionLocal() as session:
+            wf_service = WorkflowOrchestrationService(
+                session,
+                validator_registry=_build_validator_registry(),
+                task_system_adapter=StubTaskSystemAdapter(),
+                calendar_system_adapter=_build_calendar_adapter(),
+            )
+            wf_service.complete_current_step(
+                run_id,
+                artifact_type=WorkflowArtifactType.SCHEDULE_PROPOSAL.value,
+                artifact_payload=output,
+                next_step_name="apply_schedule",
+            )
+            return WorkflowStatusService(session).get_run_detail(run_id)
+
+    def execute_after_approval(self, run_id: int) -> dict[str, object]:
+        """Trigger immediate execution of apply_schedule after an approval decision."""
+        # Lazy imports to avoid importing helm_worker.config at module level
+        from helm_worker.jobs.workflow_runs import (
+            _build_resume_service,
+            _build_specialist_steps,
+        )
+
+        with SessionLocal() as session:
+            handlers = _build_specialist_steps()
+            resume_service = _build_resume_service(session, handlers=handlers)
+            resume_service.resume_run(run_id)
+            return WorkflowStatusService(session).get_run_detail(run_id)
 
     def list_recent_runs(self, *, limit: int = 5) -> list[dict[str, object]]:
         with SessionLocal() as session:

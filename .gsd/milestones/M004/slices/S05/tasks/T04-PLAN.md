@@ -102,3 +102,20 @@ The test proves the inline execution path produces the correct DB state transiti
 ## Expected Output
 
 - `tests/integration/test_task_execution_integration.py` — new file with at least one test proving the full `/task` → DB state path with correct state transitions (blocked → completed)
+
+## Observability Impact
+
+**What signals change:**
+- `WorkflowRun.status` transitions (`pending → blocked → pending → completed`) and `needs_action` flip are the primary observable signals — both are surfaced via `GET /v1/workflow-runs/{run_id}` or `WorkflowStatusService.get_run_detail(run_id)`.
+- `StubCalendarSystemAdapter.upsert_calendar_block` is invoked during `execute_after_approval`; real adapter logs `upsert_calendar_block` structlog entry with `planned_item_key` — filter structlog for `key="upsert_calendar_block"` to confirm calendar write was reached.
+- `PastEventError` raised from `past_event_guard` appears in logs when time-freeze is not applied correctly — signals misconfiguration of the time mock.
+
+**How to inspect after the fact:**
+- `session.get(WorkflowRunORM, run_id)` gives raw ORM state at any checkpoint.
+- `WorkflowStatusService(session).get_run_detail(run_id)` returns the full run detail dict including `approval_checkpoint`, `current_step`, `status`, and `needs_action`.
+- Query `SELECT status, needs_action FROM workflow_runs WHERE id = <run_id>` in the test DB for post-hoc inspection.
+
+**Failure visibility:**
+- If `past_event_guard` fires, the test fails at `execute_task_run` with `PastEventError` — indicates the `helm_orchestration.scheduling.datetime` patch was not applied correctly or the frozen time is in the past.
+- If `_build_calendar_adapter` cannot connect, it logs `calendar_adapter_fallback_to_stub` at WARNING and falls back to `StubCalendarSystemAdapter` — this is expected in the test environment and is harmless.
+- If `get_run_detail` returns `None`, the run was created in a different session than the one being inspected — indicates session isolation is broken in the test setup.

@@ -72,6 +72,15 @@ class ValidationIssue(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class TaskSemantics(BaseModel):
+    model_config = ConfigDict(extra="ignore")  # NOT "forbid" — LLM may add fields
+
+    urgency: str  # low / medium / high
+    priority: str  # low / medium / high
+    sizing_minutes: int
+    confidence: float  # 0.0–1.0
+
+
 class TaskArtifact(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

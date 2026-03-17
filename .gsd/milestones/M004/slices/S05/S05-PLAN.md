@@ -66,7 +66,7 @@
   - Verify: With real staging calendar: the new assertion passes. Without staging calendar: the test skips cleanly with the existing credential/HELM_E2E gate
   - Done when: timezone correctness assertion exists in the E2E suite; passes against staging calendar
 
-- [ ] **T04: Add /task → DB state integration test** `est:45m`
+- [x] **T04: Add /task → DB state integration test** `est:45m`
   - Why: S03's known limitation — no integration test for the full `/task` → execute_task_run → DB state chain. This test exercises the path with real Postgres but mocked LLM and Calendar, filling the gap (R113)
   - Files: `tests/integration/test_task_execution_integration.py` (new)
   - Do: Create integration test that: (1) creates a `task_quick_add` workflow run via `TelegramWorkflowStatusService.start_task_run`; (2) calls `execute_task_run` with mocked LLM + Calendar; (3) asserts `status=blocked, needs_action=True`; (4) calls `execute_after_approval` with mocked Calendar; (5) asserts `status=completed, needs_action=False`. Uses time-freeze pattern (2099-01-07) to avoid `past_event_guard` flakiness.
