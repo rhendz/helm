@@ -186,6 +186,7 @@ class GoogleCalendarAdapter:
             description = payload.get("description", "")
             start_str = payload.get("start")
             end_str = payload.get("end")
+            calendar_id = payload.get("calendar_id") or "primary"
 
             # Validate required fields
             if not title or not start_str or not end_str:
@@ -243,9 +244,10 @@ class GoogleCalendarAdapter:
                     event_id=external_object_id,
                     title=title,
                     start=start_rfc3339,
+                    calendar_id=calendar_id,
                 )
                 result = service.events().update(
-                    calendarId="primary",
+                    calendarId=calendar_id,
                     eventId=external_object_id,
                     body=event_body,
                 ).execute()
@@ -255,9 +257,10 @@ class GoogleCalendarAdapter:
                     "upsert_calendar_block: calling events.insert",
                     title=title,
                     start=start_rfc3339,
+                    calendar_id=calendar_id,
                 )
                 result = service.events().insert(
-                    calendarId="primary",
+                    calendarId=calendar_id,
                     body=event_body,
                 ).execute()
 
@@ -265,6 +268,7 @@ class GoogleCalendarAdapter:
             logger.info(
                 "upsert_calendar_block_success",
                 event_id=returned_event_id,
+                calendar_id=calendar_id,
                 operation="update" if external_object_id else "create",
             )
 
@@ -392,11 +396,12 @@ class GoogleCalendarAdapter:
                 "reconcile_calendar_block: calling events.get",
                 eventId=request.external_object_id,
                 planned_item_key=request.planned_item_key,
+                calendar_id=request.calendar_id,
             )
 
             # Retrieve the live event from calendar
             event = service.events().get(
-                calendarId="primary",
+                calendarId=request.calendar_id,
                 eventId=request.external_object_id,
             ).execute()
 

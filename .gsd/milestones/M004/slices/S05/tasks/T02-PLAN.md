@@ -19,6 +19,23 @@ E2E tests currently hardcode `calendarId="primary"` everywhere and have no guard
 
 Per D007: E2E tests skip (not fail) if env vars absent, but fail explicitly if `HELM_CALENDAR_TEST_ID=primary`.
 
+## Observability Impact
+
+**Signals added by this task:**
+- `upsert_calendar_block: calling events.update` and `upsert_calendar_block: calling events.insert` structlog entries now include `calendar_id` field — directly observable which calendar is being written.
+- `upsert_calendar_block_success` structlog entry now includes `calendar_id` — confirms the actual calendar that received the event.
+- `reconcile_calendar_block: calling events.get` structlog entry now includes `calendar_id` — confirms which calendar is being reconciled against.
+
+**Inspection surfaces:**
+- `HELM_CALENDAR_TEST_ID` env var: if set, all calendar writes/reads route to that calendar ID instead of "primary". Absence means "primary" is used.
+- `HELM_E2E` env var: if absent, all E2E tests skip. If present without `HELM_CALENDAR_TEST_ID`, tests fail immediately with a descriptive error.
+- `pytest_configure` in `tests/e2e/conftest.py` will `pytest.exit()` with "must not be 'primary'" if a misconfigured run is attempted.
+
+**Failure visibility:**
+- If E2E tests run against the wrong calendar, structlog entries at `upsert_calendar_block_success` will show the `calendar_id` that was used — enabling post-hoc diagnosis.
+- If `HELM_CALENDAR_TEST_ID=primary` is set with `HELM_E2E=true`, pytest exits before any test runs with a clear error message. No events will be created.
+- `_reconcile_sync_record` now propagates `calendar_id` from the sync record's payload, so reconciliation drift detection also operates on the correct calendar.
+
 ## Steps
 
 1. **Update `tests/e2e/conftest.py`** — add safety guards:

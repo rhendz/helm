@@ -220,6 +220,7 @@ class SyncLookupRequest(BaseModel):
     planned_item_key: str
     payload_fingerprint: str
     external_object_id: str | None = None
+    calendar_id: str = "primary"  # staging calendar override for E2E
 
 
 class SyncLookupResult(BaseModel):

@@ -314,7 +314,7 @@ def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
     )
     return CalendarAgentOutput(
         proposal_summary=summary,
-        calendar_id="primary",
+        calendar_id=os.getenv("HELM_CALENDAR_TEST_ID", "primary"),
         time_blocks=tuple(scheduled_blocks),
         proposed_changes=tuple(proposed_changes),
         honored_constraints=tuple(dict.fromkeys(honored_constraints)),

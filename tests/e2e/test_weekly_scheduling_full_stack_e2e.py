@@ -116,11 +116,12 @@ class TestWeeklySchedulingFullStackE2E:
         yield
         if self.created_event_ids:
             try:
+                calendar_id = os.getenv("HELM_CALENDAR_TEST_ID", "primary")
                 adapter = GoogleCalendarAdapter(GoogleCalendarAuth())
                 service = adapter._get_service()
                 for event_id in self.created_event_ids:
                     try:
-                        service.events().delete(calendarId="primary", eventId=event_id).execute()
+                        service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
                     except Exception:
                         pass
             except Exception:
@@ -244,11 +245,12 @@ class TestWeeklySchedulingFullStackE2E:
         """Fetch each created event from the Calendar API and confirm it's live."""
         assert self.created_event_ids, "No event IDs — step 4 must have failed"
 
+        calendar_id = os.getenv("HELM_CALENDAR_TEST_ID", "primary")
         adapter = GoogleCalendarAdapter(GoogleCalendarAuth())
         service = adapter._get_service()
 
         for event_id in self.created_event_ids:
-            event = service.events().get(calendarId="primary", eventId=event_id).execute()
+            event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
             assert event.get("status") != "cancelled", f"Event {event_id} is cancelled/deleted"
             assert event.get("summary"), f"Event {event_id} has no title"
 
@@ -271,6 +273,7 @@ class TestWeeklySchedulingFullStackE2E:
                 planned_item_key=rec["planned_item_key"],
                 payload_fingerprint=rec["payload_fingerprint"],
                 external_object_id=rec["external_object_id"],
+                calendar_id=os.getenv("HELM_CALENDAR_TEST_ID", "primary"),
             )
             result = adapter.reconcile_calendar_block(lookup)
             assert result.found is True, (

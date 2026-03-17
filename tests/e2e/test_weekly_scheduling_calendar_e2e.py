@@ -4,12 +4,16 @@ This test exercises the full weekly scheduling flow against a live Google
 Calendar account. It creates events, verifies they exist, then cleans them up.
 
 Requirements:
+  HELM_E2E=true must be set (handled by conftest.py)
+  HELM_CALENDAR_TEST_ID must be set to a non-"primary" staging calendar ID
   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN must be set.
 
 Run with:
-  uv run --frozen --extra dev pytest tests/e2e/test_weekly_scheduling_calendar_e2e.py -v -s
+  HELM_E2E=true HELM_CALENDAR_TEST_ID=<staging_id> \\
+    uv run --frozen --extra dev pytest tests/e2e/test_weekly_scheduling_calendar_e2e.py -v -s
 
-Skipped automatically when credentials are not present.
+Skipped automatically when HELM_E2E is not set (conftest handles this).
+Also skipped when Google credentials are not present (secondary gate).
 """
 from __future__ import annotations
 
@@ -53,11 +57,13 @@ def _make_request(
     key: str,
 ) -> tuple[CalendarSyncRequest, str]:
     """Build a CalendarSyncRequest and its stored fingerprint."""
+    calendar_id = os.getenv("HELM_CALENDAR_TEST_ID", "primary")
     payload = {
         "title": title,
         "start": start.isoformat(),
         "end": end.isoformat(),
         "description": "",
+        "calendar_id": calendar_id,
     }
     fingerprint = _calendar_sync_fingerprint(payload)
     req = CalendarSyncRequest(
@@ -84,10 +90,11 @@ class TestWeeklySchedulingCalendarE2E:
     def cleanup(self, adapter: GoogleCalendarAdapter) -> None:
         self.created_event_ids = []
         yield
+        calendar_id = os.getenv("HELM_CALENDAR_TEST_ID", "primary")
         service = adapter._get_service()
         for event_id in self.created_event_ids:
             try:
-                service.events().delete(calendarId="primary", eventId=event_id).execute()
+                service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
             except Exception:
                 pass
 
@@ -116,6 +123,7 @@ class TestWeeklySchedulingCalendarE2E:
             planned_item_key="e2e:deep-work",
             payload_fingerprint=fingerprint,
             external_object_id=result.external_object_id,
+            calendar_id=os.getenv("HELM_CALENDAR_TEST_ID", "primary"),
         )
         reconcile = adapter.reconcile_calendar_block(lookup)
         assert reconcile.found is True
@@ -157,6 +165,7 @@ class TestWeeklySchedulingCalendarE2E:
                 planned_item_key=f"e2e:{title[11:31]}",
                 payload_fingerprint=fp,
                 external_object_id=result.external_object_id,
+                calendar_id=os.getenv("HELM_CALENDAR_TEST_ID", "primary"),
             )
             reconcile = adapter.reconcile_calendar_block(lookup)
             assert reconcile.found is True, f"Event not found for {title!r}"
@@ -181,8 +190,9 @@ class TestWeeklySchedulingCalendarE2E:
         event_id = result.external_object_id
         self.created_event_ids.append(event_id)
 
+        calendar_id = os.getenv("HELM_CALENDAR_TEST_ID", "primary")
         adapter._get_service().events().patch(
-            calendarId="primary",
+            calendarId=calendar_id,
             eventId=event_id,
             body={"summary": "[Helm E2E Test] Drift target (MANUALLY EDITED)"},
         ).execute()
@@ -195,6 +205,7 @@ class TestWeeklySchedulingCalendarE2E:
             planned_item_key="e2e:drift-target",
             payload_fingerprint=fingerprint,
             external_object_id=event_id,
+            calendar_id=calendar_id,
         )
         reconcile = adapter.reconcile_calendar_block(lookup)
         assert reconcile.found is True
@@ -219,8 +230,9 @@ class TestWeeklySchedulingCalendarE2E:
         assert result.status == SyncOutcomeStatus.SUCCEEDED
         event_id = result.external_object_id
 
+        calendar_id = os.getenv("HELM_CALENDAR_TEST_ID", "primary")
         # Delete directly — not in cleanup list
-        adapter._get_service().events().delete(calendarId="primary", eventId=event_id).execute()
+        adapter._get_service().events().delete(calendarId=calendar_id, eventId=event_id).execute()
 
         lookup = SyncLookupRequest(
             proposal_artifact_id=999,
@@ -230,6 +242,7 @@ class TestWeeklySchedulingCalendarE2E:
             planned_item_key="e2e:delete-me",
             payload_fingerprint=fingerprint,
             external_object_id=event_id,
+            calendar_id=calendar_id,
         )
         reconcile = adapter.reconcile_calendar_block(lookup)
         assert reconcile.found is False

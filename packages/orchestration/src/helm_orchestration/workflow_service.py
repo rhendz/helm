@@ -1695,6 +1695,8 @@ class WorkflowOrchestrationService:
         return adapter.upsert_calendar_block(CalendarSyncRequest(item=sync_item))
 
     def _reconcile_sync_record(self, sync_record) -> SyncLookupResult:
+        payload = sync_record.payload if hasattr(sync_record, "payload") else {}
+        calendar_id = (payload.get("calendar_id") or "primary") if isinstance(payload, dict) else "primary"
         lookup = SyncLookupRequest(
             proposal_artifact_id=sync_record.proposal_artifact_id,
             proposal_version_number=sync_record.proposal_version_number,
@@ -1703,6 +1705,7 @@ class WorkflowOrchestrationService:
             planned_item_key=sync_record.planned_item_key,
             payload_fingerprint=sync_record.payload_fingerprint,
             external_object_id=sync_record.external_object_id,
+            calendar_id=calendar_id,
         )
         if lookup.target_system is SyncTargetSystem.TASK_SYSTEM:
             adapter = self._require_task_system_adapter()

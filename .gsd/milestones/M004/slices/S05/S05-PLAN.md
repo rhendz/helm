@@ -52,7 +52,7 @@
   - Verify: `OPERATOR_TIMEZONE=America/Los_Angeles uv run --frozen --extra dev pytest tests/unit/test_google_calendar_adapter.py -v` passes; old path no longer exists
   - Done when: file lives in `tests/unit/`, all tests pass, no references to old path remain
 
-- [ ] **T02: Add E2E safety guards and thread calendar_id through adapter** `est:1h`
+- [x] **T02: Add E2E safety guards and thread calendar_id through adapter** `est:1h`
   - Why: E2E tests currently hardcode `calendarId="primary"` everywhere and have no guard preventing accidental writes to the operator's real calendar. This is the core plumbing that makes safe E2E testing possible (R114, R113)
   - Files: `tests/e2e/conftest.py`, `packages/connectors/src/helm_connectors/google_calendar.py`, `apps/worker/src/helm_worker/jobs/workflow_runs.py`, `apps/telegram-bot/src/helm_telegram_bot/services/workflow_status_service.py`, `tests/e2e/test_weekly_scheduling_calendar_e2e.py`, `tests/e2e/test_weekly_scheduling_full_stack_e2e.py`
   - Do: (1) Add `HELM_E2E` + `HELM_CALENDAR_TEST_ID` guards to `tests/e2e/conftest.py`; (2) make `upsert_calendar_block` and `reconcile_calendar_block` read `calendar_id` from payload; (3) make `_run_calendar_agent` and `execute_task_run` read `HELM_CALENDAR_TEST_ID` env var; (4) update both E2E test files to use staging calendar ID in cleanup and all API calls
