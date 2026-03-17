@@ -32,9 +32,9 @@ def calendar_auth() -> GoogleCalendarAuth:
     with patch.dict(
         os.environ,
         {
-            "CALENDAR_CLIENT_ID": "test-client-id",
-            "CALENDAR_CLIENT_SECRET": "test-client-secret",
-            "CALENDAR_REFRESH_TOKEN": "test-refresh-token",
+            "GOOGLE_CLIENT_ID": "test-client-id",
+            "GOOGLE_CLIENT_SECRET": "test-client-secret",
+            "GOOGLE_REFRESH_TOKEN": "test-refresh-token",
         },
     ):
         return GoogleCalendarAuth()

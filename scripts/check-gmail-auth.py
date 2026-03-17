@@ -14,9 +14,9 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 REQUIRED_ENV_VARS = (
-    "GMAIL_CLIENT_ID",
-    "GMAIL_CLIENT_SECRET",
-    "GMAIL_REFRESH_TOKEN",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REFRESH_TOKEN",
     "GMAIL_USER_EMAIL",
 )
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
@@ -30,9 +30,9 @@ def _require_env_var(name: str) -> str:
 
 
 def _build_credentials() -> Credentials:
-    client_id = _require_env_var("GMAIL_CLIENT_ID")
-    client_secret = _require_env_var("GMAIL_CLIENT_SECRET")
-    refresh_token = _require_env_var("GMAIL_REFRESH_TOKEN")
+    client_id = _require_env_var("GOOGLE_CLIENT_ID")
+    client_secret = _require_env_var("GOOGLE_CLIENT_SECRET")
+    refresh_token = _require_env_var("GOOGLE_REFRESH_TOKEN")
     return Credentials(
         token=None,
         refresh_token=refresh_token,

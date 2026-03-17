@@ -117,9 +117,9 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         monkeypatch.setattr(replay_service, "SessionLocal", lambda: _SessionContext(session))
 
         # Set up real Google Calendar credentials to enable GoogleCalendarAdapter
-        monkeypatch.setenv("CALENDAR_CLIENT_ID", "test-client-id")
-        monkeypatch.setenv("CALENDAR_CLIENT_SECRET", "test-client-secret")
-        monkeypatch.setenv("CALENDAR_REFRESH_TOKEN", "test-refresh-token")
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+        monkeypatch.setenv("GOOGLE_REFRESH_TOKEN", "test-refresh-token")
 
         # Step 1: Create a weekly scheduling run via API
         request_text = (

@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
-"""OAuth flow to obtain a Google Calendar + Gmail refresh_token.
+"""OAuth flow to obtain a Google refresh_token covering Gmail + Calendar.
 
 Usage:
     uv run scripts/get_calendar_credentials.py
 
-Requires a Google Cloud project with Calendar API enabled and an
-OAuth 2.0 "Desktop app" client ID. Set these env vars or enter them
-when prompted:
+Requires a Google Cloud Desktop app OAuth client. Set these env vars or
+enter them when prompted:
 
-    CALENDAR_CLIENT_ID=<your-client-id>
-    CALENDAR_CLIENT_SECRET=<your-client-secret>
+    GOOGLE_CLIENT_ID=<your-client-id>
+    GOOGLE_CLIENT_SECRET=<your-client-secret>
 
 The script opens a browser for consent. Google shows an auth code on
-screen — paste it back here. The script exchanges it for a refresh_token
-that covers both Gmail and Calendar scopes.
+screen — paste it back here. Prints the three keys to add to .env.
 """
 from __future__ import annotations
 
@@ -34,13 +32,13 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
 
 def main() -> None:
-    client_id = os.getenv("CALENDAR_CLIENT_ID", "").strip()
-    client_secret = os.getenv("CALENDAR_CLIENT_SECRET", "").strip()
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
 
     if not client_id:
-        client_id = input("CALENDAR_CLIENT_ID: ").strip()
+        client_id = input("GOOGLE_CLIENT_ID: ").strip()
     if not client_secret:
-        client_secret = input("CALENDAR_CLIENT_SECRET: ").strip()
+        client_secret = input("GOOGLE_CLIENT_SECRET: ").strip()
 
     if not client_id or not client_secret:
         print("ERROR: client_id and client_secret are required.", file=sys.stderr)
@@ -52,11 +50,11 @@ def main() -> None:
         "response_type": "code",
         "scope": SCOPES,
         "access_type": "offline",
-        "prompt": "consent",  # force refresh_token issuance
+        "prompt": "consent",
     }
     consent_url = f"{AUTH_URL}?{urlencode(params)}"
 
-    print(f"\nOpening browser for consent...\n")
+    print("\nOpening browser for consent...\n")
     webbrowser.open(consent_url)
     print(f"If the browser didn't open, visit:\n  {consent_url}\n")
 
@@ -65,7 +63,6 @@ def main() -> None:
         print("ERROR: No auth code provided.", file=sys.stderr)
         sys.exit(1)
 
-    # Exchange code for tokens
     data = urlencode({
         "code": auth_code,
         "client_id": client_id,
@@ -90,11 +87,10 @@ def main() -> None:
         print(f"Full response: {json.dumps(tokens, indent=2)}", file=sys.stderr)
         sys.exit(1)
 
-    print("\n✓ Success. Update your .env with:\n")
-    print(f"CALENDAR_CLIENT_ID={client_id}")
-    print(f"CALENDAR_CLIENT_SECRET={client_secret}")
-    print(f"CALENDAR_REFRESH_TOKEN={refresh_token}")
-    print(f"GMAIL_REFRESH_TOKEN={refresh_token}  # same token, covers both scopes")
+    print("\n✓ Success. Add these to your .env:\n")
+    print(f"GOOGLE_CLIENT_ID={client_id}")
+    print(f"GOOGLE_CLIENT_SECRET={client_secret}")
+    print(f"GOOGLE_REFRESH_TOKEN={refresh_token}")
     print()
 
 

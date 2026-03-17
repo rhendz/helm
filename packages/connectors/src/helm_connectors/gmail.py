@@ -13,9 +13,9 @@ from helm_observability.logging import get_logger
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 _GMAIL_REQUIRED_ENV_VARS = (
-    "GMAIL_CLIENT_ID",
-    "GMAIL_CLIENT_SECRET",
-    "GMAIL_REFRESH_TOKEN",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REFRESH_TOKEN",
     "GMAIL_USER_EMAIL",
 )
 
@@ -201,15 +201,14 @@ def _build_refreshed_credentials(*, scopes: list[str] | None = None) -> Any:
 
     credentials = Credentials(
         token=None,
-        refresh_token=_require_env("GMAIL_REFRESH_TOKEN"),
+        refresh_token=_require_env("GOOGLE_REFRESH_TOKEN"),
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=_require_env("GMAIL_CLIENT_ID"),
-        client_secret=_require_env("GMAIL_CLIENT_SECRET"),
+        client_id=_require_env("GOOGLE_CLIENT_ID"),
+        client_secret=_require_env("GOOGLE_CLIENT_SECRET"),
         scopes=scopes or [GMAIL_SCOPE],
     )
     credentials.refresh(Request())
     return credentials
-
 
 def _build_gmail_service(*, scopes: list[str] | None = None) -> Any:
     from googleapiclient.discovery import build

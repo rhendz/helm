@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import re
 from datetime import UTC, datetime, timedelta
 
 from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
+from helm_connectors.google_calendar import GoogleCalendarAdapter, GoogleCalendarAuth
 from helm_observability.logging import get_logger
 from helm_orchestration import (
     CalendarAgentInput,
@@ -79,6 +82,24 @@ def _build_validator_registry() -> ValidatorRegistry:
     )
 
 
+def _build_calendar_adapter() -> GoogleCalendarAdapter | StubCalendarSystemAdapter:
+    """Build a real GoogleCalendarAdapter if credentials are present, else fall back to stub.
+
+    The stub is only acceptable in local dev without credentials. In production all
+    three CALENDAR_* vars must be set — the adapter will raise at init time if missing.
+    """
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    refresh_token = os.getenv("GOOGLE_REFRESH_TOKEN", "").strip()
+    if client_id and client_secret and refresh_token:
+        return GoogleCalendarAdapter(GoogleCalendarAuth())
+    logger.warning(
+        "calendar_adapter_fallback_to_stub",
+        reason="CALENDAR_CLIENT_ID/SECRET/REFRESH_TOKEN not set; calendar sync will be a no-op",
+    )
+    return StubCalendarSystemAdapter()
+
+
 def _build_resume_service(
     session: Session,
     *,
@@ -90,7 +111,7 @@ def _build_resume_service(
             session,
             validator_registry=_build_validator_registry(),
             task_system_adapter=StubTaskSystemAdapter(),
-            calendar_system_adapter=StubCalendarSystemAdapter(),
+            calendar_system_adapter=_build_calendar_adapter(),
         ),
         specialist_steps=handlers,
     )
@@ -230,7 +251,6 @@ def _build_calendar_agent_input(state: WorkflowRunState) -> PreparedSpecialistIn
 
 def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
     request = CalendarAgentInput.model_validate(payload)
-    slots = _candidate_slots(request)
     scheduled_blocks: list[ScheduleBlock] = []
     carry_forward: list[str] = []
     proposed_changes: list[str] = []
@@ -247,23 +267,30 @@ def _run_calendar_agent(payload: object) -> CalendarAgentOutput:
             task.title.lower(),
         )
     )
+
+    slots = _candidate_slots(request)
     for task, slot in zip(tasks, slots, strict=False):
-        end_time = slot + timedelta(minutes=task.estimated_minutes or 60)
+        # Try to parse explicit duration from title (e.g. "10am-12pm" → 120 min)
+        duration_minutes = _parse_duration_from_title(task.title) or task.estimated_minutes or 60
+        # Try to use the explicit start time from the title if present
+        explicit_start = _parse_slot_from_title(task.title, reference_week_start=slot)
+        start = explicit_start if explicit_start is not None else slot
+        end_time = start + timedelta(minutes=duration_minutes)
         scheduled_blocks.append(
             ScheduleBlock(
                 title=task.title,
                 task_title=task.title,
-                start=slot.isoformat().replace("+00:00", "Z"),
+                start=start.isoformat().replace("+00:00", "Z"),
                 end=end_time.isoformat().replace("+00:00", "Z"),
             )
         )
-        change = f"Schedule {task.title} on {_human_day(slot)}."
+        change = f"Schedule {task.title} on {_human_day(start)}."
         if task.deadline:
             change += f" Deadline tracked: {task.deadline}."
         proposed_changes.append(change)
 
     if len(tasks) > len(scheduled_blocks):
-        for task in tasks[len(scheduled_blocks) :]:
+        for task in tasks[len(scheduled_blocks):]:
             carry_forward.append(task.title)
 
     if request.scheduling_constraints:
@@ -304,6 +331,99 @@ def _candidate_slots(request: CalendarAgentInput) -> list[datetime]:
     if protected:
         return [base + timedelta(days=index) for index in range(4)]
     return [base + timedelta(days=index, hours=(index % 2)) for index in range(5)]
+
+
+_DAY_OFFSETS = {
+    "monday": 0, "tuesday": 1, "wednesday": 2,
+    "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
+}
+
+_TIME_PATTERN = re.compile(
+    r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b", re.IGNORECASE
+)
+
+_RANGE_PATTERN = re.compile(
+    r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*[-–]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b",
+    re.IGNORECASE,
+)
+
+
+def _parse_slot_from_title(title: str, *, reference_week_start: datetime) -> datetime | None:
+    """Extract day + start time from a natural title like 'Monday deep work 10am-12pm'.
+
+    Returns a UTC datetime for the named day at the named time, relative to the
+    Monday of the current week (reference_week_start). Returns None if no day or
+    time can be parsed.
+    """
+    lowered = title.lower()
+
+    # Find day offset
+    day_offset: int | None = None
+    for day, offset in _DAY_OFFSETS.items():
+        if day in lowered:
+            day_offset = offset
+            break
+    if day_offset is None:
+        return None
+
+    # Monday of reference week
+    week_monday = reference_week_start - timedelta(days=reference_week_start.weekday())
+    base_day = week_monday + timedelta(days=day_offset)
+
+    # Find start time — prefer a range match (e.g. "10am-12pm"), fall back to first time
+    range_match = _RANGE_PATTERN.search(title)
+    if range_match:
+        hour = int(range_match.group(1))
+        minute = int(range_match.group(2) or 0)
+        # Determine am/pm: use start-side am/pm if present, else infer from end-side
+        start_ampm = range_match.group(3) or range_match.group(6)
+        if start_ampm and start_ampm.lower() == "pm" and hour != 12:
+            hour += 12
+        elif start_ampm and start_ampm.lower() == "am" and hour == 12:
+            hour = 0
+        return base_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    time_match = _TIME_PATTERN.search(title)
+    if time_match:
+        hour = int(time_match.group(1))
+        minute = int(time_match.group(2) or 0)
+        ampm = time_match.group(3).lower()
+        if ampm == "pm" and hour != 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+        return base_day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    # Day found but no time — use 9am default
+    return base_day.replace(hour=9, minute=0, second=0, microsecond=0)
+
+
+def _parse_duration_from_title(title: str) -> int | None:
+    """Parse duration in minutes from a time range in the title, e.g. '10am-12pm' → 120."""
+    match = _RANGE_PATTERN.search(title)
+    if not match:
+        return None
+    try:
+        start_h = int(match.group(1))
+        start_m = int(match.group(2) or 0)
+        start_ampm = (match.group(3) or match.group(6) or "am").lower()
+        end_h = int(match.group(4))
+        end_m = int(match.group(5) or 0)
+        end_ampm = match.group(6).lower()
+
+        if start_ampm == "pm" and start_h != 12:
+            start_h += 12
+        elif start_ampm == "am" and start_h == 12:
+            start_h = 0
+        if end_ampm == "pm" and end_h != 12:
+            end_h += 12
+        elif end_ampm == "am" and end_h == 12:
+            end_h = 0
+
+        duration = (end_h * 60 + end_m) - (start_h * 60 + start_m)
+        return duration if duration > 0 else None
+    except (ValueError, AttributeError):
+        return None
 
 
 def _priority_rank(priority: str | None) -> int:

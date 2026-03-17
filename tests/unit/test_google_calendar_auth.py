@@ -16,9 +16,9 @@ class TestGoogleCalendarAuthInit:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-client-id-123",
-                "CALENDAR_CLIENT_SECRET": "test-client-secret-456",
-                "CALENDAR_REFRESH_TOKEN": "test-refresh-token-789",
+                "GOOGLE_CLIENT_ID": "test-client-id-123",
+                "GOOGLE_CLIENT_SECRET": "test-client-secret-456",
+                "GOOGLE_REFRESH_TOKEN": "test-refresh-token-789",
             },
         ):
             auth = GoogleCalendarAuth()
@@ -28,45 +28,45 @@ class TestGoogleCalendarAuthInit:
             assert auth._credentials is not None
 
     def test_init_failure_missing_client_id(self) -> None:
-        """Initialization fails when CALENDAR_CLIENT_ID is missing."""
+        """Initialization fails when GOOGLE_CLIENT_ID is missing."""
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
             clear=False,
         ):
-            with pytest.raises(ValueError, match="CALENDAR_CLIENT_ID"):
+            with pytest.raises(ValueError, match="GOOGLE_CLIENT_ID"):
                 GoogleCalendarAuth()
 
     def test_init_failure_missing_client_secret(self) -> None:
-        """Initialization fails when CALENDAR_CLIENT_SECRET is missing."""
+        """Initialization fails when GOOGLE_CLIENT_SECRET is missing."""
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
             clear=False,
         ):
-            with pytest.raises(ValueError, match="CALENDAR_CLIENT_SECRET"):
+            with pytest.raises(ValueError, match="GOOGLE_CLIENT_SECRET"):
                 GoogleCalendarAuth()
 
     def test_init_failure_missing_refresh_token(self) -> None:
-        """Initialization fails when CALENDAR_REFRESH_TOKEN is missing."""
+        """Initialization fails when GOOGLE_REFRESH_TOKEN is missing."""
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "",
             },
             clear=False,
         ):
-            with pytest.raises(ValueError, match="CALENDAR_REFRESH_TOKEN"):
+            with pytest.raises(ValueError, match="GOOGLE_REFRESH_TOKEN"):
                 GoogleCalendarAuth()
 
     def test_credentials_initialized_with_refresh_token(self) -> None:
@@ -74,9 +74,9 @@ class TestGoogleCalendarAuthInit:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -104,9 +104,9 @@ class TestGoogleCalendarAuthRefresh:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -130,9 +130,9 @@ class TestGoogleCalendarAuthRefresh:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -156,9 +156,9 @@ class TestGoogleCalendarAuthRefresh:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "invalid-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "invalid-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -180,9 +180,9 @@ class TestGoogleCalendarAuthRefresh:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -204,9 +204,9 @@ class TestGoogleCalendarAuthRefresh:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -228,9 +228,9 @@ class TestGoogleCalendarAuthRefresh:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -254,9 +254,9 @@ class TestGoogleCalendarAuthRefresh:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "invalid-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "invalid-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -285,9 +285,9 @@ class TestGoogleCalendarAuthEnvVarHandling:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "  test-id-with-spaces  ",
-                "CALENDAR_CLIENT_SECRET": "\ttest-secret\t",
-                "CALENDAR_REFRESH_TOKEN": " test-token ",
+                "GOOGLE_CLIENT_ID": "  test-id-with-spaces  ",
+                "GOOGLE_CLIENT_SECRET": "\ttest-secret\t",
+                "GOOGLE_REFRESH_TOKEN": " test-token ",
             },
         ):
             auth = GoogleCalendarAuth()
@@ -300,13 +300,13 @@ class TestGoogleCalendarAuthEnvVarHandling:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "   ",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "   ",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
             clear=False,
         ):
-            with pytest.raises(ValueError, match="CALENDAR_CLIENT_ID"):
+            with pytest.raises(ValueError, match="GOOGLE_CLIENT_ID"):
                 GoogleCalendarAuth()
 
     def test_all_three_env_vars_required(self) -> None:
@@ -315,9 +315,9 @@ class TestGoogleCalendarAuthEnvVarHandling:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
             clear=False,
         ):
@@ -333,9 +333,9 @@ class TestGoogleCalendarAuthTokenExpiry:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
@@ -356,9 +356,9 @@ class TestGoogleCalendarAuthTokenExpiry:
         with patch.dict(
             os.environ,
             {
-                "CALENDAR_CLIENT_ID": "test-id",
-                "CALENDAR_CLIENT_SECRET": "test-secret",
-                "CALENDAR_REFRESH_TOKEN": "test-token",
+                "GOOGLE_CLIENT_ID": "test-id",
+                "GOOGLE_CLIENT_SECRET": "test-secret",
+                "GOOGLE_REFRESH_TOKEN": "test-token",
             },
         ):
             with patch("google.oauth2.credentials.Credentials") as mock_creds_class:

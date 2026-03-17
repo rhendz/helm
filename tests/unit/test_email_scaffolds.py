@@ -89,9 +89,9 @@ def test_pull_new_messages_manual_payload_records_failures_and_keeps_valid() -> 
 
 
 def test_pull_new_messages_returns_empty_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GMAIL_CLIENT_ID", raising=False)
-    monkeypatch.delenv("GMAIL_CLIENT_SECRET", raising=False)
-    monkeypatch.delenv("GMAIL_REFRESH_TOKEN", raising=False)
+    monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
+    monkeypatch.delenv("GOOGLE_REFRESH_TOKEN", raising=False)
     monkeypatch.delenv("GMAIL_USER_EMAIL", raising=False)
     assert pull_new_messages() == []
 
@@ -100,9 +100,9 @@ def test_pull_new_messages_polling_normalizes_provider_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name, value in {
-        "GMAIL_CLIENT_ID": "id",
-        "GMAIL_CLIENT_SECRET": "secret",
-        "GMAIL_REFRESH_TOKEN": "refresh",
+        "GOOGLE_CLIENT_ID": "id",
+        "GOOGLE_CLIENT_SECRET": "secret",
+        "GOOGLE_REFRESH_TOKEN": "refresh",
         "GMAIL_USER_EMAIL": "me@example.com",
     }.items():
         monkeypatch.setenv(name, value)
@@ -164,9 +164,9 @@ def test_pull_changed_messages_history_normalizes_provider_payload_and_cursor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name, value in {
-        "GMAIL_CLIENT_ID": "id",
-        "GMAIL_CLIENT_SECRET": "secret",
-        "GMAIL_REFRESH_TOKEN": "refresh",
+        "GOOGLE_CLIENT_ID": "id",
+        "GOOGLE_CLIENT_SECRET": "secret",
+        "GOOGLE_REFRESH_TOKEN": "refresh",
         "GMAIL_USER_EMAIL": "me@example.com",
     }.items():
         monkeypatch.setenv(name, value)
@@ -242,9 +242,9 @@ def test_pull_changed_messages_bootstraps_to_poll_when_cursor_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name, value in {
-        "GMAIL_CLIENT_ID": "id",
-        "GMAIL_CLIENT_SECRET": "secret",
-        "GMAIL_REFRESH_TOKEN": "refresh",
+        "GOOGLE_CLIENT_ID": "id",
+        "GOOGLE_CLIENT_SECRET": "secret",
+        "GOOGLE_REFRESH_TOKEN": "refresh",
         "GMAIL_USER_EMAIL": "me@example.com",
     }.items():
         monkeypatch.setenv(name, value)
@@ -286,9 +286,9 @@ def test_pull_changed_messages_falls_back_when_history_cursor_is_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name, value in {
-        "GMAIL_CLIENT_ID": "id",
-        "GMAIL_CLIENT_SECRET": "secret",
-        "GMAIL_REFRESH_TOKEN": "refresh",
+        "GOOGLE_CLIENT_ID": "id",
+        "GOOGLE_CLIENT_SECRET": "secret",
+        "GOOGLE_REFRESH_TOKEN": "refresh",
         "GMAIL_USER_EMAIL": "me@example.com",
     }.items():
         monkeypatch.setenv(name, value)

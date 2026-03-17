@@ -17,9 +17,9 @@ if TYPE_CHECKING:
 
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
 _CALENDAR_REQUIRED_ENV_VARS = (
-    "CALENDAR_CLIENT_ID",
-    "CALENDAR_CLIENT_SECRET",
-    "CALENDAR_REFRESH_TOKEN",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_REFRESH_TOKEN",
 )
 
 logger = get_logger("helm_connectors.google_calendar")
@@ -61,9 +61,9 @@ class GoogleCalendarAuth:
             ValueError: If any required environment variable is missing.
         """
         try:
-            self._client_id = _require_env("CALENDAR_CLIENT_ID")
-            self._client_secret = _require_env("CALENDAR_CLIENT_SECRET")
-            self._refresh_token = _require_env("CALENDAR_REFRESH_TOKEN")
+            self._client_id = _require_env("GOOGLE_CLIENT_ID")
+            self._client_secret = _require_env("GOOGLE_CLIENT_SECRET")
+            self._refresh_token = _require_env("GOOGLE_REFRESH_TOKEN")
         except ValueError as exc:
             logger.error("calendar_auth_init_failed", error=str(exc))
             raise
@@ -399,6 +399,21 @@ class GoogleCalendarAdapter:
                 calendarId="primary",
                 eventId=request.external_object_id,
             ).execute()
+
+            # Google returns status='cancelled' for deleted events instead of 404
+            if event.get("status") == "cancelled":
+                logger.info(
+                    "reconcile_calendar_block_event_cancelled",
+                    event_id=request.external_object_id,
+                    planned_item_key=request.planned_item_key,
+                )
+                return SyncLookupResult(
+                    found=False,
+                    external_object_id=request.external_object_id,
+                    payload_fingerprint_matches=None,
+                    provider_state="cancelled",
+                    details={"error": "Event was deleted (status=cancelled)"},
+                )
 
             # Extract and canonicalize live event state
             live_event_fingerprint = self._fingerprint_event(event)

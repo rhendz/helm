@@ -328,9 +328,9 @@ def test_happy_path_regression(monkeypatch) -> None:
         )
 
         # Set up real Google Calendar credentials (mocked below)
-        monkeypatch.setenv("CALENDAR_CLIENT_ID", "test-client-id")
-        monkeypatch.setenv("CALENDAR_CLIENT_SECRET", "test-client-secret")
-        monkeypatch.setenv("CALENDAR_REFRESH_TOKEN", "test-refresh-token")
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+        monkeypatch.setenv("GOOGLE_REFRESH_TOKEN", "test-refresh-token")
 
         # Step 1: Create workflow run
         run_id = _create_workflow_run(
@@ -435,9 +435,9 @@ def test_drift_detection_in_workflow_context(monkeypatch) -> None:
             replay_service, "SessionLocal", lambda: _SessionContext(session)
         )
 
-        monkeypatch.setenv("CALENDAR_CLIENT_ID", "test-client-id")
-        monkeypatch.setenv("CALENDAR_CLIENT_SECRET", "test-client-secret")
-        monkeypatch.setenv("CALENDAR_REFRESH_TOKEN", "test-refresh-token")
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+        monkeypatch.setenv("GOOGLE_REFRESH_TOKEN", "test-refresh-token")
 
         # Step 1: Create workflow and approve
         run_id = _create_workflow_run(client)
@@ -605,9 +605,9 @@ def test_recovery_action_replay(monkeypatch) -> None:
             replay_service, "SessionLocal", lambda: _SessionContext(session)
         )
 
-        monkeypatch.setenv("CALENDAR_CLIENT_ID", "test-client-id")
-        monkeypatch.setenv("CALENDAR_CLIENT_SECRET", "test-client-secret")
-        monkeypatch.setenv("CALENDAR_REFRESH_TOKEN", "test-refresh-token")
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+        monkeypatch.setenv("GOOGLE_REFRESH_TOKEN", "test-refresh-token")
 
         # Step 1: Create workflow with drift (reuse scenario 2 setup)
         run_id = _create_workflow_run(client)
@@ -760,9 +760,9 @@ def test_telegram_sync_visibility(monkeypatch) -> None:
             replay_service, "SessionLocal", lambda: _SessionContext(session)
         )
 
-        monkeypatch.setenv("CALENDAR_CLIENT_ID", "test-client-id")
-        monkeypatch.setenv("CALENDAR_CLIENT_SECRET", "test-client-secret")
-        monkeypatch.setenv("CALENDAR_REFRESH_TOKEN", "test-refresh-token")
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+        monkeypatch.setenv("GOOGLE_REFRESH_TOKEN", "test-refresh-token")
 
         # Step 1: Create workflow with multiple tasks (generates multiple syncs)
         run_id = _create_workflow_run(
@@ -912,9 +912,9 @@ def test_partial_failure_mixed_outcomes(monkeypatch) -> None:
             replay_service, "SessionLocal", lambda: _SessionContext(session)
         )
 
-        monkeypatch.setenv("CALENDAR_CLIENT_ID", "test-client-id")
-        monkeypatch.setenv("CALENDAR_CLIENT_SECRET", "test-client-secret")
-        monkeypatch.setenv("CALENDAR_REFRESH_TOKEN", "test-refresh-token")
+        monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+        monkeypatch.setenv("GOOGLE_REFRESH_TOKEN", "test-refresh-token")
 
         # Step 1: Create and approve workflow
         run_id = _create_workflow_run(client)
