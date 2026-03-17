@@ -51,7 +51,7 @@
   - Verify: `pytest tests/unit/test_scheduling_primitives.py -v` → all pass; `pytest tests/unit/test_task_inference.py -v` → still passes (no regression)
   - Done when: all new primitive tests pass and existing S01 unit tests are unaffected
 
-- [ ] **T02: Add OPERATOR_TIMEZONE to RuntimeAppSettings and fix test environment** `est:30m`
+- [x] **T02: Add OPERATOR_TIMEZONE to RuntimeAppSettings and fix test environment** `est:30m`
   - Why: `OPERATOR_TIMEZONE` must be required config with fail-fast validation before any scheduling work runs. Adding it as a required field on `RuntimeAppSettings` will break any unit/integration test that instantiates a settings subclass without the env var — a `conftest.py` at `tests/` level is the cleanest fix.
   - Files: `packages/runtime/src/helm_runtime/config.py`, `tests/conftest.py` (new), `.env.example`
   - Do: Add `operator_timezone: str` field with a `field_validator` that calls `ZoneInfo(value)` to validate at init; create `tests/conftest.py` autouse fixture that sets `OPERATOR_TIMEZONE=America/Los_Angeles` for all tests; add the var to `.env.example`

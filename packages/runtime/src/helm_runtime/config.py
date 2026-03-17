@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,3 +22,16 @@ class RuntimeSettings(BaseSettings):
 class RuntimeAppSettings(RuntimeSettings):
     app_env: str = "local"
     log_level: str = "INFO"
+    operator_timezone: str  # required — no default; fails fast if unset or invalid
+
+    @field_validator("operator_timezone")
+    @classmethod
+    def validate_operator_timezone(cls, v: str) -> str:
+        try:
+            ZoneInfo(v)
+        except (ZoneInfoNotFoundError, KeyError) as exc:
+            raise ValueError(
+                f"OPERATOR_TIMEZONE '{v}' is not a valid IANA timezone string. "
+                f"Example: 'America/Los_Angeles'"
+            ) from exc
+        return v
