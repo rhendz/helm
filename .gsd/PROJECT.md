@@ -11,10 +11,13 @@ The operator can add a task through Telegram and trust that it lands on Calendar
 ## Current State
 
 - M001–M003 complete: durable workflow kernel, truth-set cleanup, real Google Calendar OAuth integration with drift detection.
-- M004 in progress (S01 complete): `/task` command wired — persists workflow run immediately, infers semantics via LLM (TaskSemantics: urgency/priority/sizing/confidence), evaluates ConditionalApprovalPolicy (confidence≥0.8 AND sizing≤120min→auto-approve), pushes outcome to operator. 385 tests passing.
-- Timezone handling, calendar placement, OPERATOR_TIMEZONE config, and shared scheduling primitives are next (S02).
+- M004 in progress (S01 + S02 complete):
+  - S01: `/task` command wired — persists workflow run immediately, infers semantics via LLM (TaskSemantics: urgency/priority/sizing/confidence), evaluates ConditionalApprovalPolicy (confidence≥0.8 AND sizing≤120min→auto-approve), pushes outcome to operator.
+  - S02: Timezone correctness and shared scheduling primitives shipped — `OPERATOR_TIMEZONE` is required config (fail-fast at startup); `compute_reference_week`/`parse_local_slot`/`to_utc`/`past_event_guard` are pure shared primitives in `helm_orchestration`; hardcoded UTC date and RFC3339 hack removed from `workflow_runs.py`; 53/53 integration tests pass.
+- 440/441 tests passing (1 pre-existing unrelated study agent failure).
+- Next: S03 — immediate inline execution path for `/task` and `/approve` using corrected scheduling behavior.
 - Worker polling interval is 30s, causing 2–3 minute latency for simple operator actions — direct execution path is S03.
-- Test suite exercises the scheduling path against stubs only — no real calendar datetime correctness verification (S05).
+- Test suite exercises the scheduling path with correct primitives, but no real calendar datetime correctness verification against staging (S05).
 
 ## Architecture / Key Patterns
 
