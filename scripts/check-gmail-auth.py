@@ -19,7 +19,7 @@ REQUIRED_ENV_VARS = (
     "GMAIL_REFRESH_TOKEN",
     "GMAIL_USER_EMAIL",
 )
-GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
 
 
 def _require_env_var(name: str) -> str:

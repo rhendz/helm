@@ -1488,7 +1488,7 @@ class WorkflowOrchestrationService:
                     operation=SyncOperation.CALENDAR_BLOCK_UPSERT,
                     planned_item_key=f"calendar:{_slugify(block.title)}:{index}",
                     execution_order=execution_order,
-                    payload_fingerprint=_payload_fingerprint(calendar_payload),
+                    payload_fingerprint=_calendar_sync_fingerprint(calendar_payload),
                     payload=calendar_payload,
                 )
             )
@@ -1952,6 +1952,45 @@ def _now() -> datetime:
 def _payload_fingerprint(payload: dict[str, Any]) -> str:
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return f"sha256:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
+
+
+def _calendar_sync_fingerprint(payload: dict[str, Any]) -> str:
+    """Compute a fingerprint of the calendar-observable fields (title, start, end).
+
+    This produces a raw JSON fingerprint that matches what GoogleCalendarAdapter
+    produces from live event data, enabling drift detection via direct comparison.
+
+    Datetimes are normalized to UTC ISO format to survive Google's timezone
+    conversion (Google returns events with local offset, not the stored UTC value).
+
+    Args:
+        payload: Calendar sync payload dict with title, start, end keys.
+
+    Returns:
+        Canonical JSON string (sorted keys) of {title, start_utc, end_utc, description}.
+    """
+    from datetime import timezone as _tz
+
+    def _to_utc_isoformat(dt_str: str) -> str:
+        if not dt_str:
+            return ""
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(_tz.utc)
+            # Truncate to seconds — Google strips sub-second precision on round-trip
+            dt = dt.replace(microsecond=0)
+            return dt.isoformat()
+        except ValueError:
+            return dt_str
+
+    fingerprint_data = {
+        "title": payload.get("title", ""),
+        "start": _to_utc_isoformat(payload.get("start", "")),
+        "end": _to_utc_isoformat(payload.get("end", "")),
+        "description": payload.get("description", ""),
+    }
+    return json.dumps(fingerprint_data, sort_keys=True, separators=(",", ":"))
 
 
 def _sync_idempotency_key(item: ApprovedSyncItem) -> str:

@@ -485,22 +485,41 @@ class GoogleCalendarAdapter:
 
     def _fingerprint_event(self, event: dict[str, Any]) -> str:
         """Create a canonical JSON fingerprint of a calendar event.
-        
+
         Extracts title, start.dateTime, end.dateTime, and description from
-        the event, canonicalizes to sorted JSON for comparison against stored
-        payload_fingerprint.
-        
+        the event and normalizes datetimes to UTC ISO format. This matches
+        the format produced by _calendar_sync_fingerprint in the workflow,
+        enabling direct comparison for drift detection.
+
+        Google Calendar returns datetimes with the calendar's local timezone
+        offset (e.g. -07:00) regardless of how they were stored. Normalizing
+        to UTC ensures fingerprints match across timezones.
+
         Args:
             event: Google Calendar event dict (result from events().get().execute()).
-            
+
         Returns:
-            Canonical JSON string (sorted keys) representing event state.
+            Canonical JSON string (sorted keys) representing event state in UTC.
         """
-        # Extract relevant fields
+        from datetime import timezone as _tz
+
+        def _normalize_dt(dt_str: str) -> str:
+            if not dt_str:
+                return ""
+            try:
+                dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone(_tz.utc)
+                # Truncate to seconds — Google strips sub-second precision on round-trip
+                dt = dt.replace(microsecond=0)
+                return dt.isoformat()
+            except ValueError:
+                return dt_str
+
         fingerprint_data = {
             "title": event.get("summary", ""),
-            "start": event.get("start", {}).get("dateTime", ""),
-            "end": event.get("end", {}).get("dateTime", ""),
+            "start": _normalize_dt(event.get("start", {}).get("dateTime", "")),
+            "end": _normalize_dt(event.get("end", {}).get("dateTime", "")),
             "description": event.get("description", ""),
         }
         # Canonical JSON: sorted keys, no whitespace, for deterministic comparison
