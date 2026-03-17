@@ -10,7 +10,7 @@
 - Source: user
 - Primary owning slice: M004/S01
 - Supporting slices: M004/S03, M004/S04
-- Validation: unmapped
+- Validation: S01 proves: task record persisted before async work (workflow_type="task_quick_add" DB row created at ack time); operator notified of outcome (success or error push). Calendar placement and full execution path validated in S02/S03.
 - Notes: Task record must be persisted before placement/sync begins. `/task` is a new fast path, not a replacement for the weekly scheduling workflow.
 
 ### R101 — LLM-based task semantic inference
@@ -21,7 +21,8 @@
 - Source: user
 - Primary owning slice: M004/S01
 - Supporting slices: M004/S02
-- Validation: unmapped
+- Validation: S01 proves: LLMClient.infer_task_semantics() exists with responses.parse structured output pattern; TaskSemantics model correctly captures urgency/priority/sizing_minutes/confidence fields; mocked inference tests validate data shape. Live API validation deferred to S02/S03.
+- Notes: Inference output feeds into both /task and weekly scheduling paths via ConditionalApprovalPolicy.
 - Notes: Inference runs via LLM (OpenAI). Output feeds into both `/task` and weekly scheduling paths. Shared primitive.
 
 ### R102 — OPERATOR_TIMEZONE as required config, fail-fast on missing/invalid
@@ -87,7 +88,7 @@
 - Source: user
 - Primary owning slice: M004/S01
 - Supporting slices: M004/S04
-- Validation: unmapped
+- Validation: S01 proves: ConditionalApprovalPolicy.evaluate() returns APPROVE for confidence≥0.8 AND sizing≤120min; returns REQUEST_REVISION for either condition failing; exact boundary values verified (0.79→REVISION, 0.80→APPROVE, 120→APPROVE, 121→REVISION). Live calendar placement validation deferred to S02/S03.
 - Notes: Policy is a shared primitive used by both `/task` and weekly scheduling.
 
 ### R108 — Proactive approval notifications via Telegram push
@@ -305,14 +306,14 @@
 
 | ID | Class | Status | Primary owner | Supporting | Proof |
 |----|-------|--------|---------------|------------|-------|
-| R100 | primary-user-loop | active | M004/S01 | M004/S03, S04 | unmapped |
-| R101 | core-capability | active | M004/S01 | M004/S02 | unmapped |
+| R100 | primary-user-loop | active | M004/S01 | M004/S03, S04 | S01: DB-persisted run + outcome notification proven at contract level |
+| R101 | core-capability | active | M004/S01 | M004/S02 | S01: inference method + TaskSemantics model proven at contract level |
 | R102 | constraint | active | M004/S02 | M004/S04 | unmapped |
 | R103 | core-capability | active | M004/S02 | M004/S05 | unmapped |
 | R104 | quality-attribute | active | M004/S02 | none | unmapped |
 | R105 | core-capability | active | M004/S02 | none | unmapped |
 | R106 | operability | active | M004/S03 | M004/S01 | unmapped |
-| R107 | core-capability | active | M004/S01 | M004/S04 | unmapped |
+| R107 | core-capability | active | M004/S01 | M004/S04 | S01: ConditionalApprovalPolicy boundary values proven (15 unit tests) |
 | R108 | operability | active | M004/S04 | M004/S03 | unmapped |
 | R109 | operability | active | M004/S04 | none | unmapped |
 | R110 | operability | active | M004/S04 | none | unmapped |

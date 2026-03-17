@@ -62,7 +62,7 @@ This milestone is complete only when all are true:
 
 ## Slices
 
-- [ ] **S01: Task inference engine and `/task` quick-add** `risk:high` `depends:[]`
+- [x] **S01: Task inference engine and `/task` quick-add** `risk:high` `depends:[]`
   > After this: `/task need to book flights this week` creates a task in the DB with inferred urgency/priority/sizing and replies with a concise confirmation — task record persisted immediately, calendar placement flows async
 
 - [ ] **S02: Timezone correctness and shared scheduling primitives** `risk:high` `depends:[S01]`
