@@ -77,7 +77,7 @@
 - Source: user
 - Primary owning slice: M004/S03
 - Supporting slices: M004/S01
-- Validation: unmapped
+- Validation: S03 proves at contract level: 10 unit tests confirm `/task` background coroutine calls `complete_current_step` inline; `/approve` calls `resume_run` inline immediately after `approve_run()` succeeds; worker recovery handler registered under `("task_quick_add", "infer_task_semantics")` for polling-based recovery of orphaned runs.
 - Notes: Implementation: trigger step execution inline from the Telegram handler (or via a minimal fast queue) after state is persisted. Polling remains for steps that were left runnable but not yet picked up.
 
 ### R107 — Conditional approval policy: auto-place on high confidence + low disruption; ask otherwise
@@ -312,7 +312,7 @@
 | R103 | core-capability | active | M004/S02 | M004/S05 | unmapped |
 | R104 | quality-attribute | active | M004/S02 | none | unmapped |
 | R105 | core-capability | active | M004/S02 | none | unmapped |
-| R106 | operability | active | M004/S03 | M004/S01 | unmapped |
+| R106 | operability | active | M004/S03 | M004/S01 | S03: inline execution paths proven at contract level (10 unit tests; `/task` → `complete_current_step`; `/approve` → `resume_run`; worker recovery handler registered) |
 | R107 | core-capability | active | M004/S01 | M004/S04 | S01: ConditionalApprovalPolicy boundary values proven (15 unit tests) |
 | R108 | operability | active | M004/S04 | M004/S03 | unmapped |
 | R109 | operability | active | M004/S04 | none | unmapped |

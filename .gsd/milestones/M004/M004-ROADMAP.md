@@ -68,7 +68,7 @@ This milestone is complete only when all are true:
 - [x] **S02: Timezone correctness and shared scheduling primitives** `risk:high` `depends:[S01]`
   > After this: weekly scheduling request schedules "Monday 10am" at the correct local time in Calendar; past-event guard rejects stale writes; `/task` and weekly workflow share the same timezone/inference/approval/calendar-write primitives — no duplicated legacy logic
 
-- [ ] **S03: Immediate execution path for operator actions** `risk:medium` `depends:[S01,S02]`
+- [x] **S03: Immediate execution path for operator actions** `risk:medium` `depends:[S01,S02]`
   > After this: `/task` and `/approve` complete within seconds using corrected scheduling behavior; polling loop retained only for background recovery of orphaned runnable steps
 
 - [ ] **S04: Telegram UX overhaul and proactive notifications** `risk:medium` `depends:[S01,S02,S03]`
