@@ -10,7 +10,7 @@ from typing import Any
 
 from helm_observability.logging import get_logger
 
-GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
 GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 _GMAIL_REQUIRED_ENV_VARS = (
     "GOOGLE_CLIENT_ID",
@@ -588,7 +588,7 @@ def send_reply(
         raise GmailSendError("invalid_payload", "Reply body is required.")
 
     try:
-        service = _build_gmail_service(scopes=[GMAIL_SEND_SCOPE])
+        service = _build_gmail_service(scopes=[GMAIL_SCOPE])
     except ImportError as exc:
         raise GmailSendError("auth_error", "Gmail send dependencies are unavailable.") from exc
     except ValueError as exc:

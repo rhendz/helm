@@ -25,6 +25,7 @@ from urllib.parse import urlencode
 SCOPES = " ".join([
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
 ])
 REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
