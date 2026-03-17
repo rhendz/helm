@@ -27,6 +27,33 @@ def _next_actions(run: dict[str, object]) -> list[str]:
     return labels
 
 
+_TELEGRAM_MAX_MESSAGE_LEN = 4096
+
+
+async def _send_paginated(update: Update, text: str) -> None:
+    """Send text in chunks that fit within Telegram's 4096-char message limit."""
+    limit = _TELEGRAM_MAX_MESSAGE_LEN
+    if len(text) <= limit:
+        await update.message.reply_text(text)
+        return
+    # Split on double-newline (run boundaries) to avoid cutting mid-run
+    chunks: list[str] = []
+    current = ""
+    for block in text.split("\n\n"):
+        candidate = (current + "\n\n" + block).lstrip("\n") if current else block
+        if len(candidate) > limit:
+            if current:
+                chunks.append(current)
+            current = block
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+    for i, chunk in enumerate(chunks):
+        suffix = f"\n…({i+1}/{len(chunks)})" if len(chunks) > 1 else ""
+        await update.message.reply_text(chunk + suffix)
+
+
 def _format_run(run: dict[str, object]) -> str:
     step = run.get("current_step") or "n/a"
     paused_state = run.get("paused_state") or "active"
@@ -182,7 +209,7 @@ async def recent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not runs:
         await update.message.reply_text("No workflow runs.")
         return
-    await update.message.reply_text("\n\n".join(_format_run(run) for run in runs))
+    await _send_paginated(update, "\n\n".join(_format_run(run) for run in runs))
 
 
 async def needs_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -194,7 +221,7 @@ async def needs_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not runs:
         await update.message.reply_text("No workflow runs need action.")
         return
-    await update.message.reply_text("\n\n".join(_format_run(run) for run in runs))
+    await _send_paginated(update, "\n\n".join(_format_run(run) for run in runs))
 
 
 async def retry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
