@@ -60,3 +60,20 @@ Uses the same test stub pattern as `tests/unit/test_task_command.py` — `_Messa
 ## Expected Output
 
 - `tests/unit/test_task_execution.py` — 9+ tests covering all execution paths, error cases, and worker recovery; all passing
+
+## Observability Impact
+
+**Signals changed by this task:** None — this is a pure test file. No new runtime signals are added.
+
+**How a future agent inspects this task:**
+- Run `uv run --frozen --extra dev pytest tests/unit/test_task_execution.py -v` to see all 10 tests and their pass/fail state.
+- Each test directly exercises a specific runtime code path (e.g., `_run_task_async`, `approve.handle`, `_build_specialist_steps`) via monkeypatching — so if production code regresses, specific tests fail with clear names pointing to the broken path.
+- The structlog signals (`task_execution_complete`, `task_execution_failed`, `task_execution_past_time`, `approve_inline_execution_failed`) from T01 remain the runtime observability surface; these tests verify the *code paths* that emit those signals.
+
+**Failure visibility:**
+- If `test_run_task_async_needs_action_sends_approval_notification` fails: the approval notification message no longer contains run_id + artifact_id + `/approve` hint — operator won't know how to approve.
+- If `test_approve_inline_execution_failure_still_confirms_approval` fails: approve fallback path broken — operator could get no reply on inline execution error.
+- If `test_build_specialist_steps_includes_task_quick_add` fails: worker recovery won't pick up orphaned `task_quick_add` runs from the polling loop.
+- If `test_task_quick_add_step_handler_produces_schedule_proposal` fails: the recovery step would produce wrong artifact type or advance to the wrong next step, breaking the approval checkpoint chain.
+
+**Redaction constraints:** No secrets in test data — all fixtures use hardcoded IDs and strings.
