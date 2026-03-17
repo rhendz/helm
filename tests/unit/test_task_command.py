@@ -1,18 +1,10 @@
-"""Unit tests for the /task command handler (task.py).
-
-Follows the same stub pattern as test_workflow_telegram_commands.py:
-  - _Message captures replies
-  - _Update wraps message + effective_user
-  - _Context wraps args + application stub
-"""
 from __future__ import annotations
 
 import asyncio
 from unittest.mock import MagicMock
 
 import pytest
-from helm_orchestration import ApprovalAction, TaskSemantics
-from helm_orchestration.schemas import ApprovalDecision
+from helm_orchestration import TaskSemantics
 from helm_telegram_bot.commands import task
 
 
@@ -131,89 +123,92 @@ async def test_task_background_task_created(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 # ---------------------------------------------------------------------------
-# Test: successful inference → formatted outcome with auto-approve
+# Test: successful inference → approval notification with needs_action=True
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_task_successful_inference_auto_approved(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_task_successful_inference_approval_notification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_run_task_async with execute_task_run returning needs_action=True → approval notification."""
     fixed_semantics = TaskSemantics(
         urgency="high",
         priority="high",
         sizing_minutes=30,
         confidence=0.95,
     )
-    fixed_decision = ApprovalDecision(
-        action=ApprovalAction.APPROVE,
-        actor="system:conditional_policy",
-        target_artifact_id=0,
-    )
 
     class _FakeLLMClient:
         def infer_task_semantics(self, text: str) -> TaskSemantics:
             return fixed_semantics
 
-    class _FakePolicy:
-        def evaluate(self, semantics: TaskSemantics) -> ApprovalDecision:
-            return fixed_decision
+    class _FakeService:
+        def execute_task_run(
+            self, run_id: int, *, semantics: TaskSemantics, request_text: str
+        ) -> dict[str, object]:
+            return {
+                "id": run_id,
+                "status": "blocked",
+                "needs_action": True,
+                "approval_checkpoint": {
+                    "target_artifact_id": 77,
+                    "proposal_summary": "Schedule: book flights",
+                },
+            }
 
     monkeypatch.setattr(task, "LLMClient", _FakeLLMClient)
-    monkeypatch.setattr(task, "_policy", _FakePolicy())
+    monkeypatch.setattr(task, "_service", _FakeService())
 
     update = _Update()
     await task._run_task_async(update, "book flights", run_id=99)
 
     assert len(update.message.replies) == 1
     reply = update.message.replies[0]
-    assert "Task Analysis" in reply
+    assert "⏳" in reply
     assert "run 99" in reply
-    assert "high" in reply  # urgency
-    assert "30min" in reply  # sizing
-    assert "95%" in reply  # confidence
-    assert "Auto-approved" in reply
-    assert "✅" in reply
+    assert "/approve 99 77" in reply
+    assert "Schedule proposal ready" in reply
 
 
 # ---------------------------------------------------------------------------
-# Test: successful inference → needs review (low confidence)
+# Test: successful inference → completion notification with needs_action=False
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_task_successful_inference_needs_review(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_task_successful_inference_completed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_run_task_async with execute_task_run returning needs_action=False → success notification."""
     fixed_semantics = TaskSemantics(
-        urgency="low",
-        priority="medium",
-        sizing_minutes=180,
-        confidence=0.60,
-    )
-    fixed_decision = ApprovalDecision(
-        action=ApprovalAction.REQUEST_REVISION,
-        actor="system:conditional_policy",
-        target_artifact_id=0,
-        revision_feedback="Confidence or sizing outside auto-approve thresholds",
+        urgency="high",
+        priority="high",
+        sizing_minutes=30,
+        confidence=0.95,
     )
 
     class _FakeLLMClient:
         def infer_task_semantics(self, text: str) -> TaskSemantics:
             return fixed_semantics
 
-    class _FakePolicy:
-        def evaluate(self, semantics: TaskSemantics) -> ApprovalDecision:
-            return fixed_decision
+    class _FakeService:
+        def execute_task_run(
+            self, run_id: int, *, semantics: TaskSemantics, request_text: str
+        ) -> dict[str, object]:
+            return {
+                "id": run_id,
+                "status": "completed",
+                "needs_action": False,
+                "approval_checkpoint": None,
+            }
 
     monkeypatch.setattr(task, "LLMClient", _FakeLLMClient)
-    monkeypatch.setattr(task, "_policy", _FakePolicy())
+    monkeypatch.setattr(task, "_service", _FakeService())
 
     update = _Update()
-    await task._run_task_async(update, "refactor entire codebase", run_id=55)
+    await task._run_task_async(update, "book flights", run_id=55)
 
+    assert len(update.message.replies) == 1
     reply = update.message.replies[0]
-    assert "Needs review" in reply
-    assert "⚠️" in reply
-    assert "Reason: Confidence or sizing outside auto-approve thresholds" in reply
-    assert "180min" in reply
-    assert "60%" in reply
+    assert "✅" in reply
+    assert "55" in reply
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +217,7 @@ async def test_task_successful_inference_needs_review(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
-async def test_task_inference_failure_pushes_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_task_execution_failure_pushes_error_message(monkeypatch: pytest.MonkeyPatch) -> None:
     class _FakeLLMClient:
         def infer_task_semantics(self, text: str) -> TaskSemantics:
             raise RuntimeError("OpenAI connection timeout")
@@ -235,7 +230,7 @@ async def test_task_inference_failure_pushes_error_message(monkeypatch: pytest.M
     assert len(update.message.replies) == 1
     reply = update.message.replies[0]
     assert "❌" in reply
-    assert "Task analysis failed" in reply
+    assert "Task execution failed" in reply
     assert "13" in reply  # run_id in error message
     assert "/task" in reply  # retry hint
 
@@ -283,3 +278,4 @@ def test_start_task_run_uses_task_quick_add_workflow_type(monkeypatch: pytest.Mo
     # WorkflowRunCreateInput is a Pydantic/dataclass object with attributes
     assert payload.workflow_type == "task_quick_add"
     assert payload.first_step_name == "infer_task_semantics"
+

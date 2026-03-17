@@ -30,6 +30,7 @@ class WorkflowArtifactKind(StrEnum):
 class SpecialistName(StrEnum):
     TASK_AGENT = "task_agent"
     CALENDAR_AGENT = "calendar_agent"
+    TASK_INFERENCE = "task_inference"
 
 
 class ValidationTargetKind(StrEnum):

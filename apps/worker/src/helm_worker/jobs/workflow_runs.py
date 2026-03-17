@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_connectors.google_calendar import GoogleCalendarAdapter, GoogleCalendarAuth
+from helm_llm.client import LLMClient
 from helm_observability.logging import get_logger
 from helm_orchestration import (
     CalendarAgentInput,
@@ -149,7 +150,76 @@ def _build_specialist_steps() -> dict[tuple[str, str], WorkflowSpecialistStep]:
         artifact_type=WorkflowArtifactKind.SCHEDULE_PROPOSAL,
         next_step_name="apply_schedule",
     )
-    return {task_step.key: task_step, calendar_step.key: calendar_step}
+    task_inference_step = _build_task_quick_add_step()
+    return {
+        task_step.key: task_step,
+        calendar_step.key: calendar_step,
+        task_inference_step.key: task_inference_step,
+    }
+
+
+def _build_task_quick_add_step() -> WorkflowSpecialistStep:
+    """Build the worker-recovery step handler for task_quick_add runs.
+
+    This handler is invoked by the polling loop for orphaned runs where the Telegram
+    handler's inline path never called complete_current_step (e.g. crash before completion).
+    It performs the full inference + CalendarAgentOutput construction so the run can
+    advance to the approval checkpoint.
+    """
+    return WorkflowSpecialistStep(
+        workflow_type="task_quick_add",
+        step_name="infer_task_semantics",
+        specialist=SpecialistName.TASK_INFERENCE,
+        input_builder=_build_task_quick_add_input,
+        handler=_run_task_inference,
+        artifact_type=WorkflowArtifactKind.SCHEDULE_PROPOSAL,
+        next_step_name="apply_schedule",
+    )
+
+
+def _build_task_quick_add_input(state: WorkflowRunState) -> PreparedSpecialistInput:
+    request_artifact = state.latest_artifacts[WorkflowArtifactType.RAW_REQUEST.value]
+    return PreparedSpecialistInput(
+        input_artifact_id=request_artifact.id,
+        payload=request_artifact.payload["request_text"],
+    )
+
+
+def _run_task_inference(payload: object) -> CalendarAgentOutput:
+    """Worker recovery handler: infer semantics and build a CalendarAgentOutput."""
+    request_text = str(payload)
+    tz = ZoneInfo(settings.operator_timezone)
+    semantics = LLMClient().infer_task_semantics(request_text)
+
+    week_start = compute_reference_week(tz)
+    local_start = parse_local_slot(request_text, week_start, tz)
+    if local_start is None:
+        local_start = week_start.replace(hour=9, minute=0, second=0, microsecond=0)
+    start_utc = to_utc(local_start, tz)
+    end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
+
+    try:
+        past_event_guard(start_utc, tz)
+    except PastEventError as exc:
+        logger.warning(
+            "task_quick_add_past_event_guard_triggered",
+            request_text=request_text,
+            reason=str(exc),
+        )
+        raise
+
+    block = ScheduleBlock(
+        title=request_text,
+        task_title=request_text,
+        start=start_utc.isoformat(),
+        end=end_utc.isoformat(),
+    )
+    return CalendarAgentOutput(
+        proposal_summary=f"Schedule: {request_text}",
+        calendar_id="primary",
+        time_blocks=(block,),
+        proposed_changes=(f"Schedule {request_text}",),
+    )
 
 
 def _build_task_agent_input(state: WorkflowRunState) -> PreparedSpecialistInput:
