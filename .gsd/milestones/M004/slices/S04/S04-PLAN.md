@@ -60,14 +60,14 @@
   - Verify: `pytest tests/unit/test_status_command.py -v` → all pass; `python -c "from helm_telegram_bot.commands import status; print('ok')"` → clean import
   - Done when: `/status` handler function exists with 5+ unit tests covering pending approvals format, recent completions format, empty state, and timezone display; `notify_approval_needed` method added to `TelegramDigestDeliveryService` with test
 
-- [ ] **T02: Add `list_today_events` to GoogleCalendarAdapter and build `/agenda` command** `est:45m`
+- [x] **T02: Add `list_today_events` to GoogleCalendarAdapter and build `/agenda` command** `est:45m`
   - Why: Closes R110 (`/agenda` shows today's calendar events in local time). `list_today_events` is the only net-new non-trivial code in S04 — it calls the Google Calendar API and must handle both timed and all-day event formats. The command is a thin formatter over this method.
   - Files: `packages/connectors/src/helm_connectors/google_calendar.py`, `apps/telegram-bot/src/helm_telegram_bot/commands/agenda.py` (new), `tests/unit/test_agenda_command.py` (new)
   - Do: See T02-PLAN.md
   - Verify: `pytest tests/unit/test_agenda_command.py -v` → all pass; `python -c "from helm_telegram_bot.commands import agenda; print('ok')"` → clean import
   - Done when: `GoogleCalendarAdapter.list_today_events(calendar_id)` exists and handles both `start.dateTime` and `start.date` event shapes; `/agenda` command handles stub/no-credentials gracefully; 5+ unit tests covering timed events, all-day events, empty calendar, and no-credentials case
 
-- [ ] **T03: Wire proactive notification into worker and register both new commands** `est:30m`
+- [x] **T03: Wire proactive notification into worker and register both new commands** `est:30m`
   - Why: Closes R108 (proactive approval notification), R111 (concise default output), and R102's remaining gap (timezone in `/status` output). This task wires the `notify_approval_needed` method from T01 into the worker's `run()` function so weekly workflow approval checkpoints push without polling. It also registers both new commands in `main.py` and adds the proactive notification unit tests.
   - Files: `apps/worker/src/helm_worker/jobs/workflow_runs.py`, `apps/telegram-bot/src/helm_telegram_bot/main.py`, `tests/unit/test_worker_notification.py` (new)
   - Do: See T03-PLAN.md
