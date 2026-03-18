@@ -24,10 +24,14 @@ The operator can add a task through Telegram and trust that it lands on Calendar
 - Python monorepo: `apps/` (api, worker, telegram-bot) and `packages/` (orchestration, storage, connectors, agents, llm, observability, runtime).
 - DB-first: Postgres is the source of truth for workflow state, artifacts, sync records, tasks.
 - Custom step-runner in `packages/orchestration` — not LangGraph. Specialist steps registered in `apps/worker/jobs/workflow_runs.py`.
-- Worker polls every 30s for runnable steps (target: reduce to background-only after M004 direct execution path).
-- Telegram bot is the primary operator surface. Proactive push via `TelegramDigestDeliveryService` (bot.send_message) exists but is only used for digests today.
-- Google Calendar adapter in `packages/connectors/src/helm_connectors/google_calendar.py` — correct RFC3339 formatting, but no operator timezone awareness upstream.
-- LLM via `packages/llm` (OpenAI). Currently unused in the scheduling path — `_run_task_agent` is pure Python with no inference.
+- Worker polls every 30s for runnable steps — background recovery only; operator-triggered actions (`/task`, `/approve`) execute inline immediately.
+- Telegram bot is the primary operator surface. Proactive approval push via `TelegramDigestDeliveryService.notify_approval_needed()` fires from the worker notification loop for any `needs_action=True` run.
+- Shared scheduling primitives in `packages/orchestration/src/helm_orchestration/scheduling.py` — `compute_reference_week`, `parse_local_slot`, `to_utc`, `past_event_guard`. Both `/task` and weekly scheduling use these; no duplicated logic.
+- `OPERATOR_TIMEZONE` (IANA) is required config; validated at startup via `ZoneInfo`. All local time interpretation uses this timezone; UTC conversion only at storage/API boundaries.
+- LLM task inference via `packages/llm` (OpenAI `responses.parse`). `LLMClient.infer_task_semantics()` extracts urgency/priority/sizing/confidence from natural language.
+- Google Calendar adapter in `packages/connectors/src/helm_connectors/google_calendar.py` — `calendar_id` flows from proposal through payload chain; never hardcoded.
+- APM via `ddtrace` (optional dev dep): `helm.task.run` and `helm.task.inference` spans on `/task` path with try/except guard (D018). Structured logs via `structlog` are the primary observability surface.
+- Live reload: both `apps/worker` and `apps/telegram-bot` use `python -m watchfiles --filter python` in their run scripts.
 - `uv` for dependency management. `uv.lock` present.
 
 ## Capability Contract
