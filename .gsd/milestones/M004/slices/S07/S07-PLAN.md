@@ -36,7 +36,7 @@
 
 ## Tasks
 
-- [ ] **T01: Add proactive notification loop to workflow_runs.run() and write tests** `est:30m`
+- [x] **T01: Add proactive notification loop to workflow_runs.run() and write tests** `est:30m`
   - Why: The notification loop is the only missing production wiring in M004 — without it, the worker silently resumes runs that need approval without notifying the operator. The `/status` command registration is already done (verified: `CommandHandler("status", status.handle)` exists at line 100 of `main.py`). This task adds the loop, fixes the existing test fake states, and writes new tests.
   - Files: `apps/worker/src/helm_worker/jobs/workflow_runs.py`, `tests/unit/test_worker_notification.py`, `tests/unit/test_worker_registry.py`
   - Do: (1) Add notification loop to `run()` after `resume_runnable_runs()` — iterate `resumed`, skip if `not state.run.needs_action`, extract `proposal_summary` from `state.latest_artifacts`, lazily import and call `TelegramDigestDeliveryService().notify_approval_needed()`, wrap each dispatch in `try/except Exception`. (2) Fix `_FakeResumeService` in `test_worker_registry.py` to return fake states with `.run.needs_action=False` instead of bare `object()`. (3) Write `test_worker_notification.py` with 3+ tests covering dispatch, no-op, and failure isolation.

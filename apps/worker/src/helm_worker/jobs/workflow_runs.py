@@ -63,7 +63,35 @@ def run(*, handlers: dict[tuple[str, str], WorkflowSpecialistStep] | None = None
         resume_service = _build_resume_service(session, handlers=configured_handlers)
         resumed = resume_service.resume_runnable_runs()
         logger.info("workflow_runs_job_processed", resumed_count=len(resumed))
-        return len(resumed)
+
+    # Fire proactive notifications for any run that reached needs_action=True
+    for state in resumed:
+        if not state.run.needs_action:
+            continue
+        try:
+            from helm_telegram_bot.services.digest_delivery import TelegramDigestDeliveryService
+            proposal_summary = ""
+            schedule_proposal = state.latest_artifacts.get(
+                WorkflowArtifactType.SCHEDULE_PROPOSAL.value
+            )
+            if schedule_proposal is not None:
+                proposal_summary = schedule_proposal.payload.get("proposal_summary") or ""
+            TelegramDigestDeliveryService().notify_approval_needed(
+                state.run.id, proposal_summary
+            )
+            logger.info(
+                "proactive_approval_notification_sent",
+                run_id=state.run.id,
+                workflow_type=state.run.workflow_type,
+            )
+        except Exception:
+            logger.warning(
+                "proactive_approval_notification_failed",
+                run_id=state.run.id,
+                exc_info=True,
+            )
+
+    return len(resumed)
 
 
 def _build_validator_registry() -> ValidatorRegistry:

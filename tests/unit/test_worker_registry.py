@@ -1,7 +1,13 @@
+import types
 from contextlib import contextmanager
 
 from helm_worker.jobs import workflow_runs
 from helm_worker.jobs.registry import JOBS
+
+
+def _make_fake_state(needs_action: bool = False) -> types.SimpleNamespace:
+    run = types.SimpleNamespace(needs_action=needs_action)
+    return types.SimpleNamespace(run=run, latest_artifacts={})
 
 
 def test_job_registry_contains_core_jobs() -> None:
@@ -46,8 +52,8 @@ def test_workflow_runs_job_resumes_runnable_runs(monkeypatch) -> None:  # noqa: 
         yield object()
 
     class _FakeResumeService:
-        def resume_runnable_runs(self) -> list[object]:
-            return [object(), object()]
+        def resume_runnable_runs(self) -> list[types.SimpleNamespace]:
+            return [_make_fake_state(), _make_fake_state()]
 
     captured_handlers: dict[tuple[str, str], object] = {}
 

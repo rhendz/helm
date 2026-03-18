@@ -37,6 +37,7 @@ from helm_telegram_bot.commands import (
     set_followup_days,
     snooze,
     start,
+    status,
     task,
     tasks,
     thread,
@@ -74,6 +75,7 @@ def main() -> None:
     application.add_handler(CommandHandler("pause_replay", pause_replay.handle))
     application.add_handler(CommandHandler("proposals", proposals.handle))
     application.add_handler(CommandHandler("replay_status", replay_status.handle))
+    application.add_handler(CommandHandler("status", status.handle))
     application.add_handler(CommandHandler("replays", replays.handle))
     application.add_handler(CommandHandler("run_job", run_job.handle))
     application.add_handler(CommandHandler("run_replay", run_replay.handle))
