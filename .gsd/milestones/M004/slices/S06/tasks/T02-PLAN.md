@@ -91,3 +91,20 @@ Live reload uses `watchfiles` (per D010). Datadog uses `ddtrace` (per D009). Bot
 - `scripts/run-telegram-bot.sh` — uses watchfiles for reload
 - `apps/telegram-bot/src/helm_telegram_bot/commands/task.py` — has ddtrace span wrappers
 - `.env.example` — has DD configuration vars
+
+## Observability Impact
+
+**New signals introduced:**
+- `helm.task.run` span (resource=`task_quick_add`): wraps the full `_run_task_async` body; appears in Datadog APM under service `helm` when a DD agent is running.
+- `helm.task.inference` span (resource=`infer_task_semantics`): child span covering the `run_in_executor(infer_task_semantics)` call; captures latency of LLM inference separately from orchestration.
+- Both spans are no-ops (zero overhead) without a DD agent — `ddtrace` skips them cleanly.
+
+**How a future agent inspects this:**
+- With DD agent running: `DD_SERVICE=helm DD_ENV=development` env vars route traces to the `helm` service in Datadog APM. Span errors are tagged automatically on uncaught exceptions.
+- Without DD agent: no traces appear; structlog events `task_inference_complete` / `task_inference_failed` (already present from S01/S02) remain the primary inspection surface.
+- `grep "tracer.trace" apps/telegram-bot/src/helm_telegram_bot/commands/task.py` verifies spans are present in source.
+
+**Failure state visibility:**
+- If inference raises, the `helm.task.inference` span is tagged with `error=True` and the exception type; structlog also logs `task_inference_failed` with `run_id`.
+- If any downstream step raises, the `helm.task.run` span captures the exception tag; structlog logs `task_execution_failed`.
+- Live-reload failures (watchfiles) surface as process restart logs to stdout — watchfiles prints the reload trigger file and restarts the target module.

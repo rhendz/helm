@@ -53,7 +53,7 @@
   - Verify: `uv run --frozen pytest tests/unit/ tests/integration/ --ignore=tests/integration/test_study_agent_mvp.py --ignore=tests/unit/test_study_agent_mvp.py -q` → 440+ passed, 0 failures
   - Done when: All S01–S04 implementation is on `main`, full test suite passes with 0 failures
 
-- [ ] **T02: Add watchfiles live reload and ddtrace APM instrumentation** `est:30m`
+- [x] **T02: Add watchfiles live reload and ddtrace APM instrumentation** `est:30m`
   - Why: R116 requires live reload for worker/bot dev loop; R117 requires Datadog observability on the `/task` path. Both are additive and share the pyproject.toml edit.
   - Files: `pyproject.toml`, `scripts/run-worker.sh`, `scripts/run-telegram-bot.sh`, `apps/telegram-bot/src/helm_telegram_bot/commands/task.py`, `.env.example`
   - Do: (1) Add `watchfiles>=0.21.0` and `ddtrace>=2.0.0` to `[project.optional-dependencies].dev` in pyproject.toml. (2) Update `run-worker.sh` to use `python -m watchfiles --filter python helm_worker.main apps/worker/src packages/`. (3) Same for `run-telegram-bot.sh` with `helm_telegram_bot.main apps/telegram-bot/src packages/`. (4) In `task.py`, wrap `_run_task_async` body with `ddtrace` span `helm.task.run` and wrap the `run_in_executor` LLM call with span `helm.task.inference`. Import `tracer` at top. (5) Add `DD_ENV`, `DD_SERVICE`, `DD_VERSION` to `.env.example`.
