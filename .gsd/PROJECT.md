@@ -11,12 +11,12 @@ The operator can add a task through Telegram and trust that it lands on Calendar
 ## Current State
 
 - M001–M003 complete: durable workflow kernel, truth-set cleanup, real Google Calendar OAuth integration with drift detection.
-- M004 in progress (S01–S05 complete, S06 remaining):
-  - S01–S03: `/task` quick-add with LLM inference, shared timezone/scheduling primitives, immediate execution path all shipped (on `milestone/M004` branch).
-  - S04: `/status` (pending approvals with `/approve N M` hints, recent completions, OPERATOR_TIMEZONE) and `/agenda` (today's Calendar events in local time) commands live; proactive approval notifications wired into worker.
-  - S05: Strict test layer boundaries enforced; E2E safety guards (HELM_E2E + HELM_CALENDAR_TEST_ID fail-fast); calendar_id threaded through full adapter stack (no hardcoded "primary"); timezone correctness E2E assertion (test_07) in place; /task→DB state integration test added; scheduling primitives ported to main; 436 tests passing.
-  - **Note:** S01–S04 implementation is on `milestone/M004` branch; S05 test infrastructure is on `main`. Branch merge required before M004 is fully deployable.
-- Remaining: S06 (live reload, Datadog, cleanup).
+- **M004 complete (S01–S06 all done):**
+  - S01–S03: `/task` quick-add with LLM inference, shared timezone/scheduling primitives, immediate execution path.
+  - S04: `/status` (pending approvals with `/approve N M` hints, recent completions, OPERATOR_TIMEZONE) and proactive approval notifications.
+  - S05: Strict test layer boundaries; E2E safety guards (HELM_E2E + HELM_CALENDAR_TEST_ID fail-fast); calendar_id threaded through full adapter stack; timezone correctness E2E; 436-test baseline.
+  - S06: `milestone/M004` merged into `main`; 496 tests passing; watchfiles live reload for worker + bot; ddtrace APM spans on `/task` path (helm.task.run + helm.task.inference) with try/except guard for frozen envs; `/agenda` command (list_today_events, timezone-aware formatting); legacy scheduling stubs removed.
+- **All M004 slices complete. main branch is deployable.**
 
 ## Architecture / Key Patterns
 
@@ -38,5 +38,5 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract.
 - [x] M001: Helm Orchestration Kernel v1 — Durable workflow kernel with weekly scheduling workflow and shared operator surfaces.
 - [x] M002: Helm Truth-Set Cleanup — Strict workflow-engine truth set, removal of stale artifacts, verified task/calendar workflow protection.
 - [x] M003: Task/Calendar Productionization — Real Google Calendar OAuth, drift detection, Telegram sync visibility, partial failure handling.
-- [ ] M004: Foundation Repair — Fix the core task→calendar loop: correct timezone handling, LLM task inference, `/task` quick-add, immediate operator execution, Telegram UX overhaul, strict test boundaries with real E2E calendar coverage, live reload, Datadog.
+- [x] M004: Foundation Repair — Fix the core task→calendar loop: correct timezone handling, LLM task inference, `/task` quick-add, immediate operator execution, Telegram UX overhaul, strict test boundaries with real E2E calendar coverage, live reload, Datadog.
 - [ ] M005: Bidirectional Sync + Recurring Events — External calendar edit detection, internal reconciliation, conflict handling, recurring event support, reactive webhooks where viable.

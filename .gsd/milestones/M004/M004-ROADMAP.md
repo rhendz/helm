@@ -77,7 +77,7 @@ This milestone is complete only when all are true:
 - [x] **S05: Strict test boundaries and real E2E calendar coverage** `risk:high` `depends:[S02,S03]`
   > After this: E2E test suite writes to staging calendar, reads back events, asserts correct local times in OPERATOR_TIMEZONE, cleans up deterministically; fails fast if `HELM_CALENDAR_TEST_ID` is missing or "primary"; unit/integration/E2E layers are strictly separated with no mocks leaking across boundaries
 
-- [ ] **S06: Dev experience, observability, and cleanup** `risk:low` `depends:[S01,S05]`
+- [x] **S06: Dev experience, observability, and cleanup** `risk:low` `depends:[S01,S05]`
   > After this: `milestone/M004` branch (S01–S04: LLM inference, `/task` handler, approval policy, proactive notifications, `/status`, `/agenda`) merged into `main` and verified against the 436-test suite; worker and telegram-bot live-reload on source file changes; Datadog logs and APM traces visible for a `/task` flow; hardcoded scheduling stubs and duplicated legacy scheduling logic removed from codebase. **Branch merge is the first step — without it, M004 is not deployable.**
 
 ## Boundary Map
