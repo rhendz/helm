@@ -93,25 +93,25 @@
 
 ### R108 — Proactive approval notifications via Telegram push
 - Class: operability
-- Status: active
+- Status: validated
 - Description: When any workflow reaches an approval-needed state, Helm pushes a Telegram notification to the operator immediately. Operator does not need to poll `/status` or `/workflows` to discover pending approvals.
 - Why it matters: The current system requires the operator to manually check for pending approvals, which defeats the purpose of an assistant.
 - Source: user
 - Primary owning slice: M004/S04
-- Supporting slices: M004/S03
-- Validation: unmapped
-- Notes: Uses existing `TelegramDigestDeliveryService.deliver()` pattern or equivalent bot.send_message. Fires when orchestration records an approval checkpoint.
+- Supporting slices: M004/S03, M004/S07
+- Validation: S07 proves: `workflow_runs.run()` contains notification loop iterating resumed states; `state.run.needs_action` check gates dispatch; lazy import of `TelegramDigestDeliveryService` per D016; per-run `try/except Exception` isolates failures; structlog INFO `proactive_approval_notification_sent` and WARNING `proactive_approval_notification_failed` emitted. 4 unit tests in `test_worker_notification.py` cover dispatch, no-op, failure isolation, and artifact extraction. `grep -n "notify_approval_needed\|needs_action" apps/worker/src/helm_worker/jobs/workflow_runs.py` confirms wiring.
+- Notes: Notification fires per-poll-cycle for `needs_action=True` runs. No deduplication — repeated notifications possible if operator is slow to respond (M005 candidate for fix).
 
 ### R109 — `/status` command: pending approvals, recent actions, current state, active timezone
 - Class: operability
-- Status: active
+- Status: validated
 - Description: `/status` returns a concise operator-facing view: pending approvals (with action commands), recent completions (last 3–5), any active workflows, and the configured OPERATOR_TIMEZONE. No debug internals by default.
 - Why it matters: Replaces the current `/workflows` command which dumps run IDs, step names, paused states, and sync timelines by default.
 - Source: user
 - Primary owning slice: M004/S04
-- Supporting slices: none
-- Validation: unmapped
-- Notes: Active timezone must be visible here. `/workflows` can remain for power-user detail access.
+- Supporting slices: M004/S07
+- Validation: S07 proves: `CommandHandler("status", status.handle)` registered at line 78 of `apps/telegram-bot/src/helm_telegram_bot/main.py`; `status.handle` renders pending approvals, recent completions, and OPERATOR_TIMEZONE (implemented S04). `grep -n 'CommandHandler("status"' apps/telegram-bot/src/helm_telegram_bot/main.py` confirms registration.
+- Notes: Active timezone visible in `/status` output. `/workflows` remains for power-user detail access.
 
 ### R110 — `/agenda` command: today's calendar from Google Calendar
 - Class: operability
@@ -314,8 +314,8 @@
 | R105 | core-capability | active | M004/S02 | none | unmapped |
 | R106 | operability | active | M004/S03 | M004/S01 | S03: inline execution paths proven at contract level (10 unit tests; `/task` → `complete_current_step`; `/approve` → `resume_run`; worker recovery handler registered) |
 | R107 | core-capability | active | M004/S01 | M004/S04 | S01: ConditionalApprovalPolicy boundary values proven (15 unit tests) |
-| R108 | operability | active | M004/S04 | M004/S03 | unmapped |
-| R109 | operability | active | M004/S04 | none | unmapped |
+| R108 | operability | validated | M004/S04 | M004/S03, S07 | S07: notification loop in workflow_runs.run() with per-run isolation; 4 unit tests in test_worker_notification.py |
+| R109 | operability | validated | M004/S04 | M004/S07 | S07: CommandHandler("status", status.handle) registered at line 78 of main.py; status.handle renders pending approvals + OPERATOR_TIMEZONE |
 | R110 | operability | active | M004/S04 | none | unmapped |
 | R111 | operability | active | M004/S04 | none | unmapped |
 | R112 | core-capability | active | M004/S02 | S01, S06 | unmapped |

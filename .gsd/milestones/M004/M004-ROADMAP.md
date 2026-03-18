@@ -80,7 +80,7 @@ This milestone is complete only when all are true:
 - [x] **S06: Dev experience, observability, and cleanup** `risk:low` `depends:[S01,S05]`
   > After this: `milestone/M004` branch (S01–S04: LLM inference, `/task` handler, approval policy, proactive notifications, `/status`, `/agenda`) merged into `main` and verified against the 436-test suite; worker and telegram-bot live-reload on source file changes; Datadog logs and APM traces visible for a `/task` flow; hardcoded scheduling stubs and duplicated legacy scheduling logic removed from codebase. **Branch merge is the first step — without it, M004 is not deployable.**
 
-- [ ] **S07: Wire `/status` command and proactive notification loop** `risk:low` `depends:[S04,S06]`
+- [x] **S07: Wire `/status` command and proactive notification loop** `risk:low` `depends:[S04,S06]`
   > After this: `/status` is registered as a `CommandHandler` in `main.py` and reachable from Telegram; `workflow_runs.run()` iterates resumed runs and calls `notify_approval_needed()` for each `needs_action=True` run with per-run failure isolation; `test_worker_notification.py` covers dispatch, no-op, and failure-isolation paths; full suite ≥496 with no regressions. Closes R108 and R109.
 
 ## Boundary Map
