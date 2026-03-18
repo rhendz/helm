@@ -17,9 +17,10 @@ class ApprovalPolicy(Protocol):
 
 
 class ConditionalApprovalPolicy:
-    """S01 stub: auto-approve high-confidence short tasks, ask otherwise.
+    """Auto-approve high-confidence short tasks, request revision otherwise.
 
-    Full conflict/displacement logic lands in S02.
+    Tasks meeting both the confidence threshold and the sizing limit are
+    approved automatically.  All others are returned for human review.
     """
 
     CONFIDENCE_THRESHOLD: float = 0.8
@@ -33,7 +34,7 @@ class ConditionalApprovalPolicy:
             return ApprovalDecision(
                 action=ApprovalAction.APPROVE,
                 actor="system:conditional_policy",
-                target_artifact_id=0,  # no artifact in S01 stub
+                target_artifact_id=0,
             )
         return ApprovalDecision(
             action=ApprovalAction.REQUEST_REVISION,

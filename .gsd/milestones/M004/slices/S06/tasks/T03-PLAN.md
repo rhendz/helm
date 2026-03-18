@@ -144,7 +144,26 @@ Two cleanup/gap-fill tasks combined because the cleanup is a small verification 
 - [ ] `test_agenda_command.py` has tests for events format, empty day, and auth rejection
 - [ ] Full test suite still passes (440+ tests, 0 failures)
 
-## Verification
+## Observability Impact
+
+**New signals added by this task:**
+
+- `list_today_events` — structlog event on every `/agenda` invocation (fields: `calendar_id`, `timezone`, `time_min`, `time_max`)
+- `list_today_events_complete` — structlog event after API response (fields: `calendar_id`, `event_count`)
+- Any Google API exception surfaces through the existing `logger.error(...)` path in `reconcile_calendar_block`'s exception handler (same error-tag pattern)
+
+**Inspection surfaces:**
+- Successful `/agenda` call: both `list_today_events` + `list_today_events_complete` appear in structlog JSON stream
+- Failed call (missing credentials, quota exceeded): `list_today_events` appears but `list_today_events_complete` does not; exception propagates to Telegram error handler
+- Auth rejection: neither event appears; the handler returns immediately after `reject_if_unauthorized`
+
+**Failure visibility:**
+- Missing `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REFRESH_TOKEN` → `ValueError: Missing required environment variable` raised inside `GoogleCalendarAuth.__init__`
+- Stale token → `googleapiclient` raises `HttpError 401`; the `/agenda` message will never be sent, but Telegram will log the unhandled exception
+
+**Redaction constraints:** calendar event summaries may appear in structlog output; no credentials are logged.
+
+
 
 - `grep -n "2026, 3, 16\|_parse_slot_from_title\|_DAY_OFFSETS\|_TIME_PATTERN" apps/worker/src/helm_worker/jobs/workflow_runs.py` → no output
 - `grep -n "S01 stub" packages/orchestration/src/helm_orchestration/scheduling.py` → no output

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from helm_observability.logging import get_logger
 
@@ -502,6 +503,52 @@ class GoogleCalendarAdapter:
                 payload_fingerprint_matches=None,
                 details={"error": error_msg, "status_code": status_code},
             )
+
+    def list_today_events(self, calendar_id: str, timezone: ZoneInfo) -> list[dict]:
+        """Return today's events from the calendar in operator local time.
+
+        Args:
+            calendar_id: Google Calendar ID (e.g. "primary").
+            timezone: Operator's local timezone for determining day boundaries.
+
+        Returns:
+            List of Google Calendar event dicts ordered by start time.
+        """
+        service = self._get_service()
+        now_local = datetime.now(timezone)
+        start_of_day = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = start_of_day + timedelta(days=1)
+
+        time_min = start_of_day.isoformat()
+        time_max = end_of_day.isoformat()
+
+        logger.info(
+            "list_today_events",
+            calendar_id=calendar_id,
+            timezone=str(timezone),
+            time_min=time_min,
+            time_max=time_max,
+        )
+
+        result = (
+            service.events()
+            .list(
+                calendarId=calendar_id,
+                timeMin=time_min,
+                timeMax=time_max,
+                singleEvents=True,
+                orderBy="startTime",
+            )
+            .execute()
+        )
+
+        events = result.get("items", [])
+        logger.info(
+            "list_today_events_complete",
+            calendar_id=calendar_id,
+            event_count=len(events),
+        )
+        return events
 
     def _fingerprint_event(self, event: dict[str, Any]) -> str:
         """Create a canonical JSON fingerprint of a calendar event.

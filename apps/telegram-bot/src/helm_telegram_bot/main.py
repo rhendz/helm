@@ -4,6 +4,7 @@ from telegram.ext import Application, CommandHandler
 from helm_telegram_bot.commands import (
     action_threads,
     actions,
+    agenda,
     approve,
     digest,
     done_task,
@@ -81,6 +82,7 @@ def main() -> None:
     application.add_handler(CommandHandler("resume_job", resume_job.handle))
     application.add_handler(CommandHandler("resume_replay", resume_replay.handle))
     application.add_handler(CommandHandler("approve", approve.handle))
+    application.add_handler(CommandHandler("agenda", agenda.handle))
     application.add_handler(CommandHandler("done_task", done_task.handle))
     application.add_handler(CommandHandler("resolved_threads", resolved_threads.handle))
     application.add_handler(CommandHandler("send", send.handle))
