@@ -480,7 +480,12 @@ class EmailMessageORM(Base):
         ForeignKey("email_threads.id", ondelete="SET NULL")
     )
     source_draft_id: Mapped[int | None] = mapped_column(
-        ForeignKey("email_drafts.id", ondelete="SET NULL")
+        ForeignKey(
+            "email_drafts.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_email_messages_source_draft_id",
+        )
     )
     direction: Mapped[str] = mapped_column(String(32), default="inbound", nullable=False)
     from_address: Mapped[str] = mapped_column(String(320), nullable=False)
@@ -517,13 +522,28 @@ class EmailThreadORM(Base):
     resurfacing_source: Mapped[str | None] = mapped_column(String(32))
     action_reason: Mapped[str | None] = mapped_column(String(32))
     last_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("email_messages.id", ondelete="SET NULL")
+        ForeignKey(
+            "email_messages.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_email_threads_last_message_id",
+        )
     )
     last_inbound_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("email_messages.id", ondelete="SET NULL")
+        ForeignKey(
+            "email_messages.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_email_threads_last_inbound_message_id",
+        )
     )
     last_outbound_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("email_messages.id", ondelete="SET NULL")
+        ForeignKey(
+            "email_messages.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_email_threads_last_outbound_message_id",
+        )
     )
     summary_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
