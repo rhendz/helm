@@ -8,3 +8,10 @@ if command -v uv >/dev/null 2>&1; then
 else
   alembic upgrade head
 fi
+
+# Seed bootstrap user from env vars (idempotent)
+if command -v uv >/dev/null 2>&1; then
+  uv run --frozen --extra dev python -c "from helm_storage.bootstrap import run_bootstrap; run_bootstrap()"
+else
+  python -c "from helm_storage.bootstrap import run_bootstrap; run_bootstrap()"
+fi

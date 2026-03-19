@@ -1,24 +1,22 @@
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from typing import Any
 
-from helm_connectors import (
-    GoogleCalendarAdapter,
-    GoogleCalendarAuth,
-    StubCalendarSystemAdapter,
-    StubTaskSystemAdapter,
-)
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
     CalendarSystemAdapter,
+    StubCalendarSystemAdapter,
+    StubTaskSystemAdapter,
     TaskSystemAdapter,
     WeeklySchedulingRequest,
     WeeklyTaskRequest,
     WorkflowOrchestrationService,
 )
+from helm_providers import GoogleCalendarProvider
 from helm_storage.models import WorkflowArtifactORM, WorkflowRunORM
 from helm_storage.repositories import (
     RawRequestArtifactPayload,
@@ -33,6 +31,7 @@ from helm_storage.repositories import (
     WorkflowSyncStatus,
     WorkflowTargetSystem,
 )
+from helm_storage.repositories.users import get_user_by_telegram_id
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -64,12 +63,12 @@ class WorkflowStatusService:
         if task_system_adapter is None:
             task_system_adapter = StubTaskSystemAdapter()
         if calendar_system_adapter is None:
-            # Try to use real GoogleCalendarAdapter if credentials are available
-            try:
-                auth = GoogleCalendarAuth()
-                calendar_system_adapter = GoogleCalendarAdapter(auth)
-            except ValueError:
-                # Credentials not available; fall back to stub
+            telegram_user_id_str = os.getenv("TELEGRAM_ALLOWED_USER_ID", "").strip()
+            if telegram_user_id_str:
+                user = get_user_by_telegram_id(int(telegram_user_id_str), session)
+                if user is not None:
+                    calendar_system_adapter = GoogleCalendarProvider(user.id, session)
+            if calendar_system_adapter is None:
                 calendar_system_adapter = StubCalendarSystemAdapter()
         
         self._orchestration = WorkflowOrchestrationService(

@@ -5,9 +5,8 @@ import types
 from contextlib import contextmanager
 
 import pytest
-
-from helm_worker.jobs import workflow_runs
 from helm_storage.repositories import WorkflowArtifactType
+from helm_worker.jobs import workflow_runs
 
 
 def _make_fake_state(
@@ -41,6 +40,7 @@ def test_notification_fires_for_needs_action_true(monkeypatch: pytest.MonkeyPatc
         def resume_runnable_runs(self):
             return [state]
 
+    monkeypatch.setattr(workflow_runs, "_resolve_bootstrap_user_id", lambda _: 1)
     monkeypatch.setattr(workflow_runs, "SessionLocal", _make_session_patcher())
     monkeypatch.setattr(
         workflow_runs,
@@ -76,6 +76,7 @@ def test_no_notification_for_needs_action_false(monkeypatch: pytest.MonkeyPatch)
         def resume_runnable_runs(self):
             return [state]
 
+    monkeypatch.setattr(workflow_runs, "_resolve_bootstrap_user_id", lambda _: 1)
     monkeypatch.setattr(workflow_runs, "SessionLocal", _make_session_patcher())
     monkeypatch.setattr(
         workflow_runs,
@@ -112,6 +113,7 @@ def test_notification_failure_does_not_crash_loop(monkeypatch: pytest.MonkeyPatc
         def resume_runnable_runs(self):
             return [state1, state2]
 
+    monkeypatch.setattr(workflow_runs, "_resolve_bootstrap_user_id", lambda _: 1)
     monkeypatch.setattr(workflow_runs, "SessionLocal", _make_session_patcher())
     monkeypatch.setattr(
         workflow_runs,
@@ -155,6 +157,7 @@ def test_proposal_summary_extracted_from_artifact(monkeypatch: pytest.MonkeyPatc
         def resume_runnable_runs(self):
             return [state]
 
+    monkeypatch.setattr(workflow_runs, "_resolve_bootstrap_user_id", lambda _: 1)
     monkeypatch.setattr(workflow_runs, "SessionLocal", _make_session_patcher())
     monkeypatch.setattr(
         workflow_runs,

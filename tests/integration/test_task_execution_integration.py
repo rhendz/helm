@@ -7,7 +7,7 @@ Exercises the full inline execution flow used by the Telegram /task command:
 Uses:
 - In-memory SQLite (no external Postgres)
 - Mocked LLM (no real OpenAI calls)
-- StubCalendarSystemAdapter (no real Google Calendar calls)
+- GoogleCalendarProvider with mocked helm_providers.google_calendar.build (no real API calls)
 - Time-freeze on helm_orchestration.scheduling.datetime to avoid past_event_guard flakiness
 
 Corresponds to R113 / D007: integration test for the task_quick_add execution path.
@@ -15,15 +15,15 @@ Corresponds to R113 / D007: integration test for the task_quick_add execution pa
 ## Observability Impact
 
 Signals introduced / observable via this test:
-- structlog entries from `upsert_calendar_block` (issued by StubCalendarSystemAdapter during
+- structlog entries from `upsert_calendar_block` (issued by GoogleCalendarProvider during
   `execute_after_approval`) include `planned_item_key` — filter for key="upsert_calendar_block"
   to confirm the calendar write was reached.
 - `WorkflowRunStatus` transitions (PENDING → BLOCKED → PENDING → COMPLETED) are observable
   via `GET /v1/workflow-runs/{run_id}` or `WorkflowStatusService.get_run_detail(run_id)`.
 - `needs_action` flips True → False across the approval boundary — query `WorkflowRun` directly
   for post-hoc inspection: `SELECT status, needs_action FROM workflow_runs WHERE id = <run_id>`.
-- `_build_calendar_adapter()` logs `calendar_adapter_fallback_to_stub` at WARNING when
-  Google credentials are absent (which they are in this test); this is expected and harmless.
+- `calendar_provider_constructed` log entry (info) is emitted during both execute_task_run and
+  execute_after_approval with user_id and source="db_credentials".
 - Failure visibility: if `past_event_guard` fires, the test fails at `execute_task_run` with
   `PastEventError` — this means the time-freeze patch was not applied correctly.
 - Inspection surface: `session.get(WorkflowRunORM, run_id)` gives the raw ORM state at any
@@ -35,13 +35,15 @@ from __future__ import annotations
 from datetime import UTC
 from datetime import datetime as _real_datetime
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 from unittest.mock import patch as _mock_patch
 
 from helm_api.dependencies import get_db
 from helm_api.main import app
 from helm_api.services.workflow_status_service import WorkflowStatusService
 from helm_orchestration import TaskSemantics
-from helm_storage.db import Base, SessionLocal
+from helm_storage.db import Base
+from helm_storage.models import UserCredentialsORM, UserORM
 from helm_telegram_bot.services.workflow_status_service import TelegramWorkflowStatusService
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -55,6 +57,11 @@ if TYPE_CHECKING:
 # far in the future so past_event_guard never fires.
 # ---------------------------------------------------------------------------
 _FUTURE_MONDAY_MIDNIGHT_UTC = _real_datetime(2099, 1, 5, 0, 1, 0, tzinfo=UTC)
+
+# ---------------------------------------------------------------------------
+# Bootstrap Telegram user ID used across the test.
+# ---------------------------------------------------------------------------
+_TEST_TELEGRAM_USER_ID = 12345
 
 
 class _SessionContext:
@@ -95,6 +102,33 @@ def _make_session() -> tuple[Session, object]:
 def _override_session_local(session: Session):
     """Return a callable that produces a _SessionContext wrapping *session*."""
     return lambda: _SessionContext(session)
+
+
+def _seed_test_user(session: Session) -> UserORM:
+    """Insert a UserORM + UserCredentialsORM so GoogleCalendarProvider can resolve the user."""
+    user = UserORM(
+        telegram_user_id=_TEST_TELEGRAM_USER_ID,
+        display_name="Test User",
+        timezone="UTC",
+    )
+    session.add(user)
+    session.flush()  # get user.id assigned
+
+    # Provide a non-expired access_token so build_google_credentials skips refresh.
+    far_future = _real_datetime(2099, 12, 31, 23, 59, 59, tzinfo=UTC)
+    creds = UserCredentialsORM(
+        user_id=user.id,
+        provider="google",
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+        access_token="test-access-token",
+        refresh_token="test-refresh-token",
+        expires_at=far_future,
+        email="test@example.com",
+    )
+    session.add(creds)
+    session.flush()
+    return user
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +176,11 @@ def test_task_execution_creates_blocked_run_and_completes_after_approval(
         monkeypatch.setattr(_wf_job, "SessionLocal", session_factory)
 
         # -------------------------------------------------------------------
+        # Seed the test user so _resolve_user_id can find telegram:12345.
+        # -------------------------------------------------------------------
+        _seed_test_user(session)
+
+        # -------------------------------------------------------------------
         # Freeze scheduling time: patch helm_orchestration.scheduling.datetime
         # so compute_reference_week and past_event_guard see 2099-01-05 00:01 UTC.
         # The mock's side_effect delegates constructor calls to the real datetime
@@ -165,10 +204,12 @@ def test_task_execution_creates_blocked_run_and_completes_after_approval(
 
             # ---------------------------------------------------------------
             # Step 1: create a task_quick_add run.
+            # submitted_by uses "telegram:{id}" format so _resolve_user_id
+            # can parse the Telegram user ID and look up the seeded user.
             # ---------------------------------------------------------------
             created = svc.start_task_run(
                 request_text="dentist Monday 9am",
-                submitted_by="test-user",
+                submitted_by=f"telegram:{_TEST_TELEGRAM_USER_ID}",
                 chat_id="test-chat",
             )
             run_id: int = created["id"]
@@ -178,13 +219,29 @@ def test_task_execution_creates_blocked_run_and_completes_after_approval(
             # ---------------------------------------------------------------
             # Step 2: inline execution — builds CalendarAgentOutput from
             # semantics, calls complete_current_step, blocks at approval.
-            # We mock Google credentials so _build_calendar_adapter falls
-            # back to StubCalendarSystemAdapter (no real API calls).
+            # googleapiclient.discovery.build is mocked so no real API calls
+            # are made; the seeded access_token is non-expired so no refresh.
             # ---------------------------------------------------------------
+            mock_cal_service = MagicMock()
+            mock_events = mock_cal_service.events.return_value
+            mock_events.insert.return_value.execute.return_value = {
+                "id": "test-event-id",
+                "status": "confirmed",
+            }
+            mock_events.update.return_value.execute.return_value = {
+                "id": "test-event-id",
+                "status": "confirmed",
+            }
+
             with (
-                _mock_patch("google.oauth2.credentials.Credentials"),
-                _mock_patch("googleapiclient.discovery.build"),
+                _mock_patch("helm_providers.credentials.Credentials") as mock_creds_cls,
+                _mock_patch("helm_providers.google_calendar.build", return_value=mock_cal_service),
             ):
+                # Make the mock Credentials instance appear valid (non-expired, has token)
+                mock_creds_instance = MagicMock()
+                mock_creds_instance.valid = True
+                mock_creds_cls.return_value = mock_creds_instance
+
                 execute_result = svc.execute_task_run(
                     run_id,
                     semantics=semantics,
@@ -223,12 +280,16 @@ def test_task_execution_creates_blocked_run_and_completes_after_approval(
 
             # ---------------------------------------------------------------
             # Step 4: execute_after_approval drives the apply_schedule step.
-            # StubCalendarSystemAdapter is used (Google credentials absent).
+            # GoogleCalendarProvider is used (with mocked Google API client).
             # ---------------------------------------------------------------
             with (
-                _mock_patch("google.oauth2.credentials.Credentials"),
-                _mock_patch("googleapiclient.discovery.build"),
+                _mock_patch("helm_providers.credentials.Credentials") as mock_creds_cls2,
+                _mock_patch("helm_providers.google_calendar.build", return_value=mock_cal_service),
             ):
+                mock_creds_instance2 = MagicMock()
+                mock_creds_instance2.valid = True
+                mock_creds_cls2.return_value = mock_creds_instance2
+
                 final_result = svc.execute_after_approval(run_id)
 
             assert final_result["status"] == "completed", (

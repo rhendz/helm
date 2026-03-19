@@ -1,12 +1,59 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from helm_connectors.gmail import GmailSendError, send_reply
+from helm_providers.gmail import GmailProvider, GmailSendError, GmailSendResult
+from helm_storage.db import SessionLocal
+from helm_storage.repositories.users import get_user_by_telegram_id
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from email_agent.runtime import EmailAgentRuntime
+
+
+def _resolve_bootstrap_user_id(db: Session) -> int:
+    """Look up the single bootstrap user from the TELEGRAM_ALLOWED_USER_ID env var.
+
+    # TODO: V1 single-user workaround — in multi-user future, send_reply needs to
+    # know which user's credentials to use without relying on a global env var.
+    """
+    telegram_user_id_str = os.getenv("TELEGRAM_ALLOWED_USER_ID", "").strip()
+    if not telegram_user_id_str:
+        raise RuntimeError(
+            "Bootstrap user not found: TELEGRAM_ALLOWED_USER_ID env var is not set"
+        )
+    user = get_user_by_telegram_id(int(telegram_user_id_str), db)
+    if user is None:
+        raise RuntimeError(
+            f"Bootstrap user not found: no user with telegram_user_id={telegram_user_id_str}"
+        )
+    return user.id
+
+
+def _build_gmail_provider(db: Session, user_id: int) -> GmailProvider:
+    """Construct a GmailProvider for the given user."""
+    return GmailProvider(user_id, db)
+
+
+def send_reply(
+    *,
+    provider_thread_id: str,
+    to_address: str,
+    subject: str,
+    body_text: str,
+) -> GmailSendResult:
+    """Send a reply email via GmailProvider using the bootstrap user's credentials."""
+    with SessionLocal() as session:
+        user_id = _resolve_bootstrap_user_id(session)
+        provider = _build_gmail_provider(session, user_id)
+        return provider.send_reply(
+            provider_thread_id=provider_thread_id,
+            to_address=to_address,
+            subject=subject,
+            body_text=body_text,
+        )
 
 
 @dataclass(frozen=True, slots=True)

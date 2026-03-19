@@ -11,10 +11,10 @@ from helm_api.services.workflow_status_service import (
     WorkflowStatusService,
     build_workflow_run_create_input,
 )
-from helm_connectors import StubTaskSystemAdapter
 from helm_orchestration import (
     CalendarAgentOutput,
     ScheduleBlock,
+    StubTaskSystemAdapter,
     TaskSemantics,
     WorkflowOrchestrationService,
     compute_reference_week,
@@ -22,14 +22,56 @@ from helm_orchestration import (
     past_event_guard,
     to_utc,
 )
+from helm_providers import GoogleCalendarProvider
 from helm_storage.db import SessionLocal
+from helm_storage.models import WorkflowArtifactORM
 from helm_storage.repositories import WorkflowArtifactType
+from helm_storage.repositories.users import get_user_by_telegram_id
 from helm_storage.repositories.workflow_events import SQLAlchemyWorkflowEventRepository
 from helm_storage.repositories.workflow_sync_records import (
     SQLAlchemyWorkflowSyncRecordRepository,
 )
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_telegram_user_id(submitted_by: str) -> int | None:
+    """Extract numeric Telegram user ID from a 'telegram:{id}' submitted_by string."""
+    if not submitted_by.startswith("telegram:"):
+        return None
+    try:
+        return int(submitted_by.split(":", 1)[1])
+    except ValueError:
+        return None
+
+
+def _resolve_user_id(submitted_by: str, db: Session) -> int:
+    """Resolve an internal Helm user ID from the run's submitted_by field.
+
+    Primary path: parse 'telegram:{id}' from submitted_by and look up the user.
+    Fallback path: use the TELEGRAM_ALLOWED_USER_ID env var (V1 single-user workaround).
+    Raises RuntimeError if no user is found via either path.
+    """
+    telegram_id = _parse_telegram_user_id(submitted_by)
+    if telegram_id is not None:
+        user = get_user_by_telegram_id(telegram_id, db)
+        if user is not None:
+            return user.id
+
+    # Fallback: V1 bootstrap user from env
+    fallback_str = os.getenv("TELEGRAM_ALLOWED_USER_ID", "").strip()
+    if fallback_str:
+        try:
+            fallback_telegram_id = int(fallback_str)
+        except ValueError:
+            pass
+        else:
+            user = get_user_by_telegram_id(fallback_telegram_id, db)
+            if user is not None:
+                return user.id
+
+    raise RuntimeError(f"No user found for submitted_by={submitted_by}")
 
 
 class TelegramWorkflowStatusService:
@@ -67,12 +109,7 @@ class TelegramWorkflowStatusService:
         request_text: str,
     ) -> dict[str, object]:
         """Build a CalendarAgentOutput from TaskSemantics and advance the run to the approval checkpoint."""
-        # Lazy imports to avoid importing helm_worker.config at module level
-        # (worker config requires OPERATOR_TIMEZONE env var and would fail at import time)
-        from helm_worker.jobs.workflow_runs import (
-            _build_calendar_adapter,
-            _build_validator_registry,
-        )
+        from helm_worker.jobs.workflow_runs import _build_validator_registry
 
         tz = ZoneInfo(os.environ["OPERATOR_TIMEZONE"])
         week_start = compute_reference_week(tz)
@@ -98,11 +135,23 @@ class TelegramWorkflowStatusService:
         )
 
         with SessionLocal() as session:
+            raw_req = (
+                session.query(WorkflowArtifactORM)
+                .filter(
+                    WorkflowArtifactORM.run_id == run_id,
+                    WorkflowArtifactORM.artifact_type == WorkflowArtifactType.RAW_REQUEST.value,
+                )
+                .first()
+            )
+            submitted_by = (
+                raw_req.payload.get("submitted_by", "") if raw_req is not None else ""
+            )
+            user_id = _resolve_user_id(submitted_by, session)
             wf_service = WorkflowOrchestrationService(
                 session,
                 validator_registry=_build_validator_registry(),
                 task_system_adapter=StubTaskSystemAdapter(),
-                calendar_system_adapter=_build_calendar_adapter(),
+                calendar_system_adapter=GoogleCalendarProvider(user_id, session),
             )
             wf_service.complete_current_step(
                 run_id,
@@ -114,15 +163,26 @@ class TelegramWorkflowStatusService:
 
     def execute_after_approval(self, run_id: int) -> dict[str, object]:
         """Trigger immediate execution of apply_schedule after an approval decision."""
-        # Lazy imports to avoid importing helm_worker.config at module level
         from helm_worker.jobs.workflow_runs import (
             _build_resume_service,
             _build_specialist_steps,
         )
 
         with SessionLocal() as session:
+            raw_req = (
+                session.query(WorkflowArtifactORM)
+                .filter(
+                    WorkflowArtifactORM.run_id == run_id,
+                    WorkflowArtifactORM.artifact_type == WorkflowArtifactType.RAW_REQUEST.value,
+                )
+                .first()
+            )
+            submitted_by = (
+                raw_req.payload.get("submitted_by", "") if raw_req is not None else ""
+            )
+            user_id = _resolve_user_id(submitted_by, session)
             handlers = _build_specialist_steps()
-            resume_service = _build_resume_service(session, handlers=handlers)
+            resume_service = _build_resume_service(session, handlers=handlers, user_id=user_id)
             resume_service.resume_run(run_id)
             return WorkflowStatusService(session).get_run_detail(run_id)
 

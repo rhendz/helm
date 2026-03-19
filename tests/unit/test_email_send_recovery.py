@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from email_agent import query as email_query
 from email_agent.send_recovery import run_pending_send_retries
 from email_agent.types import EmailMessage
-from helm_connectors.gmail import GmailSendResult
+from helm_providers.gmail import GmailSendResult
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
 from helm_storage.repositories.contracts import NewEmailDraft, NewEmailThread

@@ -5,8 +5,6 @@ import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
-from helm_connectors.google_calendar import GoogleCalendarAdapter, GoogleCalendarAuth
 from helm_llm.client import LLMClient
 from helm_observability.logging import get_logger
 from helm_orchestration import (
@@ -19,6 +17,7 @@ from helm_orchestration import (
     ScheduleBlock,
     ScheduleProposalValidator,
     SpecialistName,
+    StubTaskSystemAdapter,
     TaskAgentInput,
     TaskAgentOutput,
     TaskArtifact,
@@ -35,8 +34,10 @@ from helm_orchestration import (
     past_event_guard,
     to_utc,
 )
+from helm_providers import GoogleCalendarProvider
 from helm_storage.db import SessionLocal
 from helm_storage.repositories import WorkflowArtifactType, WorkflowRunState
+from helm_storage.repositories.users import get_user_by_telegram_id
 from helm_worker.config import settings
 from sqlalchemy.orm import Session
 
@@ -60,7 +61,8 @@ def run(*, handlers: dict[tuple[str, str], WorkflowSpecialistStep] | None = None
         return 0
 
     with SessionLocal() as session:
-        resume_service = _build_resume_service(session, handlers=configured_handlers)
+        user_id = _resolve_bootstrap_user_id(session)
+        resume_service = _build_resume_service(session, handlers=configured_handlers, user_id=user_id)
         resumed = resume_service.resume_runnable_runs()
         logger.info("workflow_runs_job_processed", resumed_count=len(resumed))
 
@@ -124,28 +126,37 @@ def _build_validator_registry() -> ValidatorRegistry:
     )
 
 
-def _build_calendar_adapter() -> GoogleCalendarAdapter | StubCalendarSystemAdapter:
-    """Build a real GoogleCalendarAdapter if credentials are present, else fall back to stub.
+def _resolve_bootstrap_user_id(db: Session) -> int:
+    """Look up the single bootstrap user from the TELEGRAM_ALLOWED_USER_ID env var.
 
-    The stub is only acceptable in local dev without credentials. In production all
-    three CALENDAR_* vars must be set — the adapter will raise at init time if missing.
+    # TODO: V1 single-user workaround — in multi-user future, _run_task_inference
+    # needs to know which user's credentials to use without relying on a global env var.
     """
-    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
-    client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
-    refresh_token = os.getenv("GOOGLE_REFRESH_TOKEN", "").strip()
-    if client_id and client_secret and refresh_token:
-        return GoogleCalendarAdapter(GoogleCalendarAuth())
-    logger.warning(
-        "calendar_adapter_fallback_to_stub",
-        reason="CALENDAR_CLIENT_ID/SECRET/REFRESH_TOKEN not set; calendar sync will be a no-op",
-    )
-    return StubCalendarSystemAdapter()
+    telegram_user_id_str = os.getenv("TELEGRAM_ALLOWED_USER_ID", "").strip()
+    if not telegram_user_id_str:
+        raise RuntimeError(
+            "Bootstrap user not found: TELEGRAM_ALLOWED_USER_ID env var is not set"
+        )
+    user = get_user_by_telegram_id(int(telegram_user_id_str), db)
+    if user is None:
+        raise RuntimeError(
+            f"Bootstrap user not found: no user with telegram_user_id={telegram_user_id_str}"
+        )
+    return user.id
+
+
+def _build_calendar_provider(db: Session, user_id: int) -> GoogleCalendarProvider:
+    """Construct a GoogleCalendarProvider for the given user and log construction."""
+    provider = GoogleCalendarProvider(user_id, db)
+    logger.info("calendar_provider_constructed", user_id=user_id, source="db_credentials")
+    return provider
 
 
 def _build_resume_service(
     session: Session,
     *,
     handlers: dict[tuple[str, str], WorkflowSpecialistStep],
+    user_id: int,
 ) -> WorkflowResumeService:
     return WorkflowResumeService(
         session,
@@ -153,7 +164,7 @@ def _build_resume_service(
             session,
             validator_registry=_build_validator_registry(),
             task_system_adapter=StubTaskSystemAdapter(),
-            calendar_system_adapter=_build_calendar_adapter(),
+            calendar_system_adapter=_build_calendar_provider(db=session, user_id=user_id),
         ),
         specialist_steps=handlers,
     )

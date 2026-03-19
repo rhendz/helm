@@ -8,10 +8,54 @@ from sqlalchemy.sql import func
 from helm_storage.db import Base
 
 
+class UserORM(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telegram_user_id: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class UserCredentialsORM(Base):
+    __tablename__ = "user_credentials"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_user_credentials_user_provider"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    client_id: Mapped[str | None] = mapped_column(String(255))
+    client_secret: Mapped[str | None] = mapped_column(String(255))
+    access_token: Mapped[str | None] = mapped_column(Text())
+    refresh_token: Mapped[str] = mapped_column(Text(), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scopes: Mapped[str | None] = mapped_column(Text())
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 class ContactORM(Base):
     __tablename__ = "contacts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     name: Mapped[str | None] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(320), unique=True)
     telegram_handle: Mapped[str | None] = mapped_column(String(255))
@@ -30,6 +74,9 @@ class ActionItemORM(Base):
     __tablename__ = "action_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(255))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -101,6 +148,9 @@ class AgentRunORM(Base):
     __tablename__ = "agent_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     agent_name: Mapped[str] = mapped_column(String(64), nullable=False)
     source_type: Mapped[str] = mapped_column(String(64), nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(255))
@@ -116,6 +166,9 @@ class WorkflowRunORM(Base):
     __tablename__ = "workflow_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True, nullable=False
     )
@@ -415,6 +468,9 @@ class EmailMessageORM(Base):
     __tablename__ = "email_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -447,6 +503,9 @@ class EmailThreadORM(Base):
     __tablename__ = "email_threads"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -479,6 +538,9 @@ class ActionProposalORM(Base):
     __tablename__ = "action_proposals"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -501,6 +563,9 @@ class ClassificationArtifactORM(Base):
     __tablename__ = "classification_artifacts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -527,6 +592,9 @@ class EmailDraftORM(Base):
     __tablename__ = "email_drafts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -556,6 +624,9 @@ class DraftReasoningArtifactORM(Base):
     __tablename__ = "draft_reasoning_artifacts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -580,6 +651,9 @@ class EmailSendAttemptORM(Base):
     __tablename__ = "email_send_attempts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -605,6 +679,9 @@ class EmailDeepSeedQueueORM(Base):
     __tablename__ = "email_deep_seed_queue"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -637,6 +714,9 @@ class ScheduledThreadTaskORM(Base):
     __tablename__ = "scheduled_thread_tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     internal_uuid: Mapped[str] = mapped_column(
         String(36), default=lambda: str(uuid4()), unique=True
     )
@@ -676,6 +756,9 @@ class OpportunityORM(Base):
     __tablename__ = "opportunities"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     contact_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id", ondelete="SET NULL"))
     company: Mapped[str] = mapped_column(String(255), nullable=False)
     role_title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -695,6 +778,9 @@ class ReplayQueueORM(Base):
     __tablename__ = "replay_queue"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     agent_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("agent_runs.id", ondelete="SET NULL")
     )

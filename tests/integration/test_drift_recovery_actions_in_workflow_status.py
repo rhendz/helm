@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from helm_api.services.workflow_status_service import WorkflowStatusService
-from helm_connectors import StubTaskSystemAdapter, StubCalendarSystemAdapter
+from helm_orchestration import StubTaskSystemAdapter, StubCalendarSystemAdapter
 from helm_storage.db import Base
 from helm_storage.models import (
     WorkflowRunORM,

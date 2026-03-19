@@ -21,7 +21,7 @@ def test_ingest_manual_email_messages_normalizes_failures_and_processes_valid(
 
     monkeypatch.setattr(
         email_service,
-        "pull_new_messages_report",
+        "_pull_new_messages_manual",
         lambda manual_payload: type(
             "Report",
             (),
@@ -70,7 +70,7 @@ def test_plan_seed_email_messages_returns_bucketed_thread_report(monkeypatch) ->
 
     monkeypatch.setattr(
         email_service,
-        "pull_new_messages_report",
+        "_pull_new_messages_manual",
         lambda manual_payload: type(
             "Report",
             (),
@@ -116,7 +116,7 @@ def test_enqueue_seed_email_messages_persists_only_deep_seed_threads(monkeypatch
     runtime = _Runtime()
     monkeypatch.setattr(
         email_service,
-        "pull_new_messages_report",
+        "_pull_new_messages_manual",
         lambda manual_payload: type(
             "Report",
             (),

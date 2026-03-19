@@ -1,10 +1,13 @@
 from collections.abc import Generator
+from datetime import UTC
+from datetime import datetime as _real_datetime
+from unittest.mock import patch as _mock_patch
 
 from fastapi.testclient import TestClient
 from helm_api.dependencies import get_db
 from helm_api.main import app
 from helm_api.services import replay_service
-from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
+from helm_orchestration import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,
@@ -19,6 +22,7 @@ from helm_orchestration import (
     WorkflowOrchestrationService,
 )
 from helm_storage.db import Base
+from helm_storage.models import UserCredentialsORM, UserORM
 from helm_storage.repositories import (
     NewWorkflowArtifact,
     SQLAlchemyWorkflowArtifactRepository,
@@ -31,6 +35,8 @@ from helm_worker.jobs import workflow_runs as workflow_runs_job
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+_TEST_TELEGRAM_USER_ID = 12345
 
 
 class _SessionContext:
@@ -79,6 +85,32 @@ def _request_payload() -> dict[str, object]:
         "channel": "telegram",
         "metadata": {"chat_id": "123"},
     }
+
+
+def _seed_test_user(session: Session) -> UserORM:
+    """Insert a UserORM + UserCredentialsORM so _resolve_bootstrap_user_id can find the user."""
+    user = UserORM(
+        telegram_user_id=_TEST_TELEGRAM_USER_ID,
+        display_name="Test User",
+        timezone="UTC",
+    )
+    session.add(user)
+    session.flush()
+
+    far_future = _real_datetime(2099, 12, 31, 23, 59, 59, tzinfo=UTC)
+    creds = UserCredentialsORM(
+        user_id=user.id,
+        provider="google",
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+        access_token="test-access-token",
+        refresh_token="test-refresh-token",
+        expires_at=far_future,
+        email="test@example.com",
+    )
+    session.add(creds)
+    session.flush()
+    return user
 
 
 def _normalized_payload() -> dict[str, object]:
@@ -314,6 +346,9 @@ def test_public_representative_flow_reaches_completion_and_replay_with_fresh_fin
         monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
         monkeypatch.setattr(replay_service, "SessionLocal", lambda: _SessionContext(session))
 
+        monkeypatch.setenv("TELEGRAM_ALLOWED_USER_ID", str(_TEST_TELEGRAM_USER_ID))
+        _seed_test_user(session)
+
         created = client.post(
             "/v1/workflow-runs",
             json={
@@ -330,8 +365,11 @@ def test_public_representative_flow_reaches_completion_and_replay_with_fresh_fin
         assert created.status_code == 200
         run_id = created.json()["id"]
 
-        assert workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps()) == 1
-        assert workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps()) == 1
+        with _mock_patch("helm_orchestration.scheduling.datetime") as _mock_dt:
+            _mock_dt.now.return_value = _real_datetime(2099, 1, 5, 0, 1, 0, tzinfo=UTC)
+            _mock_dt.side_effect = lambda *args, **kw: _real_datetime(*args, **kw)
+            assert workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps()) == 1
+            assert workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps()) == 1
 
         blocked = client.get(f"/v1/workflow-runs/{run_id}")
         assert blocked.status_code == 200

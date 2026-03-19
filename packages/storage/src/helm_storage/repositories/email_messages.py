@@ -1,6 +1,10 @@
-from datetime import datetime
+from __future__ import annotations
 
-from helm_connectors.gmail import NormalizedGmailMessage
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from helm_providers.gmail import NormalizedGmailMessage
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

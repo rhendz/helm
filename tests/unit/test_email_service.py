@@ -18,7 +18,7 @@ from helm_api.services.email_service import (
     send_draft,
     update_email_config,
 )
-from helm_connectors.gmail import GmailSendError, GmailSendResult
+from helm_providers.gmail import GmailSendError, GmailSendResult
 from helm_runtime.email_agent import build_email_agent_runtime
 from helm_storage.db import Base
 from helm_storage.repositories.action_proposals import SQLAlchemyActionProposalRepository

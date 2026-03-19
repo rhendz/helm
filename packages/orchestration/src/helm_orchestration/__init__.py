@@ -63,6 +63,7 @@ from helm_orchestration.schemas import (
     WeeklyTaskRequest,
     WorkflowSummaryArtifact,
 )
+from helm_orchestration.stubs import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration.validators import (
     NormalizedTaskValidator,
     ScheduleProposalValidator,
@@ -100,6 +101,9 @@ __all__ = [
     "ScheduleBlock",
     "ScheduleProposalArtifact",
     "ScheduleProposalValidator",
+    "SpecialistName",
+    "StubCalendarSystemAdapter",
+    "StubTaskSystemAdapter",
     "SyncLookupRequest",
     "SyncLookupResult",
     "SyncOperation",

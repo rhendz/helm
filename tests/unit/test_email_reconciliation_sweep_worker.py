@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
-from helm_connectors.gmail import NormalizedGmailMessage, PullMessagesReport
+from helm_providers.gmail import NormalizedGmailMessage, PullMessagesReport
 from helm_storage.db import Base
 from helm_storage.models import AgentRunORM, EmailMessageORM
 from helm_worker.jobs import email_reconciliation_sweep
@@ -39,25 +40,31 @@ def test_email_reconciliation_sweep_skips_already_processed_messages(
         "build_email_agent_runtime",
         lambda: runtime,
     )
+
+    mock_provider = MagicMock()
+    mock_provider.pull_new_messages_report.return_value = PullMessagesReport(
+        messages=[
+            NormalizedGmailMessage(
+                provider_message_id="msg-reconcile-1",
+                provider_thread_id="thr-reconcile-1",
+                from_address="sender@example.com",
+                subject="Already seen",
+                body_text="No new work",
+                received_at=datetime(2026, 3, 10, 18, 0, tzinfo=UTC),
+                normalized_at=datetime(2026, 3, 10, 18, 1, tzinfo=UTC),
+            )
+        ],
+        failure_counts={},
+        next_history_cursor="cursor-9",
+        mode="poll",
+    )
+    monkeypatch.setattr(email_reconciliation_sweep, "_resolve_bootstrap_user_id", lambda db: 1)
+    mock_session_cm = MagicMock()
+    mock_session_cm.__enter__ = MagicMock(return_value=MagicMock())
+    mock_session_cm.__exit__ = MagicMock(return_value=False)
+    monkeypatch.setattr(email_reconciliation_sweep, "SessionLocal", lambda: mock_session_cm)
     monkeypatch.setattr(
-        email_reconciliation_sweep,
-        "pull_new_messages_report",
-        lambda: PullMessagesReport(
-            messages=[
-                NormalizedGmailMessage(
-                    provider_message_id="msg-reconcile-1",
-                    provider_thread_id="thr-reconcile-1",
-                    from_address="sender@example.com",
-                    subject="Already seen",
-                    body_text="No new work",
-                    received_at=datetime(2026, 3, 10, 18, 0, tzinfo=UTC),
-                    normalized_at=datetime(2026, 3, 10, 18, 1, tzinfo=UTC),
-                )
-            ],
-            failure_counts={},
-            next_history_cursor="cursor-9",
-            mode="poll",
-        ),
+        email_reconciliation_sweep, "_build_gmail_provider", lambda db, user_id: mock_provider
     )
 
     email_reconciliation_sweep.run()

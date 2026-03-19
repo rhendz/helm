@@ -2,11 +2,13 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from helm_observability.logging import get_logger
+from helm_providers import GoogleCalendarProvider
+from helm_storage.db import SessionLocal
+from helm_storage.repositories.users import get_user_by_telegram_id
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from helm_connectors.google_calendar import GoogleCalendarAdapter, GoogleCalendarAuth
-from helm_observability.logging import get_logger
 from helm_telegram_bot.commands.common import reject_if_unauthorized
 from helm_telegram_bot.config import get_settings
 
@@ -22,11 +24,17 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = get_settings()
     tz = ZoneInfo(settings.operator_timezone)
 
-    adapter = GoogleCalendarAdapter(GoogleCalendarAuth())
-    events = adapter.list_today_events(
-        calendar_id="primary",
-        timezone=tz,
-    )
+    telegram_user_id = update.effective_user.id
+    with SessionLocal() as db:
+        user = get_user_by_telegram_id(telegram_user_id, db)
+        if user is None:
+            await update.message.reply_text("No Helm user found for your Telegram account.")
+            return
+        provider = GoogleCalendarProvider(user.id, db)
+        events = provider.list_today_events(
+            calendar_id="primary",
+            timezone=tz,
+        )
 
     if not events:
         await update.message.reply_text("📅 No events today.")

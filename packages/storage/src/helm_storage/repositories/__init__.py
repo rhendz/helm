@@ -28,6 +28,8 @@ from helm_storage.repositories.contracts import (
     NewEmailDraft,
     NewEmailThread,
     NewScheduledThreadTask,
+    NewUser,
+    NewUserCredentials,
     NewWorkflowApprovalCheckpoint,
     NewWorkflowArtifact,
     NewWorkflowEvent,
@@ -86,6 +88,7 @@ from helm_storage.repositories.job_controls import SQLAlchemyJobControlRepositor
 from helm_storage.repositories.opportunities import SQLAlchemyOpportunityRepository
 from helm_storage.repositories.replay_queue import SQLAlchemyReplayQueueRepository
 from helm_storage.repositories.scheduled_thread_tasks import SQLAlchemyScheduledThreadTaskRepository
+from helm_storage.repositories.users import get_credentials, get_user_by_telegram_id
 from helm_storage.repositories.workflow_approval_checkpoints import (
     SQLAlchemyWorkflowApprovalCheckpointRepository,
 )
@@ -111,6 +114,8 @@ __all__ = [
     "EmailAgentConfigRepository",
     "EmailDraftRepository",
     "EmailThreadRepository",
+    "get_credentials",
+    "get_user_by_telegram_id",
     "NewActionItem",
     "NewActionProposal",
     "NewClassificationArtifact",
@@ -120,6 +125,8 @@ __all__ = [
     "NewEmailDraft",
     "NewEmailThread",
     "NewScheduledThreadTask",
+    "NewUser",
+    "NewUserCredentials",
     "NewWorkflowArtifact",
     "NewWorkflowApprovalCheckpoint",
     "NewWorkflowEvent",

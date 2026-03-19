@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from email_agent.runtime import EmailAgentRuntime
 from email_agent.triage import process_inbound_email_message
 from email_agent.types import EmailMessage
-from helm_connectors.gmail import NormalizedGmailMessage
 from helm_observability.logging import get_logger
+from helm_providers.gmail import NormalizedGmailMessage
 
 logger = get_logger("helm_worker.jobs.email_message_ingest")
 

@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from helm_api.dependencies import get_db
 from helm_api.main import app
 from helm_api.services import replay_service
-from helm_connectors import StubCalendarSystemAdapter
+from helm_orchestration import StubCalendarSystemAdapter
 from helm_orchestration import (
     SCHEMA_VERSION,
     NormalizedTaskValidator,

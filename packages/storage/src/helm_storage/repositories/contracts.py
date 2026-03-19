@@ -214,6 +214,24 @@ class EmailAgentConfigPatch:
     last_history_cursor: str | None = None
 
 
+@dataclass(frozen=True)
+class NewUser:
+    telegram_user_id: int
+    timezone: str = "UTC"
+    display_name: str | None = None
+
+
+@dataclass(frozen=True)
+class NewUserCredentials:
+    user_id: int
+    provider: str
+    refresh_token: str
+    email: str
+    client_id: str | None = None
+    client_secret: str | None = None
+    scopes: str | None = None
+
+
 class WorkflowRunStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"

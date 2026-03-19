@@ -57,10 +57,11 @@ def test_workflow_runs_job_resumes_runnable_runs(monkeypatch) -> None:  # noqa: 
 
     captured_handlers: dict[tuple[str, str], object] = {}
 
-    def _build_resume_service(_session, *, handlers):  # type: ignore[no-untyped-def]
+    def _build_resume_service(_session, *, handlers, **_kwargs):  # type: ignore[no-untyped-def]
         captured_handlers.update(handlers)
         return _FakeResumeService()
 
+    monkeypatch.setattr(workflow_runs, "_resolve_bootstrap_user_id", lambda _: 1)
     monkeypatch.setattr(workflow_runs, "SessionLocal", _session_local)
     monkeypatch.setattr(workflow_runs, "_build_resume_service", _build_resume_service)
 

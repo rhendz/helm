@@ -1,5 +1,5 @@
 from helm_api.services.workflow_status_service import build_workflow_run_create_input
-from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
+from helm_orchestration import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration import (
     ApprovalAction,
     ApprovalDecision,

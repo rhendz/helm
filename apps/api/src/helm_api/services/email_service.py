@@ -27,10 +27,23 @@ from email_agent.send import send_approved_draft
 from email_agent.thread_state import transition_for_human_override
 from email_agent.triage import build_email_triage_graph, process_inbound_email_message
 from email_agent.types import EmailMessage
-from helm_connectors.gmail import pull_new_messages_report
 from helm_observability.agent_runs import record_agent_run
+from helm_observability.logging import get_logger
+from helm_providers.gmail import PullMessagesReport, _normalize_manual_payload
 from helm_runtime.email_agent import build_email_agent_runtime
 from sqlalchemy.exc import SQLAlchemyError
+
+_email_service_logger = get_logger("helm_api.services.email_service")
+
+
+def _pull_new_messages_manual(messages: list[dict]) -> PullMessagesReport:
+    """Normalize a manual payload without constructing a GmailProvider."""
+    return _normalize_manual_payload(
+        messages,
+        logger=_email_service_logger,
+        next_history_cursor=None,
+        mode="manual",
+    )
 
 
 def _runtime():
@@ -304,7 +317,7 @@ def complete_global_task(*, task_id: int) -> dict:
 
 
 def ingest_manual_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:
-    report = pull_new_messages_report(manual_payload=[dict(item) for item in messages])
+    report = _pull_new_messages_manual([dict(item) for item in messages])
     normalized_messages = report.messages
     runtime = _runtime()
     graph = build_email_triage_graph()
@@ -365,7 +378,7 @@ def _is_valid_timezone(value: str) -> bool:
 
 
 def plan_seed_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:
-    report = pull_new_messages_report(manual_payload=[dict(item) for item in messages])
+    report = _pull_new_messages_manual([dict(item) for item in messages])
     normalized_messages = [
         EmailMessage(
             provider_message_id=message.provider_message_id,
@@ -388,7 +401,7 @@ def plan_seed_email_messages(*, source_type: str, messages: list[Mapping[str, ob
 
 
 def enqueue_seed_email_messages(*, source_type: str, messages: list[Mapping[str, object]]) -> dict:
-    report = pull_new_messages_report(manual_payload=[dict(item) for item in messages])
+    report = _pull_new_messages_manual([dict(item) for item in messages])
     normalized_messages = [
         EmailMessage(
             provider_message_id=message.provider_message_id,

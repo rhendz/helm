@@ -13,13 +13,15 @@ after M002 cleanup and aligns with the UAT script in .gsd/milestones/M002/slices
 """
 
 from collections.abc import Generator
+from datetime import UTC
+from datetime import datetime as _real_datetime
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 from helm_api.dependencies import get_db
 from helm_api.main import app
 from helm_api.services import replay_service
-from helm_connectors import StubCalendarSystemAdapter, StubTaskSystemAdapter
+from helm_orchestration import StubCalendarSystemAdapter, StubTaskSystemAdapter
 from helm_orchestration import (
     NormalizedTaskValidator,
     RegisteredValidator,
@@ -29,7 +31,9 @@ from helm_orchestration import (
     ValidatorTarget,
     WorkflowOrchestrationService,
 )
+from helm_providers import GoogleCalendarProvider
 from helm_storage.db import Base
+from helm_storage.models import UserCredentialsORM, UserORM
 from helm_storage.repositories import (
     SQLAlchemyWorkflowSyncRecordRepository,
     WorkflowArtifactType,
@@ -40,6 +44,9 @@ from helm_worker.jobs import workflow_runs as workflow_runs_job
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
+
+_TEST_TELEGRAM_USER_ID = 12345
+_FUTURE_MONDAY_MIDNIGHT_UTC = _real_datetime(2099, 1, 5, 0, 1, 0, tzinfo=UTC)
 
 
 class _SessionContext:
@@ -75,6 +82,32 @@ def _validator_registry() -> ValidatorRegistry:
             ),
         ]
     )
+
+
+def _seed_test_user(session: Session) -> UserORM:
+    """Insert a UserORM + UserCredentialsORM so GoogleCalendarProvider can resolve the user."""
+    user = UserORM(
+        telegram_user_id=_TEST_TELEGRAM_USER_ID,
+        display_name="Test User",
+        timezone="UTC",
+    )
+    session.add(user)
+    session.flush()
+
+    far_future = _real_datetime(2099, 12, 31, 23, 59, 59, tzinfo=UTC)
+    creds = UserCredentialsORM(
+        user_id=user.id,
+        provider="google",
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+        access_token="test-access-token",
+        refresh_token="test-refresh-token",
+        expires_at=far_future,
+        email="test@example.com",
+    )
+    session.add(creds)
+    session.flush()
+    return user
 
 
 def _client() -> Generator[tuple[TestClient, Session], None, None]:
@@ -116,10 +149,9 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
         monkeypatch.setattr(replay_service, "SessionLocal", lambda: _SessionContext(session))
 
-        # Set up real Google Calendar credentials to enable GoogleCalendarAdapter
-        monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
-        monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
-        monkeypatch.setenv("GOOGLE_REFRESH_TOKEN", "test-refresh-token")
+        # Seed user so _resolve_bootstrap_user_id and GoogleCalendarProvider can find the user.
+        monkeypatch.setenv("TELEGRAM_ALLOWED_USER_ID", str(_TEST_TELEGRAM_USER_ID))
+        user = _seed_test_user(session)
 
         # Step 1: Create a weekly scheduling run via API
         request_text = (
@@ -146,10 +178,14 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         # Step 2: Run worker to advance to proposal generation
         # First run: dispatch_task_agent -> completion
         # Second run: dispatch_calendar_agent -> completion and block at await_schedule_approval
-        job_count_1 = workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
-        assert job_count_1 >= 1, "Worker should process at least one job (dispatch_task_agent)"
+        # Time-freeze so past_event_guard never fires (scheduled slots are in the future).
+        with patch("helm_orchestration.scheduling.datetime") as _mock_dt:
+            _mock_dt.now.return_value = _FUTURE_MONDAY_MIDNIGHT_UTC
+            _mock_dt.side_effect = lambda *args, **kw: _real_datetime(*args, **kw)
+            job_count_1 = workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
+            assert job_count_1 >= 1, "Worker should process at least one job (dispatch_task_agent)"
 
-        job_count_2 = workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
+            job_count_2 = workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
         assert job_count_2 >= 1, "Worker should process at least one job (dispatch_calendar_agent)"
 
         # Step 3: Verify run blocks at approval checkpoint
@@ -200,44 +236,38 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
         assert approved_data["paused_state"] is None
 
         # Step 6: Execute sync via orchestration service
-        # Create service with real GoogleCalendarAdapter (credentials set via monkeypatch above)
-        # Mock the Google Calendar API calls since we don't have real credentials
-        from helm_connectors import GoogleCalendarAdapter, GoogleCalendarAuth
+        # GoogleCalendarProvider reads credentials from seeded UserCredentialsORM.
+        # Mock the Credentials constructor and Google API client to avoid real calls.
+        mock_service = MagicMock()
+        mock_events = MagicMock()
+        mock_service.events.return_value = mock_events
 
-        # Mock the Credentials.refresh to avoid actual OAuth calls
-        mock_credentials = MagicMock()
-        mock_credentials.expired = False
+        mock_insert = MagicMock()
+        mock_insert.execute.return_value = {"id": "test-event-id-123"}
+        mock_events.insert.return_value = mock_insert
 
-        with patch("google.oauth2.credentials.Credentials") as mock_creds_class:
-            mock_creds_class.return_value = mock_credentials
+        mock_update = MagicMock()
+        mock_update.execute.return_value = {"id": "test-event-id-123"}
+        mock_events.update.return_value = mock_update
 
-            # Mock the Google Calendar API service
-            mock_service = MagicMock()
-            mock_events = MagicMock()
-            mock_service.events.return_value = mock_events
+        mock_creds_instance = MagicMock()
+        mock_creds_instance.valid = True
 
-            # Mock insert/update responses to return an event ID
-            mock_insert = MagicMock()
-            mock_insert.execute.return_value = {"id": "test-event-id-123"}
-            mock_events.insert.return_value = mock_insert
+        with patch("helm_providers.credentials.Credentials") as mock_creds_class:
+            mock_creds_class.return_value = mock_creds_instance
 
-            mock_update = MagicMock()
-            mock_update.execute.return_value = {"id": "test-event-id-123"}
-            mock_events.update.return_value = mock_update
-
-            with patch("googleapiclient.discovery.build") as mock_build:
+            with patch("helm_providers.google_calendar.build") as mock_build:
                 mock_build.return_value = mock_service
 
-                auth = GoogleCalendarAuth()
                 orchestration = WorkflowOrchestrationService(
                     session,
                     validator_registry=_validator_registry(),
                     task_system_adapter=StubTaskSystemAdapter(),
-                    calendar_system_adapter=GoogleCalendarAdapter(auth),
+                    calendar_system_adapter=GoogleCalendarProvider(user.id, session),
                 )
                 completed_result = orchestration.execute_pending_sync_step(run_id)
                 assert completed_result.run.status == WorkflowRunStatus.COMPLETED.value
-                
+
                 # Capture source sync record IDs for later verification
                 source_sync_records = SQLAlchemyWorkflowSyncRecordRepository(session).list_for_run(run_id)
                 source_sync_record_ids = [
@@ -246,7 +276,7 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
                     if record.replayed_from_sync_record_id is None
                 ]
                 assert len(source_sync_record_ids) > 0, "Should have created sync records"
-                
+
                 # Verify calendar sync records have external_object_id populated
                 calendar_sync_records = [
                     r for r in source_sync_records
@@ -256,7 +286,7 @@ def test_weekly_scheduling_end_to_end_happy_path(monkeypatch) -> None:  # noqa: 
                 for record in calendar_sync_records:
                     assert record.external_object_id is not None, f"Calendar sync record {record.id} missing external_object_id"
                     assert record.external_object_id != "", f"Calendar sync record {record.id} has empty external_object_id"
-        
+
         # Step 7: Assert on completion summary and sync records
         completed = client.get(f"/v1/workflow-runs/{run_id}")
         assert completed.status_code == 200
@@ -304,7 +334,8 @@ def test_weekly_scheduling_approval_checkpoint_blocks_execution(monkeypatch) -> 
     """
     # Freeze scheduling "now" to a Sunday evening so all Mon-Fri slots generated
     # by compute_reference_week are in the future and past_event_guard never fires.
-    from datetime import UTC, datetime as real_datetime
+    from datetime import UTC
+    from datetime import datetime as real_datetime
     from unittest.mock import patch as mock_patch
 
     _future_now = real_datetime(2099, 1, 5, 0, 1, 0, tzinfo=UTC)
@@ -314,6 +345,10 @@ def test_weekly_scheduling_approval_checkpoint_blocks_execution(monkeypatch) -> 
 
         for client, session in _client():
             monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
+
+            # Seed user so _resolve_bootstrap_user_id can find the bootstrap user.
+            monkeypatch.setenv("TELEGRAM_ALLOWED_USER_ID", str(_TEST_TELEGRAM_USER_ID))
+            _seed_test_user(session)
 
             # Create run and advance to approval
             created = client.post(
@@ -361,6 +396,10 @@ def test_weekly_scheduling_sync_record_integrity(monkeypatch) -> None:  # noqa: 
         monkeypatch.setattr(workflow_runs_job, "SessionLocal", lambda: _SessionContext(session))
         monkeypatch.setattr(replay_service, "SessionLocal", lambda: _SessionContext(session))
 
+        # Seed user so _resolve_bootstrap_user_id can find the bootstrap user.
+        monkeypatch.setenv("TELEGRAM_ALLOWED_USER_ID", str(_TEST_TELEGRAM_USER_ID))
+        _seed_test_user(session)
+
         # Create and complete run
         created = client.post(
             "/v1/workflow-runs",
@@ -374,9 +413,12 @@ def test_weekly_scheduling_sync_record_integrity(monkeypatch) -> None:  # noqa: 
         )
         run_id = created.json()["id"]
 
-        # Advance to approval
-        workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
-        workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
+        # Advance to approval (time-frozen so past_event_guard doesn't fire)
+        with patch("helm_orchestration.scheduling.datetime") as _mock_dt:
+            _mock_dt.now.return_value = _FUTURE_MONDAY_MIDNIGHT_UTC
+            _mock_dt.side_effect = lambda *args, **kw: _real_datetime(*args, **kw)
+            workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
+            workflow_runs_job.run(handlers=workflow_runs_job._build_specialist_steps())
 
         # Get approval details
         blocked = client.get(f"/v1/workflow-runs/{run_id}")
