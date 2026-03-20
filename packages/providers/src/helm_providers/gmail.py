@@ -1,14 +1,14 @@
 """GmailProvider — credential-aware Gmail provider for Helm.
 
-Implements the ``InboxProvider`` Protocol by constructing a
-``google_workspace_mcp.services.gmail.GmailService`` with a pre-built
-``_service`` injected directly.  The credential bypass pattern sets
-``svc._service`` before the ``service`` property is ever accessed, so the
-``gauth`` module inside the MCP package is never invoked.
+Wraps ``google_workspace_mcp.services.gmail.GmailService`` with per-user
+DB-backed OAuth credentials.  Credentials are built from ``UserCredentialsORM``
+and injected into ``GmailService._service`` before any method is called,
+bypassing the gauth env-var lazy-load path.
 
-Data classes and normalization functions are transplanted verbatim from
-``packages/connectors/src/helm_connectors/gmail.py`` so that downstream
-consumers (S05) can switch import paths with a one-line change.
+``send_reply`` delegates to ``GmailService.create_reply``.
+Gmail history-cursor polling (``pull_new_messages_report``,
+``pull_changed_messages_report``) is implemented here because the MCP has
+no incremental sync equivalent.
 
 Security contract: access_token, refresh_token, and client_secret are never
 logged.  Only user_id appears in structured log events.
@@ -20,10 +20,10 @@ import base64
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from email.message import EmailMessage as MIMEEmailMessage
 from typing import Any
 
 import structlog
+from google_workspace_mcp.services.gmail import GmailService
 from googleapiclient.discovery import build
 from helm_storage.repositories.users import get_credentials
 from sqlalchemy.orm import Session
@@ -448,35 +448,13 @@ class GmailProvider:
     """
 
     def __init__(self, user_id: int, db: Session) -> None:
-        """Construct a provider for the given user.
-
-        Loads the user's Google credentials from the DB, refreshes the token if
-        necessary, and constructs a ``GmailService`` with the raw API client
-        injected directly.  Setting ``_service`` before accessing the ``service``
-        property ensures the lazy-load path (which calls into ``gauth``) is never
-        triggered.
-
-        Args:
-            user_id: Internal Helm user ID.
-            db: Active SQLAlchemy ``Session``.
-
-        Raises:
-            RuntimeError: If no Google credentials exist for this user.
-        """
-        from google_workspace_mcp.services.gmail import GmailService
-
         creds = get_credentials(user_id, "google", db)
         if creds is None:
             raise RuntimeError(f"No Google credentials for user_id={user_id}")
 
         google_creds = build_google_credentials(user_id, creds, db)
 
-        # Bypass GmailService.__init__ (which calls BaseGoogleService.__init__)
-        # by using __new__, then manually set the required attributes so the
-        # `service` property never triggers the gauth lazy-load path.
-        svc = GmailService.__new__(GmailService)
-        svc.service_name = "gmail"
-        svc.version = "v1"
+        svc = GmailService()
         svc._service = build("gmail", "v1", credentials=google_creds)
 
         self._gmail_svc = svc
@@ -615,18 +593,6 @@ class GmailProvider:
 
         Validates ``to_address`` and ``body_text`` before attempting the send.
         Raises ``GmailSendError`` on validation failure or API error.
-
-        Args:
-            provider_thread_id: Gmail thread ID to reply into.
-            to_address: Recipient email address.
-            subject: Email subject line.
-            body_text: Plain-text reply body.
-
-        Returns:
-            ``GmailSendResult`` with provider IDs and sender metadata.
-
-        Raises:
-            GmailSendError: On validation failure or API error.
         """
         logger = log.bind(user_id=self._user_id)
 
@@ -636,21 +602,19 @@ class GmailProvider:
         if not body_text.strip():
             raise GmailSendError("invalid_payload", "Reply body is required.")
 
-        service = self._gmail_svc.service
-
-        message = MIMEEmailMessage()
-        message["To"] = to_address
-        message["From"] = self._sender_email
-        message["Subject"] = subject
-        message.set_content(body_text)
-
-        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
-        payload: dict[str, object] = {"raw": raw_message}
-        if provider_thread_id:
-            payload["threadId"] = provider_thread_id
+        # Construct the original_message dict that GmailService.create_reply expects
+        original_message = {
+            "from": to_address,
+            "subject": subject,
+            "threadId": provider_thread_id,
+        }
 
         try:
-            response = service.users().messages().send(userId="me", body=payload).execute()
+            response = self._gmail_svc.create_reply(
+                original_message=original_message,
+                reply_body=body_text,
+                send=True,
+            )
         except TimeoutError as exc:
             raise GmailSendError("timeout", "Gmail send timed out.") from exc
         except ConnectionError as exc:
@@ -658,26 +622,27 @@ class GmailProvider:
         except Exception as exc:
             _raise_send_error(exc)
 
+        if not response or response.get("error"):
+            raise GmailSendError("unknown_delivery_state", f"Gmail send failed: {response}")
+
         provider_message_id = str(response.get("id", "")).strip()
         if not provider_message_id:
             raise GmailSendError(
                 "unknown_delivery_state",
                 "Gmail send did not return a provider message id.",
             )
-        provider_thread_id = (
-            str(response.get("threadId", provider_thread_id)).strip() or provider_thread_id
-        )
+        returned_thread_id = str(response.get("threadId", provider_thread_id)).strip() or provider_thread_id
 
         logger.info(
             "gmail_send_completed",
             to_address=to_address,
             provider_message_id=provider_message_id,
-            provider_thread_id=provider_thread_id,
+            provider_thread_id=returned_thread_id,
         )
 
         return GmailSendResult(
             provider_message_id=provider_message_id,
-            provider_thread_id=provider_thread_id,
+            provider_thread_id=returned_thread_id,
             from_address=self._sender_email,
             to_address=to_address,
             subject=subject,

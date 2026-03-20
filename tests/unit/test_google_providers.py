@@ -224,24 +224,23 @@ class TestProviderFactory:
 def _make_cal_provider_mocked(
     user_id: int = 1,
 ) -> tuple:
-    """Return (provider, mock_service) with the Google API client fully mocked."""
+    """Return (provider, mock_cal_svc) with CalendarService methods mocked."""
     from helm_providers.google_calendar import GoogleCalendarProvider
 
     db = MagicMock()
-    mock_service = MagicMock()
+    mock_cal_svc = MagicMock()
 
     with patch("helm_providers.google_calendar.get_credentials") as mock_get_creds, \
          patch("helm_providers.google_calendar.build_google_credentials") as mock_build, \
-         patch("helm_providers.google_calendar.build") as mock_disc_build:
+         patch("helm_providers.google_calendar.build"), \
+         patch("helm_providers.google_calendar.CalendarService") as mock_cal_cls:
         mock_get_creds.return_value = MagicMock()
         mock_build.return_value = MagicMock()
-        mock_disc_build.return_value = mock_service
+        mock_cal_cls.return_value = mock_cal_svc
 
         provider = GoogleCalendarProvider(user_id, db)
 
-    # Confirm _service is set (not None) — bypasses gauth lazy-load
-    assert provider._cal_svc._service is mock_service
-    return provider, mock_service
+    return provider, mock_cal_svc
 
 
 class TestGoogleCalendarProviderInit:
@@ -270,10 +269,10 @@ class TestGoogleCalendarProviderInit:
         assert "import gauth" not in content, "gauth must not be imported in google_calendar.py"
 
     def test_service_injected_before_property_access(self) -> None:
-        """_service is set before any access to .service property (no gauth trigger)."""
-        provider, mock_service = _make_cal_provider_mocked()
-        # Directly accessing _service on the CalendarService instance
-        assert provider._cal_svc._service is mock_service
+        """_service is injected onto CalendarService before any access."""
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        # CalendarService instance is the mock itself
+        assert provider._cal_svc is mock_cal_svc
 
 
 class TestUpsertCalendarBlock:
@@ -322,13 +321,11 @@ class TestUpsertCalendarBlock:
         )
 
     def test_insert_new_event_succeeds(self) -> None:
-        """Insert path: events().insert() called, SUCCEEDED returned."""
+        """Insert path: create_event called, SUCCEEDED returned."""
         from helm_orchestration.schemas import SyncOutcomeStatus, SyncRetryDisposition
 
-        provider, mock_service = _make_cal_provider_mocked()
-        mock_service.events.return_value.insert.return_value.execute.return_value = {
-            "id": "new-event-id-42"
-        }
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.create_event.return_value = {"id": "new-event-id-42"}
 
         result = provider.upsert_calendar_block(self._make_request())
 
@@ -336,17 +333,15 @@ class TestUpsertCalendarBlock:
         assert result.retry_disposition == SyncRetryDisposition.TERMINAL
         assert result.external_object_id == "new-event-id-42"
         assert result.error_summary is None
-        mock_service.events.return_value.insert.assert_called_once()
-        mock_service.events.return_value.update.assert_not_called()
+        mock_cal_svc.create_event.assert_called_once()
+        mock_cal_svc.delete_event.assert_not_called()
 
     def test_update_existing_event_succeeds(self) -> None:
-        """Update path: events().update() called when external_object_id present."""
+        """Update path: delete_event then create_event when external_object_id present."""
         from helm_orchestration.schemas import SyncOutcomeStatus
 
-        provider, mock_service = _make_cal_provider_mocked()
-        mock_service.events.return_value.update.return_value.execute.return_value = {
-            "id": "existing-event-99"
-        }
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.create_event.return_value = {"id": "existing-event-99"}
 
         result = provider.upsert_calendar_block(
             self._make_request(external_object_id="existing-event-99")
@@ -354,29 +349,27 @@ class TestUpsertCalendarBlock:
 
         assert result.status == SyncOutcomeStatus.SUCCEEDED
         assert result.external_object_id == "existing-event-99"
-        mock_service.events.return_value.update.assert_called_once()
-        mock_service.events.return_value.insert.assert_not_called()
+        mock_cal_svc.delete_event.assert_called_once_with(event_id="existing-event-99", send_notifications=False)
+        mock_cal_svc.create_event.assert_called_once()
 
     def test_missing_title_returns_terminal_failure(self) -> None:
         """Missing required title field → TERMINAL_FAILURE without API call."""
         from helm_orchestration.schemas import SyncOutcomeStatus, SyncRetryDisposition
 
-        provider, mock_service = _make_cal_provider_mocked()
+        provider, mock_cal_svc = _make_cal_provider_mocked()
         result = provider.upsert_calendar_block(self._make_request(title=""))
 
         assert result.status == SyncOutcomeStatus.TERMINAL_FAILURE
         assert result.retry_disposition == SyncRetryDisposition.TERMINAL
         assert result.error_summary is not None
-        mock_service.events.assert_not_called()
+        mock_cal_svc.create_event.assert_not_called()
 
     def test_404_returns_terminal_failure(self) -> None:
-        """HTTP 404 → TERMINAL_FAILURE (event vanished)."""
-        from googleapiclient.errors import HttpError
+        """create_event returning error with status_code=404 → TERMINAL_FAILURE."""
         from helm_orchestration.schemas import SyncOutcomeStatus, SyncRetryDisposition
 
-        provider, mock_service = _make_cal_provider_mocked()
-        http_error = HttpError(resp=MagicMock(status=404), content=b"Not Found")
-        mock_service.events.return_value.insert.return_value.execute.side_effect = http_error
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.create_event.return_value = {"error": True, "status_code": 404, "message": "Not Found"}
 
         result = provider.upsert_calendar_block(self._make_request())
 
@@ -384,13 +377,11 @@ class TestUpsertCalendarBlock:
         assert result.retry_disposition == SyncRetryDisposition.TERMINAL
 
     def test_429_returns_retryable_failure(self) -> None:
-        """HTTP 429 → RETRYABLE_FAILURE (rate limited)."""
-        from googleapiclient.errors import HttpError
+        """create_event returning error with status_code=429 → RETRYABLE_FAILURE."""
         from helm_orchestration.schemas import SyncOutcomeStatus, SyncRetryDisposition
 
-        provider, mock_service = _make_cal_provider_mocked()
-        http_error = HttpError(resp=MagicMock(status=429), content=b"Rate Limited")
-        mock_service.events.return_value.insert.return_value.execute.side_effect = http_error
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.create_event.return_value = {"error": True, "status_code": 429, "message": "Rate Limited"}
 
         result = provider.upsert_calendar_block(self._make_request())
 
@@ -398,13 +389,11 @@ class TestUpsertCalendarBlock:
         assert result.retry_disposition == SyncRetryDisposition.RETRYABLE
 
     def test_500_returns_retryable_failure(self) -> None:
-        """HTTP 5xx → RETRYABLE_FAILURE (transient server error)."""
-        from googleapiclient.errors import HttpError
+        """create_event returning error with status_code=500 → RETRYABLE_FAILURE."""
         from helm_orchestration.schemas import SyncOutcomeStatus, SyncRetryDisposition
 
-        provider, mock_service = _make_cal_provider_mocked()
-        http_error = HttpError(resp=MagicMock(status=500), content=b"Server Error")
-        mock_service.events.return_value.insert.return_value.execute.side_effect = http_error
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.create_event.return_value = {"error": True, "status_code": 500, "message": "Server Error"}
 
         result = provider.upsert_calendar_block(self._make_request())
 
@@ -413,7 +402,7 @@ class TestUpsertCalendarBlock:
 
 
 class TestReconcileCalendarBlock:
-    """reconcile_calendar_block — found, not-found (404), cancelled events."""
+    """reconcile_calendar_block — found, not-found, cancelled events."""
 
     def _make_lookup_request(
         self,
@@ -440,9 +429,9 @@ class TestReconcileCalendarBlock:
         )
 
     def test_found_event_returns_true(self) -> None:
-        """Event found in calendar → found=True."""
-        provider, mock_service = _make_cal_provider_mocked()
-        mock_service.events.return_value.get.return_value.execute.return_value = {
+        """Event found → found=True."""
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.get_event_details.return_value = {
             "id": "evt-123",
             "summary": "Standup",
             "start": {"dateTime": "2026-03-14T10:00:00+00:00"},
@@ -459,12 +448,9 @@ class TestReconcileCalendarBlock:
         assert "live_event_fields" in result.details
 
     def test_not_found_404_returns_false(self) -> None:
-        """HTTP 404 → found=False, provider_state='not_found'."""
-        provider, mock_service = _make_cal_provider_mocked()
-        error = Exception("Not Found")
-        error.resp = MagicMock()
-        error.resp.status = 404
-        mock_service.events.return_value.get.return_value.execute.side_effect = error
+        """get_event_details returning error dict with status_code=404 → found=False."""
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.get_event_details.return_value = {"error": True, "status_code": 404, "message": "Not Found"}
 
         result = provider.reconcile_calendar_block(self._make_lookup_request())
 
@@ -474,11 +460,8 @@ class TestReconcileCalendarBlock:
 
     def test_cancelled_event_returns_false(self) -> None:
         """Google status='cancelled' → found=False, provider_state='cancelled'."""
-        provider, mock_service = _make_cal_provider_mocked()
-        mock_service.events.return_value.get.return_value.execute.return_value = {
-            "id": "evt-123",
-            "status": "cancelled",
-        }
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.get_event_details.return_value = {"id": "evt-123", "status": "cancelled"}
 
         result = provider.reconcile_calendar_block(self._make_lookup_request())
 
@@ -487,43 +470,39 @@ class TestReconcileCalendarBlock:
 
     def test_missing_external_object_id_returns_error(self) -> None:
         """No external_object_id → found=False with error details, no API call."""
-        provider, mock_service = _make_cal_provider_mocked()
+        provider, mock_cal_svc = _make_cal_provider_mocked()
         result = provider.reconcile_calendar_block(
             self._make_lookup_request(external_object_id=None)
         )
 
         assert result.found is False
         assert "error" in result.details
-        mock_service.events.assert_not_called()
+        mock_cal_svc.get_event_details.assert_not_called()
 
 
 class TestListTodayEvents:
-    """list_today_events — day boundary computation and API call."""
+    """list_today_events — delegates to CalendarService.get_events."""
 
     def test_returns_event_list(self) -> None:
-        """list_today_events returns items from API response."""
         from zoneinfo import ZoneInfo
 
-        provider, mock_service = _make_cal_provider_mocked()
-        mock_service.events.return_value.list.return_value.execute.return_value = {
-            "items": [
-                {"id": "e1", "summary": "Morning call"},
-                {"id": "e2", "summary": "Lunch"},
-            ]
-        }
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.get_events.return_value = [
+            {"id": "e1", "summary": "Morning call"},
+            {"id": "e2", "summary": "Lunch"},
+        ]
 
         events = provider.list_today_events("primary", ZoneInfo("America/Los_Angeles"))
 
         assert len(events) == 2
         assert events[0]["id"] == "e1"
-        mock_service.events.return_value.list.assert_called_once()
+        mock_cal_svc.get_events.assert_called_once()
 
     def test_empty_calendar_returns_empty_list(self) -> None:
-        """Empty calendar → empty list (not error)."""
         from zoneinfo import ZoneInfo
 
-        provider, mock_service = _make_cal_provider_mocked()
-        mock_service.events.return_value.list.return_value.execute.return_value = {"items": []}
+        provider, mock_cal_svc = _make_cal_provider_mocked()
+        mock_cal_svc.get_events.return_value = []
 
         events = provider.list_today_events("primary", ZoneInfo("UTC"))
 
@@ -536,8 +515,8 @@ class TestFingerprintEvent:
     def test_canonical_json_sorted_keys(self) -> None:
         """Fingerprint is deterministic (same input → same output, sorted keys)."""
         import json
+        from helm_providers.google_calendar import _fingerprint_event
 
-        provider, _ = _make_cal_provider_mocked()
         event = {
             "summary": "Standup",
             "start": {"dateTime": "2026-03-14T10:00:00+00:00"},
@@ -545,8 +524,8 @@ class TestFingerprintEvent:
             "description": "Daily sync",
         }
 
-        fp1 = provider._fingerprint_event(event)
-        fp2 = provider._fingerprint_event(event)
+        fp1 = _fingerprint_event(event)
+        fp2 = _fingerprint_event(event)
         assert fp1 == fp2
 
         parsed = json.loads(fp1)
@@ -555,7 +534,8 @@ class TestFingerprintEvent:
 
     def test_datetimes_normalized_to_utc(self) -> None:
         """Datetimes with different UTC offsets that represent the same instant fingerprint equal."""
-        provider, _ = _make_cal_provider_mocked()
+        from helm_providers.google_calendar import _fingerprint_event
+
         event_utc = {
             "summary": "Meeting",
             "start": {"dateTime": "2026-03-14T17:00:00+00:00"},
@@ -569,17 +549,14 @@ class TestFingerprintEvent:
             "description": "",
         }
 
-        fp_utc = provider._fingerprint_event(event_utc)
-        fp_pacific = provider._fingerprint_event(event_pacific)
-        assert fp_utc == fp_pacific
+        assert _fingerprint_event(event_utc) == _fingerprint_event(event_pacific)
 
     def test_missing_fields_produce_empty_strings(self) -> None:
         """Missing start/end/description → empty strings in fingerprint."""
         import json
+        from helm_providers.google_calendar import _fingerprint_event
 
-        provider, _ = _make_cal_provider_mocked()
-        fp = provider._fingerprint_event({"summary": "Solo"})
-        parsed = json.loads(fp)
+        parsed = json.loads(_fingerprint_event({"summary": "Solo"}))
         assert parsed["start"] == ""
         assert parsed["end"] == ""
         assert parsed["description"] == ""
@@ -594,27 +571,30 @@ def _make_gmail_provider_mocked(
     user_id: int = 1,
     sender_email: str = "sender@example.com",
 ) -> tuple:
-    """Return (provider, mock_service) with the Gmail API client fully mocked."""
+    """Return (provider, mock_gmail_svc) with GmailService methods mocked.
+
+    The raw service (mock_gmail_svc.service) is also a MagicMock so polling
+    tests that call self._gmail_svc.service.users()... still work.
+    """
     from helm_providers.gmail import GmailProvider
 
     db = MagicMock()
-    mock_service = MagicMock()
+    mock_gmail_svc = MagicMock()
 
     mock_creds_orm = MagicMock()
     mock_creds_orm.email = sender_email
 
     with patch("helm_providers.gmail.get_credentials") as mock_get_creds, \
          patch("helm_providers.gmail.build_google_credentials") as mock_build, \
-         patch("helm_providers.gmail.build") as mock_disc_build:
+         patch("helm_providers.gmail.build"), \
+         patch("helm_providers.gmail.GmailService") as mock_gmail_cls:
         mock_get_creds.return_value = mock_creds_orm
         mock_build.return_value = MagicMock()
-        mock_disc_build.return_value = mock_service
+        mock_gmail_cls.return_value = mock_gmail_svc
 
         provider = GmailProvider(user_id, db)
 
-    # Confirm _service is injected directly (gauth bypass)
-    assert provider._gmail_svc._service is mock_service
-    return provider, mock_service
+    return provider, mock_gmail_svc
 
 
 class TestGmailProviderInit:
@@ -651,7 +631,7 @@ class TestPullNewMessagesReport:
 
     def test_manual_payload_normalizes_messages(self) -> None:
         """Manual payload list is normalized without calling the Gmail API."""
-        provider, mock_service = _make_gmail_provider_mocked()
+        provider, mock_gmail_svc = _make_gmail_provider_mocked()
 
         raw_msgs = [
             {
@@ -679,14 +659,14 @@ class TestPullNewMessagesReport:
         assert report.messages[0].provider_message_id == "msg001"
         assert report.messages[1].provider_message_id == "msg002"
         # API must NOT be called for manual payload
-        mock_service.users.assert_not_called()
+        mock_gmail_svc.service.users.assert_not_called()
 
     def test_from_api_normalizes_messages(self) -> None:
         """API path: messages().list() + messages().get() called and normalized."""
-        provider, mock_service = _make_gmail_provider_mocked()
+        provider, mock_gmail_svc = _make_gmail_provider_mocked()
 
         # Mock messages().list() response
-        mock_service.users.return_value.messages.return_value.list.return_value \
+        mock_gmail_svc.service.users.return_value.messages.return_value.list.return_value \
             .execute.return_value = {
                 "messages": [{"id": "api001"}, {"id": "api002"}]
             }
@@ -710,10 +690,10 @@ class TestPullNewMessagesReport:
                 }
             )
 
-        mock_service.users.return_value.messages.return_value.get.side_effect = fake_get_execute
+        mock_gmail_svc.service.users.return_value.messages.return_value.get.side_effect = fake_get_execute
 
         # Mock getProfile for history cursor
-        mock_service.users.return_value.getProfile.return_value.execute.return_value = {
+        mock_gmail_svc.service.users.return_value.getProfile.return_value.execute.return_value = {
             "historyId": "999"
         }
 
@@ -730,13 +710,13 @@ class TestPullChangedMessagesReport:
 
     def test_bootstrap_fallback_when_no_cursor(self) -> None:
         """last_history_cursor=None must fall back to pull_new_messages_report with mode='bootstrap'."""
-        provider, mock_service = _make_gmail_provider_mocked()
+        provider, mock_gmail_svc = _make_gmail_provider_mocked()
 
         # Mock the full new-messages path
-        mock_service.users.return_value.messages.return_value.list.return_value \
+        mock_gmail_svc.service.users.return_value.messages.return_value.list.return_value \
             .execute.return_value = {"messages": [{"id": "bsm001"}]}
 
-        mock_service.users.return_value.messages.return_value.get.side_effect = (
+        mock_gmail_svc.service.users.return_value.messages.return_value.get.side_effect = (
             lambda userId, id, format: MagicMock(  # noqa: A002
                 execute=lambda: {
                     "id": id,
@@ -751,7 +731,7 @@ class TestPullChangedMessagesReport:
                 }
             )
         )
-        mock_service.users.return_value.getProfile.return_value.execute.return_value = {
+        mock_gmail_svc.service.users.return_value.getProfile.return_value.execute.return_value = {
             "historyId": "111"
         }
 
@@ -764,10 +744,10 @@ class TestPullChangedMessagesReport:
 
     def test_history_cursor_path(self) -> None:
         """Valid cursor: history().list() called, new messages fetched and returned."""
-        provider, mock_service = _make_gmail_provider_mocked()
+        provider, mock_gmail_svc = _make_gmail_provider_mocked()
 
         # Mock history list response with one new message
-        mock_service.users.return_value.history.return_value.list.return_value \
+        mock_gmail_svc.service.users.return_value.history.return_value.list.return_value \
             .execute.return_value = {
                 "historyId": "500",
                 "history": [
@@ -780,7 +760,7 @@ class TestPullChangedMessagesReport:
                 "nextPageToken": None,
             }
 
-        mock_service.users.return_value.messages.return_value.get.side_effect = (
+        mock_gmail_svc.service.users.return_value.messages.return_value.get.side_effect = (
             lambda userId, id, format: MagicMock(  # noqa: A002
                 execute=lambda: {
                     "id": id,
@@ -805,16 +785,16 @@ class TestPullChangedMessagesReport:
 
     def test_history_pull_failure_triggers_recovery(self) -> None:
         """History pull exception falls back to recovery_poll with recovery_reason set."""
-        provider, mock_service = _make_gmail_provider_mocked()
+        provider, mock_gmail_svc = _make_gmail_provider_mocked()
 
         # History list raises
-        mock_service.users.return_value.history.return_value.list.return_value \
+        mock_gmail_svc.service.users.return_value.history.return_value.list.return_value \
             .execute.side_effect = Exception("historyId too old")
 
         # Fall-back new-messages pull returns empty
-        mock_service.users.return_value.messages.return_value.list.return_value \
+        mock_gmail_svc.service.users.return_value.messages.return_value.list.return_value \
             .execute.return_value = {"messages": []}
-        mock_service.users.return_value.getProfile.return_value.execute.return_value = {
+        mock_gmail_svc.service.users.return_value.getProfile.return_value.execute.return_value = {
             "historyId": "600"
         }
 
@@ -825,15 +805,14 @@ class TestPullChangedMessagesReport:
 
 
 class TestSendReply:
-    """send_reply — success, validation errors, error classification."""
+    """send_reply — success, validation errors."""
 
     def test_send_reply_success(self) -> None:
         """Successful send returns GmailSendResult with correct fields."""
         from helm_providers.gmail import GmailSendResult
 
-        provider, mock_service = _make_gmail_provider_mocked(sender_email="me@example.com")
-        mock_service.users.return_value.messages.return_value.send.return_value \
-            .execute.return_value = {"id": "msg123", "threadId": "t456"}
+        provider, mock_gmail_svc = _make_gmail_provider_mocked(sender_email="me@example.com")
+        mock_gmail_svc.create_reply.return_value = {"id": "msg123", "threadId": "t456"}
 
         result = provider.send_reply(
             provider_thread_id="t456",
