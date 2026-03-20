@@ -198,6 +198,7 @@ def test_task_execution_creates_blocked_run_and_completes_after_approval(
                 priority="low",
                 sizing_minutes=60,
                 confidence=0.9,
+                suggested_date="2099-06-10",
             )
 
             svc = TelegramWorkflowStatusService()

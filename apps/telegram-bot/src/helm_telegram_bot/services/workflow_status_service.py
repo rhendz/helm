@@ -17,8 +17,6 @@ from helm_orchestration import (
     StubTaskSystemAdapter,
     TaskSemantics,
     WorkflowOrchestrationService,
-    compute_reference_week,
-    parse_local_slot,
     past_event_guard,
     to_utc,
 )
@@ -109,13 +107,30 @@ class TelegramWorkflowStatusService:
         request_text: str,
     ) -> dict[str, object]:
         """Build a CalendarAgentOutput from TaskSemantics and advance the run to the approval checkpoint."""
+        from datetime import datetime
         from helm_worker.jobs.workflow_runs import _build_validator_registry
 
         tz = ZoneInfo(os.environ["OPERATOR_TIMEZONE"])
-        week_start = compute_reference_week(tz)
-        local_start = parse_local_slot(request_text, week_start, tz)
+        now_local = datetime.now(tz)
+
+        # Use LLM-suggested date at 9am; fall back to tomorrow 9am if absent or past.
+        local_start: datetime | None = None
+        if semantics.suggested_date:
+            try:
+                from datetime import date as _date
+                suggested = _date.fromisoformat(semantics.suggested_date)
+                candidate = datetime(suggested.year, suggested.month, suggested.day, 9, 0, 0, tzinfo=tz)
+                if candidate > now_local:
+                    local_start = candidate
+            except ValueError:
+                pass
+
         if local_start is None:
-            local_start = week_start.replace(hour=9, minute=0, second=0, microsecond=0)
+            candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
+            if candidate <= now_local:
+                candidate = candidate + timedelta(days=1)
+            local_start = candidate
+
         start_utc = to_utc(local_start, tz)
         end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
         # Raises PastEventError if the resolved time is in the past — caller handles it
@@ -159,6 +174,7 @@ class TelegramWorkflowStatusService:
                 artifact_payload=output,
                 next_step_name="apply_schedule",
             )
+            session.flush()
             return WorkflowStatusService(session).get_run_detail(run_id)
 
     def execute_after_approval(self, run_id: int) -> dict[str, object]:
