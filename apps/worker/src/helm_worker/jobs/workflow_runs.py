@@ -230,10 +230,26 @@ def _run_task_inference(payload: object) -> CalendarAgentOutput:
     tz = ZoneInfo(settings.operator_timezone)
     semantics = LLMClient().infer_task_semantics(request_text)
 
-    week_start = compute_reference_week(tz)
-    local_start = parse_local_slot(request_text, week_start, tz)
+    # Use the LLM-suggested date at 9am local time.
+    # Fall back to tomorrow 9am if the LLM returned None or the date is in the past.
+    now_local = datetime.now(tz)
+    local_start: datetime | None = None
+    if semantics.suggested_date:
+        try:
+            from datetime import date as _date
+            suggested = _date.fromisoformat(semantics.suggested_date)
+            local_start = datetime(suggested.year, suggested.month, suggested.day, 9, 0, 0, tzinfo=tz)
+            if local_start <= now_local:
+                local_start = None  # LLM hallucinated a past date — fall through to default
+        except ValueError:
+            local_start = None
+
     if local_start is None:
-        local_start = week_start.replace(hour=9, minute=0, second=0, microsecond=0)
+        candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
+        if candidate <= now_local:
+            candidate = candidate + timedelta(days=1)
+        local_start = candidate
+
     start_utc = to_utc(local_start, tz)
     end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
 

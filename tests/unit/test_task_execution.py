@@ -260,21 +260,17 @@ def test_build_specialist_steps_includes_task_quick_add() -> None:
 def test_run_task_inference_produces_calendar_agent_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
     from helm_orchestration import CalendarAgentOutput, TaskSemantics
     from helm_worker.jobs import workflow_runs
 
     class _FakeLLMClient:
         def infer_task_semantics(self, text: str) -> TaskSemantics:
-            return TaskSemantics(urgency="high", priority="high", sizing_minutes=45, confidence=0.9)
-
-    # Return next Monday at midnight so past_event_guard doesn't trigger
-    future_monday = datetime(2099, 1, 6, 9, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+            return TaskSemantics(
+                urgency="high", priority="high", sizing_minutes=45, confidence=0.9,
+                suggested_date="2099-01-06",
+            )
 
     monkeypatch.setattr(workflow_runs, "LLMClient", _FakeLLMClient)
-    monkeypatch.setattr(workflow_runs, "compute_reference_week", lambda tz: future_monday)
 
     result = workflow_runs._run_task_inference("dentist appointment")
 
@@ -283,8 +279,49 @@ def test_run_task_inference_produces_calendar_agent_output(
     assert "dentist" in result.time_blocks[0].title.lower()
     assert result.time_blocks[0].start is not None
     assert result.time_blocks[0].end is not None
-    # Proposal summary should reference the request text
     assert "dentist" in result.proposal_summary.lower()
+
+
+def test_run_task_inference_no_explicit_time_uses_future_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When LLM returns no suggested_date, fallback slot must be in the future.
+
+    Regression guard: old code used parse_local_slot + week_start fallback which
+    placed tasks on Monday 9am — already in the past mid-week.
+    """
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import patch
+    from zoneinfo import ZoneInfo
+
+    from helm_orchestration import CalendarAgentOutput, TaskSemantics
+    from helm_worker.jobs import workflow_runs
+
+    class _FakeLLMClient:
+        def infer_task_semantics(self, text: str) -> TaskSemantics:
+            # No suggested_date — LLM couldn't infer one
+            return TaskSemantics(urgency="low", priority="low", sizing_minutes=30, confidence=0.9)
+
+    # Simulate Thursday at noon
+    thursday_noon = datetime(2099, 1, 9, 12, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    monkeypatch.setattr(workflow_runs, "LLMClient", _FakeLLMClient)
+
+    real_datetime = datetime
+
+    class _MockDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):  # type: ignore[override]
+            return thursday_noon
+
+    with patch("helm_worker.jobs.workflow_runs.datetime", _MockDatetime):
+        # Must not raise PastEventError
+        result = workflow_runs._run_task_inference("book dentist appointment this week")
+
+    assert isinstance(result, CalendarAgentOutput)
+    start_dt = datetime.fromisoformat(result.time_blocks[0].start)
+    assert start_dt > thursday_noon.astimezone(timezone.utc).replace(tzinfo=timezone.utc), (
+        "fallback slot must be strictly in the future"
+    )
 
 
 # ---------------------------------------------------------------------------

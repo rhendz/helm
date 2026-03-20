@@ -79,6 +79,7 @@ class TaskSemantics(BaseModel):
     priority: str  # low / medium / high
     sizing_minutes: int
     confidence: float  # 0.0–1.0
+    suggested_date: str | None = None  # ISO date string e.g. "2026-03-21", None if not inferable
 
 
 class TaskArtifact(BaseModel):
