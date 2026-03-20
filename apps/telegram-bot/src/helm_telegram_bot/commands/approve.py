@@ -46,11 +46,10 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         actor=f"telegram:{update.effective_user.id}",
         target_artifact_id=target_artifact_id,
     )
-    await update.message.reply_text(_format_run(result))
     # Trigger immediate execution of apply_schedule step
     try:
         _workflow_service.execute_after_approval(run_id)
-        await update.message.reply_text("✅ Approved and syncing to calendar…")
+        await update.message.reply_text("✅ Approved — syncing to calendar…")
     except Exception:
         logger.exception("approve_inline_execution_failed", run_id=run_id)
         await update.message.reply_text(

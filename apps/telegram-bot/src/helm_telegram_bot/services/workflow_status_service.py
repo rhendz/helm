@@ -107,46 +107,31 @@ class TelegramWorkflowStatusService:
         request_text: str,
     ) -> dict[str, object]:
         """Build a CalendarAgentOutput from TaskSemantics and advance the run to the approval checkpoint."""
-        from datetime import datetime
-        from helm_worker.jobs.workflow_runs import _build_validator_registry
+        from helm_worker.jobs.workflow_runs import (
+            _build_validator_registry,
+            _format_proposal_summary,
+            _resolve_task_slot,
+        )
 
         tz = ZoneInfo(os.environ["OPERATOR_TIMEZONE"])
-        now_local = datetime.now(tz)
-
-        # Use LLM-suggested date at 9am; fall back to tomorrow 9am if absent or past.
-        local_start: datetime | None = None
-        if semantics.suggested_date:
-            try:
-                from datetime import date as _date
-                suggested = _date.fromisoformat(semantics.suggested_date)
-                candidate = datetime(suggested.year, suggested.month, suggested.day, 9, 0, 0, tzinfo=tz)
-                if candidate > now_local:
-                    local_start = candidate
-            except ValueError:
-                pass
-
-        if local_start is None:
-            candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
-            if candidate <= now_local:
-                candidate = candidate + timedelta(days=1)
-            local_start = candidate
-
+        local_start = _resolve_task_slot(semantics, tz)
         start_utc = to_utc(local_start, tz)
         end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
         # Raises PastEventError if the resolved time is in the past — caller handles it
         past_event_guard(start_utc, tz)
 
+        title = semantics.suggested_title or request_text
         block = ScheduleBlock(
-            title=request_text,
-            task_title=request_text,
+            title=title,
+            task_title=title,
             start=start_utc.isoformat(),
             end=end_utc.isoformat(),
         )
         output = CalendarAgentOutput(
-            proposal_summary=f"Schedule: {request_text}",
+            proposal_summary=_format_proposal_summary(title, start_utc, tz),
             calendar_id="primary",
             time_blocks=(block,),
-            proposed_changes=(f"Schedule {request_text}",),
+            proposed_changes=(f"Schedule {title}",),
         )
 
         with SessionLocal() as session:

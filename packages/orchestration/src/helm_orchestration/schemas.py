@@ -80,6 +80,7 @@ class TaskSemantics(BaseModel):
     sizing_minutes: int
     confidence: float  # 0.0–1.0
     suggested_date: str | None = None  # ISO date string e.g. "2026-03-21", None if not inferable
+    suggested_title: str | None = None  # Clean short title e.g. "Book dentist appointment"
 
 
 class TaskArtifact(BaseModel):

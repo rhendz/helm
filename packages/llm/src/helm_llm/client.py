@@ -37,6 +37,9 @@ class LLMClient:
                 "Infer from context clues like 'this week', 'tomorrow', 'by Wednesday', 'urgent', etc. "
                 "If no timing context exists, suggest the next business day. "
                 "Never suggest a date in the past.\n"
+                "- suggested_title: a clean, concise calendar title in title case (3-6 words). "
+                "Strip filler words like 'this week', 'ASAP', 'please'. "
+                "Examples: 'Book Dentist Appointment', 'Review Q1 Budget', 'Call Mom'.\n"
                 "Be conservative with confidence — use <0.8 when the task is vague or ambiguous."
             ),
             input=text,

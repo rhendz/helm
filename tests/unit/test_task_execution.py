@@ -222,7 +222,6 @@ async def test_approve_triggers_inline_execution(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(approve, "reject_if_unauthorized", _allow)
     monkeypatch.setattr(approve, "_workflow_service", _FakeWorkflowService())
-    monkeypatch.setattr(approve, "_format_run", lambda result: f"run {result['id']}")
 
     update = _Update()
     ctx = _Context(args=["5", "101"])
@@ -231,9 +230,9 @@ async def test_approve_triggers_inline_execution(monkeypatch: pytest.MonkeyPatch
 
     # execute_after_approval was called with the run_id
     assert execute_after_approval_called == [5]
-    # At least two replies: formatted run + "Approved and syncing" message
-    replies_text = " ".join(update.message.replies)
-    assert "syncing" in replies_text or "Approved" in replies_text
+    # Single reply: "Approved — syncing to calendar…"
+    assert len(update.message.replies) == 1
+    assert "syncing" in update.message.replies[0].lower() or "Approved" in update.message.replies[0]
 
 
 # ---------------------------------------------------------------------------
@@ -382,20 +381,15 @@ async def test_approve_inline_execution_failure_still_confirms_approval(
 
     monkeypatch.setattr(approve, "reject_if_unauthorized", _allow)
     monkeypatch.setattr(approve, "_workflow_service", _FakeWorkflowService())
-    monkeypatch.setattr(approve, "_format_run", lambda result: f"run {result['id']}")
 
     update = _Update()
     ctx = _Context(args=["9", "55"])
 
     await approve.handle(update, ctx)
 
-    # The user must get at least two replies: formatted run approval + fallback message
-    assert len(update.message.replies) >= 2
-    all_text = " ".join(update.message.replies)
-    # Must contain approval confirmation
-    assert "run 9" in all_text
-    # Must contain "shortly" fallback (not "syncing") since inline execution failed
-    assert "shortly" in all_text
+    # Single reply: fallback message since inline execution failed
+    assert len(update.message.replies) == 1
+    assert "shortly" in update.message.replies[0]
 
 
 # ---------------------------------------------------------------------------

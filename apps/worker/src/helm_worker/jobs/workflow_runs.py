@@ -224,32 +224,44 @@ def _build_task_quick_add_input(state: WorkflowRunState) -> PreparedSpecialistIn
     )
 
 
+def _resolve_task_slot(
+    semantics: "TaskSemantics",
+    tz: "ZoneInfo",
+) -> "datetime":
+    """Return the local datetime for a task slot from LLM semantics.
+
+    Uses suggested_date at 9am; falls back to tomorrow 9am if absent or past.
+    """
+    now_local = datetime.now(tz)
+    if semantics.suggested_date:
+        try:
+            from datetime import date as _date
+            suggested = _date.fromisoformat(semantics.suggested_date)
+            candidate = datetime(suggested.year, suggested.month, suggested.day, 9, 0, 0, tzinfo=tz)
+            if candidate > now_local:
+                return candidate
+        except ValueError:
+            pass
+    # Fallback: today 9am if still in the future, otherwise tomorrow 9am
+    candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
+    if candidate <= now_local:
+        candidate = candidate + timedelta(days=1)
+    return candidate
+
+
+def _format_proposal_summary(title: str, start_utc: "datetime", tz: "ZoneInfo") -> str:
+    """Human-readable one-liner for the proposal message: 'Title — Day, Mon D at H:MMam'."""
+    local = start_utc.astimezone(tz)
+    return f"{title} — {local.strftime('%A, %b %-d at %-I:%M%p').replace('AM', 'am').replace('PM', 'pm')}"
+
+
 def _run_task_inference(payload: object) -> CalendarAgentOutput:
     """Worker recovery handler: infer semantics and build a CalendarAgentOutput."""
     request_text = str(payload)
     tz = ZoneInfo(settings.operator_timezone)
     semantics = LLMClient().infer_task_semantics(request_text)
 
-    # Use the LLM-suggested date at 9am local time.
-    # Fall back to tomorrow 9am if the LLM returned None or the date is in the past.
-    now_local = datetime.now(tz)
-    local_start: datetime | None = None
-    if semantics.suggested_date:
-        try:
-            from datetime import date as _date
-            suggested = _date.fromisoformat(semantics.suggested_date)
-            local_start = datetime(suggested.year, suggested.month, suggested.day, 9, 0, 0, tzinfo=tz)
-            if local_start <= now_local:
-                local_start = None  # LLM hallucinated a past date — fall through to default
-        except ValueError:
-            local_start = None
-
-    if local_start is None:
-        candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
-        if candidate <= now_local:
-            candidate = candidate + timedelta(days=1)
-        local_start = candidate
-
+    local_start = _resolve_task_slot(semantics, tz)
     start_utc = to_utc(local_start, tz)
     end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
 
@@ -263,17 +275,18 @@ def _run_task_inference(payload: object) -> CalendarAgentOutput:
         )
         raise
 
+    title = semantics.suggested_title or request_text
     block = ScheduleBlock(
-        title=request_text,
-        task_title=request_text,
+        title=title,
+        task_title=title,
         start=start_utc.isoformat(),
         end=end_utc.isoformat(),
     )
     return CalendarAgentOutput(
-        proposal_summary=f"Schedule: {request_text}",
+        proposal_summary=_format_proposal_summary(title, start_utc, tz),
         calendar_id=os.getenv("HELM_CALENDAR_TEST_ID", "primary"),
         time_blocks=(block,),
-        proposed_changes=(f"Schedule {request_text}",),
+        proposed_changes=(f"Schedule {title}",),
     )
 
 

@@ -152,10 +152,9 @@ async def test_workflow_approve_parses_ids_and_calls_service(
 
     assert service.seen == (7, 41)
     assert service.execute_after_approval_called == [7]
-    # First reply is the formatted run; second is "Approved and syncing…"
-    assert len(update.message.replies) == 2
-    assert "Run 7" in update.message.replies[0]
-    assert "syncing" in update.message.replies[1] or "Approved" in update.message.replies[1]
+    # Single reply: "Approved — syncing to calendar…"
+    assert len(update.message.replies) == 1
+    assert "syncing" in update.message.replies[0].lower() or "Approved" in update.message.replies[0]
 
 
 @pytest.mark.asyncio
