@@ -53,17 +53,9 @@ Expected: 1 user row, 1 credential row with `provider='google'` and `email` set.
 
 ### 3. Stack startup
 
-Start all three services in separate terminals:
-
 ```bash
-# Terminal 1
-bash scripts/run-api.sh
-
-# Terminal 2
-bash scripts/run-worker.sh
-
-# Terminal 3
-bash scripts/run-telegram-bot.sh
+docker compose build && docker compose up -d
+docker compose run --rm migrate
 ```
 
 Expected log events on startup:
@@ -86,19 +78,25 @@ If worker emits `worker_job_failed` immediately, check `DATABASE_URL` and Postgr
    /task book dentist appointment this week
    ```
 
-2. Bot should reply within ~2 seconds:
-   - Acknowledgement that the task was received
-   - Either: "Task scheduled — event created on your calendar" (auto-approve path)
-   - Or: an approval prompt with `/approve N M` (approval-required path)
+2. Bot should reply within ~2 seconds with an approval prompt:
+   ```
+   📋 Book Dentist Appointment — Friday, Mar 21 at 9:00am
 
-3. If approval prompt: reply with the `/approve N M` command shown.
+   /approve <run_id> <step_id>
+   ```
+   The title is LLM-inferred (title-case, clean). The time is the first free 30-min slot
+   starting at 9am on the LLM-inferred date. If no free slot exists in normal hours,
+   it falls back to 9am regardless.
 
-4. Bot should confirm calendar event created.
+3. Reply with the `/approve N M` command shown.
+
+4. Bot should confirm with: `✅ Approved — syncing to calendar…` followed by a confirmation.
 
 ### Expected logs (worker terminal)
 
 ```
-{"event": "calendar_provider_constructed", "user_id": 1, "source": "db_credentials", ...}
+{"event": "calendar_upsert_insert", "user_id": 1, "title": "Book Dentist Appointment", "calendar_id": "primary", ...}
+{"event": "calendar_upsert_success", "user_id": 1, "event_id": "<gcal_id>", "operation": "insert", ...}
 ```
 
 On the **first** `/task` call, also expect:
@@ -107,23 +105,10 @@ On the **first** `/task` call, also expect:
 {"event": "google_credentials_refreshed", "user_id": 1, "expires_at": "...", ...}
 ```
 
-This is the token refresh write-back. After this, `access_token` and `expires_at` will be
-populated in `user_credentials`. Subsequent calls won't emit `google_credentials_refreshed`
-until the token nears expiry.
-
-Calendar write events (in worker or bot terminal):
+If a free-slot search ran:
 
 ```
-{"event": "calendar_upsert_insert", "user_id": 1, "calendar_id": "primary", ...}
-{"event": "calendar_upsert_success", "user_id": 1, "event_id": "<gcal_id>", "operation": "insert", ...}
-```
-
-If the task goes to approval first, then after `/approve`:
-
-```
-{"event": "calendar_provider_constructed", "user_id": 1, "source": "db_credentials", ...}
-{"event": "calendar_upsert_insert", ...}
-{"event": "calendar_upsert_success", ...}
+{"event": "find_free_slot_no_gap_found", ...}  # only if calendar is fully packed 9am–6pm
 ```
 
 ### Pass criteria
@@ -288,15 +273,15 @@ If it appears on every request, the token is not being persisted.
 
 | Event | Level | Where | What it confirms |
 |---|---|---|---|
-| `calendar_provider_constructed` | info | worker/bot | Provider built from DB credentials. Fields: `user_id`, `source="db_credentials"` |
-| `calendar_upsert_insert` | info | worker/bot | New event insert attempt. Fields: `user_id`, `calendar_id`, `event_id` |
-| `calendar_upsert_update` | info | worker/bot | Existing event update attempt |
-| `calendar_upsert_success` | info | worker/bot | Calendar write confirmed. Fields: `user_id`, `event_id`, `operation`, `status_code` |
-| `calendar_upsert_failed` | error | worker/bot | Calendar write failed. Fields: `user_id`, `status_code`, `retry_disposition` |
+| `calendar_upsert_insert` | info | worker/bot | New event insert attempt. Fields: `user_id`, `title`, `start`, `calendar_id` |
+| `calendar_upsert_update` | info | worker/bot | Delete-then-reinsert for existing event. Fields: `user_id`, `event_id`, `title`, `calendar_id` |
+| `calendar_upsert_success` | info | worker/bot | Calendar write confirmed. Fields: `user_id`, `event_id`, `calendar_id`, `operation` |
+| `calendar_upsert_failed` | error | worker/bot | Calendar write failed. Fields: `user_id`, `error`, `status_code`, `retry_disposition` |
 | `list_today_events` | info | bot | `/agenda` query started. Fields: `user_id`, `calendar_id`, `timezone` |
 | `list_today_events_complete` | info | bot | `/agenda` query done. Fields: `user_id`, `event_count` |
 | `reconcile_calendar_block_success` | info | worker | Drift check passed — event matches expected state |
 | `reconcile_calendar_block_drift_detected` | info | worker | External edit detected on a scheduled block |
+| `find_free_slot_no_gap_found` | warning | worker/bot | Calendar fully packed 9am–6pm; fell back to 9am |
 | `past_event_guard_triggered` | warning | worker | Scheduled slot is in the past; task carried forward |
 
 ### Gmail (email pipeline)
