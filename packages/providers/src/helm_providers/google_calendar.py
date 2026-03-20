@@ -424,6 +424,131 @@ class GoogleCalendarProvider:
         )
         return events
 
+    def query_free_busy(
+        self,
+        calendar_id: str,
+        start: datetime,
+        end: datetime,
+    ) -> list[tuple[datetime, datetime]]:
+        """Return busy intervals within [start, end] as (start, end) UTC pairs.
+
+        Uses the Google Calendar freebusy.query API. Returns an empty list if
+        the calendar is fully free in the window.
+
+        Args:
+            calendar_id: Google Calendar ID (e.g. "primary").
+            start: Window start (timezone-aware).
+            end: Window end (timezone-aware).
+
+        Returns:
+            List of (busy_start, busy_end) UTC datetime pairs, sorted by start.
+        """
+        service = self._cal_svc.service
+        time_min = start.astimezone(UTC).isoformat()
+        time_max = end.astimezone(UTC).isoformat()
+
+        log.info(
+            "query_free_busy",
+            user_id=self._user_id,
+            calendar_id=calendar_id,
+            time_min=time_min,
+            time_max=time_max,
+        )
+
+        result = service.freebusy().query(
+            body={
+                "timeMin": time_min,
+                "timeMax": time_max,
+                "items": [{"id": calendar_id}],
+            }
+        ).execute()
+
+        busy_raw = result.get("calendars", {}).get(calendar_id, {}).get("busy", [])
+        intervals: list[tuple[datetime, datetime]] = []
+        for slot in busy_raw:
+            b_start = datetime.fromisoformat(slot["start"].replace("Z", "+00:00")).astimezone(UTC)
+            b_end = datetime.fromisoformat(slot["end"].replace("Z", "+00:00")).astimezone(UTC)
+            intervals.append((b_start, b_end))
+
+        log.info(
+            "query_free_busy_complete",
+            user_id=self._user_id,
+            calendar_id=calendar_id,
+            busy_count=len(intervals),
+        )
+        return intervals
+
+    def find_free_slot(
+        self,
+        calendar_id: str,
+        date: "datetime",
+        duration_minutes: int,
+        tz: ZoneInfo,
+        *,
+        search_start_hour: int = 9,
+        search_end_hour: int = 18,
+        step_minutes: int = 30,
+    ) -> datetime:
+        """Find the first free slot on `date` of at least `duration_minutes`.
+
+        Searches the working window [search_start_hour, search_end_hour) in
+        `step_minutes` increments, querying freebusy once for the whole day.
+        Falls back to the original 9am slot if no free window is found (rare —
+        leaves it to the human to notice at approval time).
+
+        Args:
+            calendar_id: Google Calendar ID.
+            date: Any datetime on the target day (timezone-aware or naive-local).
+            duration_minutes: Required free window length.
+            tz: Operator timezone.
+            search_start_hour: Earliest hour to place a task (default 9).
+            search_end_hour: Latest hour a task may *start* (default 18).
+            step_minutes: Granularity for slot search (default 30).
+
+        Returns:
+            Timezone-aware datetime (in tz) for the first free slot found,
+            or 9am on the date if none found.
+        """
+        # Normalise date to the target day at search_start_hour in tz
+        local_date = date.astimezone(tz) if date.tzinfo else date.replace(tzinfo=tz)
+        day_start = local_date.replace(
+            hour=search_start_hour, minute=0, second=0, microsecond=0
+        )
+        day_end = local_date.replace(
+            hour=search_end_hour, minute=0, second=0, microsecond=0
+        )
+
+        busy = self.query_free_busy(
+            calendar_id,
+            start=day_start.astimezone(UTC),
+            end=day_end.astimezone(UTC),
+        )
+
+        duration = timedelta(minutes=duration_minutes)
+        step = timedelta(minutes=step_minutes)
+        candidate = day_start
+        while candidate + duration <= day_end:
+            candidate_end = candidate + duration
+            candidate_utc = candidate.astimezone(UTC)
+            candidate_end_utc = candidate_end.astimezone(UTC)
+            conflict = any(
+                b_start < candidate_end_utc and b_end > candidate_utc
+                for b_start, b_end in busy
+            )
+            if not conflict:
+                return candidate
+            candidate += step
+
+        # No free slot found — return 9am and let the user decide at approval
+        log.warning(
+            "find_free_slot_no_gap_found",
+            user_id=self._user_id,
+            calendar_id=calendar_id,
+            date=local_date.date().isoformat(),
+            duration_minutes=duration_minutes,
+        )
+        return day_start
+
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------

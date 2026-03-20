@@ -227,26 +227,41 @@ def _build_task_quick_add_input(state: WorkflowRunState) -> PreparedSpecialistIn
 def _resolve_task_slot(
     semantics: "TaskSemantics",
     tz: "ZoneInfo",
+    *,
+    calendar_id: str = "primary",
+    provider: "GoogleCalendarProvider | None" = None,
 ) -> "datetime":
     """Return the local datetime for a task slot from LLM semantics.
 
-    Uses suggested_date at 9am; falls back to tomorrow 9am if absent or past.
+    1. Determine the target date from suggested_date, or fall back to tomorrow.
+    2. If a provider is given, query freebusy and find the first free window of
+       sizing_minutes on that date. If the whole day is packed, use 9am anyway
+       and let the user notice at approval.
+    3. If no provider, return the target date at 9am (no conflict check).
     """
     now_local = datetime.now(tz)
+    target_date: datetime | None = None
     if semantics.suggested_date:
         try:
             from datetime import date as _date
             suggested = _date.fromisoformat(semantics.suggested_date)
             candidate = datetime(suggested.year, suggested.month, suggested.day, 9, 0, 0, tzinfo=tz)
             if candidate > now_local:
-                return candidate
+                target_date = candidate
         except ValueError:
             pass
-    # Fallback: today 9am if still in the future, otherwise tomorrow 9am
-    candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
-    if candidate <= now_local:
-        candidate = candidate + timedelta(days=1)
-    return candidate
+    if target_date is None:
+        # Fallback: today 9am if still in the future, otherwise tomorrow 9am
+        candidate = now_local.replace(hour=9, minute=0, second=0, microsecond=0)
+        if candidate <= now_local:
+            candidate = candidate + timedelta(days=1)
+        target_date = candidate
+
+    if provider is not None:
+        duration = semantics.sizing_minutes or 60
+        return provider.find_free_slot(calendar_id, target_date, duration, tz)
+
+    return target_date
 
 
 def _format_proposal_summary(title: str, start_utc: "datetime", tz: "ZoneInfo") -> str:
@@ -261,7 +276,22 @@ def _run_task_inference(payload: object) -> CalendarAgentOutput:
     tz = ZoneInfo(settings.operator_timezone)
     semantics = LLMClient().infer_task_semantics(request_text)
 
-    local_start = _resolve_task_slot(semantics, tz)
+    calendar_id = os.getenv("HELM_CALENDAR_TEST_ID", "primary")
+    provider: GoogleCalendarProvider | None = None
+    try:
+        with SessionLocal() as session:
+            user_id = _get_bootstrap_user_id(session)
+            provider = _build_calendar_provider(session, user_id)
+            local_start = _resolve_task_slot(
+                semantics, tz, calendar_id=calendar_id, provider=provider
+            )
+    except Exception as exc:
+        logger.warning(
+            "task_inference_free_busy_unavailable",
+            reason=str(exc),
+        )
+        local_start = _resolve_task_slot(semantics, tz)
+
     start_utc = to_utc(local_start, tz)
     end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
 

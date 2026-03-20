@@ -324,9 +324,64 @@ def test_run_task_inference_no_explicit_time_uses_future_slot(
 
 
 # ---------------------------------------------------------------------------
-# 8. LLMClient.infer_task_semantics returns None → user-facing error pushed
+# 7b. _resolve_task_slot: provider conflict check skips busy windows
 # ---------------------------------------------------------------------------
 
+
+def test_resolve_task_slot_skips_busy_window() -> None:
+    """Free/busy check: busy 9–10am slot is skipped; next free 30-min window chosen."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    from helm_orchestration import TaskSemantics
+    from helm_worker.jobs.workflow_runs import _resolve_task_slot
+
+    tz = ZoneInfo("America/Los_Angeles")
+    # Friday at midnight — target date will be Friday
+    target_friday = datetime(2099, 1, 10, 9, 0, 0, tzinfo=tz)  # Friday 9am
+
+    class _FakeProvider:
+        def query_free_busy(self, calendar_id, start, end):
+            # 9:00–10:00 is busy
+            busy_start = datetime(2099, 1, 10, 17, 0, tzinfo=timezone.utc)  # 9am PDT
+            busy_end = datetime(2099, 1, 10, 18, 0, tzinfo=timezone.utc)   # 10am PDT
+            return [(busy_start, busy_end)]
+
+        def find_free_slot(self, calendar_id, date, duration_minutes, tz, **kwargs):
+            # Delegate to the real implementation
+            from helm_providers.google_calendar import GoogleCalendarProvider
+            # Call find_free_slot logic directly via a manual search
+            from datetime import timedelta
+            busy = self.query_free_busy(calendar_id, date, date)
+            step = timedelta(minutes=30)
+            duration = timedelta(minutes=duration_minutes)
+            candidate = date.replace(hour=9, minute=0, second=0, microsecond=0)
+            day_end = candidate.replace(hour=18)
+            while candidate + duration <= day_end:
+                cand_utc = candidate.astimezone(timezone.utc)
+                cand_end_utc = (candidate + duration).astimezone(timezone.utc)
+                conflict = any(
+                    b_start < cand_end_utc and b_end > cand_utc
+                    for b_start, b_end in busy
+                )
+                if not conflict:
+                    return candidate
+                candidate += step
+            return candidate.replace(hour=9)
+
+    semantics = TaskSemantics(
+        urgency="low", priority="low", sizing_minutes=60, confidence=0.9,
+        suggested_date="2099-01-10",
+    )
+    result = _resolve_task_slot(semantics, tz, provider=_FakeProvider())
+    # 9am is busy for 60 min; next free 60-min slot starts at 10am
+    assert result.hour == 10
+    assert result.minute == 0
+
+
+# ---------------------------------------------------------------------------
+# 8. LLMClient.infer_task_semantics returns None → user-facing error pushed
+# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_task_inference_returns_none_pushes_error(

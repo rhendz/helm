@@ -10,6 +10,7 @@ defined in ``helm_providers.gmail`` (created in T03).
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Protocol
 from zoneinfo import ZoneInfo
 
@@ -37,6 +38,15 @@ class CalendarProvider(Protocol):
 
     def list_today_events(self, calendar_id: str, timezone: ZoneInfo) -> list[dict]:
         """Return today's calendar events for the given calendar and timezone."""
+        ...
+
+    def query_free_busy(
+        self,
+        calendar_id: str,
+        start: "datetime",
+        end: "datetime",
+    ) -> list[tuple["datetime", "datetime"]]:
+        """Return busy intervals within [start, end] as (start, end) UTC pairs."""
         ...
 
 

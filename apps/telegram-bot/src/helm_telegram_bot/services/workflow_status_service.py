@@ -114,25 +114,7 @@ class TelegramWorkflowStatusService:
         )
 
         tz = ZoneInfo(os.environ["OPERATOR_TIMEZONE"])
-        local_start = _resolve_task_slot(semantics, tz)
-        start_utc = to_utc(local_start, tz)
-        end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
-        # Raises PastEventError if the resolved time is in the past — caller handles it
-        past_event_guard(start_utc, tz)
-
-        title = semantics.suggested_title or request_text
-        block = ScheduleBlock(
-            title=title,
-            task_title=title,
-            start=start_utc.isoformat(),
-            end=end_utc.isoformat(),
-        )
-        output = CalendarAgentOutput(
-            proposal_summary=_format_proposal_summary(title, start_utc, tz),
-            calendar_id="primary",
-            time_blocks=(block,),
-            proposed_changes=(f"Schedule {title}",),
-        )
+        calendar_id = "primary"
 
         with SessionLocal() as session:
             raw_req = (
@@ -147,11 +129,35 @@ class TelegramWorkflowStatusService:
                 raw_req.payload.get("submitted_by", "") if raw_req is not None else ""
             )
             user_id = _resolve_user_id(submitted_by, session)
+            provider = GoogleCalendarProvider(user_id, session)
+
+            local_start = _resolve_task_slot(
+                semantics, tz, calendar_id=calendar_id, provider=provider
+            )
+            start_utc = to_utc(local_start, tz)
+            end_utc = start_utc + timedelta(minutes=semantics.sizing_minutes or 60)
+            # Raises PastEventError if the resolved time is in the past — caller handles it
+            past_event_guard(start_utc, tz)
+
+            title = semantics.suggested_title or request_text
+            block = ScheduleBlock(
+                title=title,
+                task_title=title,
+                start=start_utc.isoformat(),
+                end=end_utc.isoformat(),
+            )
+            output = CalendarAgentOutput(
+                proposal_summary=_format_proposal_summary(title, start_utc, tz),
+                calendar_id=calendar_id,
+                time_blocks=(block,),
+                proposed_changes=(f"Schedule {title}",),
+            )
+
             wf_service = WorkflowOrchestrationService(
                 session,
                 validator_registry=_build_validator_registry(),
                 task_system_adapter=StubTaskSystemAdapter(),
-                calendar_system_adapter=GoogleCalendarProvider(user_id, session),
+                calendar_system_adapter=provider,
             )
             wf_service.complete_current_step(
                 run_id,
